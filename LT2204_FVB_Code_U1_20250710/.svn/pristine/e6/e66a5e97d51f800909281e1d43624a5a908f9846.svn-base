@@ -1,0 +1,397 @@
+C51 COMPILER V9.53.0.0   MODLVDSTX                                                         02/13/2025 10:14:09 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODLVDSTX
+OBJECT MODULE PLACED IN .\Objects\ModLvdsTx.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModLvdsTx.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE)
+                    - REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRI
+                    -NT(.\Listings\ModLvdsTx.lst) OBJECT(.\Objects\ModLvdsTx.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: ChipLvds.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.05.26
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          
+  11          
+  12          #if TX_PORT_SIGN == LVDS_PORT
+              
+              StructLvdsTx g_stLvdsTx;
+              StructTiming g_stLvdxTxVideoTiming;
+              
+              
+              u8 code szLvdsEdid[512] =
+              {
+                      0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x00,0x3A,0xC4,0xF9,0xFF,0xFF,0xFF,0xFF,0xFF,
+                      0xFF,0x1E,0x01,0x03,0x80,0x3C,0x22,0x78,0x2A,0x69,0x71,0xAF,0x4E,0x31,0xB6,0x26,
+                      0x0D,0x50,0x54,0x21,0x08,0x00,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,
+                      0x01,0x01,0x01,0x01,0x01,0x01,0x08,0xE8,0x00,0x30,0xF2,0x70,0x5A,0x80,0xB0,0x58,
+                      0x8A,0x00,0x56,0x50,0x21,0x00,0x00,0x1E,0x00,0x00,0x00,0xFF,0x00,0x23,0x47,0x54,
+                      0x49,0x59,0x4D,0x78,0x67,0x77,0x41,0x41,0x6C,0x4A,0x00,0x00,0x00,0xFD,0x00,0x18,
+                      0x64,0x1E,0x87,0x3C,0x01,0x0A,0x20,0x20,0x20,0x20,0x20,0x20,0x00,0x00,0x00,0xFC,
+                      0x00,0x47,0x2D,0x53,0x59,0x4E,0x43,0x20,0x32,0x37,0x33,0x38,0x32,0x31,0x01,0x6E,
+                      0x02,0x03,0x46,0xF1,0x4E,0x10,0x1F,0x04,0x13,0x03,0x12,0x01,0x5D,0x5E,0x5F,0x60,
+                      0x61,0x76,0x3F,0x23,0x09,0x07,0x01,0x83,0x01,0x00,0x00,0x6D,0x03,0x0C,0x00,0x10,
+                      0x00,0x38,0x3C,0x20,0x00,0x60,0x03,0x02,0x01,0x6A,0xD8,0x5D,0xC4,0x01,0x78,0x80,
+                      0x51,0x00,0x02,0x78,0xE3,0x05,0xC0,0x00,0xE2,0x00,0x6A,0xE6,0x06,0x05,0x01,0x8F,
+                      0x77,0x07,0xE3,0x0F,0x00,0x1C,0x5A,0xA0,0x00,0xA0,0xA0,0xA0,0x46,0x50,0x30,0x20,
+                      0x35,0x00,0x56,0x50,0x21,0x00,0x00,0x1A,0xC4,0xB3,0x70,0xA0,0xD0,0xA0,0x40,0x50,
+                      0x30,0x20,0x35,0x00,0x56,0x50,0x21,0x00,0x00,0x1A,0x00,0x00,0x00,0x00,0x00,0x00,
+                      0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x61,
+              };
+              
+              u8 szEdidData[512];
+              
+              void Mod_LvdsTx_SetState(u8 ucState)
+              {
+                  if(ucState != g_stLvdsTx.ucTxState)
+                  {
+                      g_stLvdsTx.ucTxStateChangeFlag = TRUE;
+                      g_stLvdsTx.ucTxState = ucState;
+                      LTLog(LOG_DEBUG, "TxState = 0x%02bx", ucState);
+                                      
+                                              if ( ucState == STATE_LVDSTX_VIDEO_OUT_5 )
+                                              {
+                                                              TX_Event_Set(TX_VIDEO_ON_EVENT_3);
+                                              }                               
+                  }
+                                      
+C51 COMPILER V9.53.0.0   MODLVDSTX                                                         02/13/2025 10:14:09 PAGE 2   
+
+              }
+              
+              //获取具体的参数配置
+              void Mod_LvdsTx_CfgParamInit()
+              {
+                  g_stLvdsTx.b1LvdsTxSscEn = LVDS_SSC;
+                  g_stLvdsTx.b1LvdsTxDeModeEn = LVDS_DEMODE;
+                  g_stLvdsTx.ucLvdsTx3DMode = LVDS_3D;
+                  g_stLvdsTx.ucLvdsTxDataMap = LVDS_DATAMAP;
+                  g_stLvdsTx.ucLvdsTxPortNum = LVDS_PORTNUM;
+                  g_stLvdsTx.ulLvdsTxInputClk = 0;
+                  g_stLvdsTx.ucLvdsTxVidFmt = P_VIDEO_FMT; 
+                  g_stLvdsTx.ucLvdsTxLaneNum = LVDS_SUB_MODE_LANE;
+                  g_stLvdsTx.ucSonyYuvDataSel= LVDS_SONY422_DATA_MAP_SEL;
+                  g_stLvdsTx.ucLvdsVblankSCEn = LVDS_VBLANK_SYNC_CODE_EN;
+                  g_stLvdsTx.ucLvdsSCSendIndependent = LVDS_SYNC_CODE_SEND_INDEPENDENT;
+                  
+                  //g_stLvdsTx.ucLVDSTXColor = LVDS_COLORSPACE;
+                  //g_stLvdsTx.ucLVDSTXDataBpc = LVDS_BPC;
+                              g_stLvdsTx.b1LvdsTxSscSel = LVDS_SSC_SEL;               
+              }
+              
+              void Mod_LvdsTx_PowerOnInit(void)
+              {
+                   memset(&g_stLvdsTx, 0, sizeof(StructLvdsTx));
+                  g_stLvdsTx.ucTxState = STATE_LVDSTX_POWER_ON_1;
+                  Mod_LvdsTx_CfgParamInit();
+              }
+              
+              
+              // TODO:
+              /*
+                  该函数用于外部调用通知，以此对外提供接口 
+              */
+              
+              void Mod_LMTx_EventMonitor(u8 ucMsgType)
+              {
+              #define SOURECE_PLUG_EVENT   1
+              #define SOURECE_UNPLUG_EVENT 2
+              #define VIDEO_ON_EVENT      3
+              #define VIDEO_OFF_EVENT       4
+              
+                  switch (ucMsgType)
+                  {
+                      case SOURECE_UNPLUG_EVENT :
+                          //g_stLvdsTx.b1UpstreamDeviceReady = FALSE;
+                          LTLog(LOG_INFO,"RX Set Event:%02bx ",ucMsgType);
+                          break;
+                      
+                      case SOURECE_PLUG_EVENT :
+                          //g_stLvdsTx.b1UpstreamDeviceReady = TRUE;
+                          LTLog(LOG_INFO,"RX Set Event:%02bx ",ucMsgType);
+                          break;
+                      
+                      case VIDEO_OFF_EVENT :
+                          g_stLvdsTx.b1UpstreamVideoReady = FALSE;
+                          LTLog(LOG_INFO,"RX Set Event:%02bx ",ucMsgType);
+                          break;
+                      
+                      case VIDEO_ON_EVENT:
+                          g_stLvdsTx.b1UpstreamVideoReady = TRUE;
+                          LTLog(LOG_INFO,"RX Set Event:%02bx ",ucMsgType);
+C51 COMPILER V9.53.0.0   MODLVDSTX                                                         02/13/2025 10:14:09 PAGE 3   
+
+                          break;
+                      
+                      default:
+                          break;
+                  }
+                  
+              }
+              
+              void Mod_LvdsTx_GetLvdsInClk()
+              {   
+                  u8 ucIndex = 0;
+                  u32 ulInclk = 0;
+                  Drv_System_FmSet(TOP_FM, 0x14); //AD_DSCTX_DSC_OUT_CLK TX_FM
+                  Ocm_Delay1ms(5);
+              
+                  for(;ucIndex < 5; ucIndex++)
+                  {
+                      if(STABLE ==  Drv_System_FmStbGet(TOP_FM) )
+                      {
+                          ulInclk = Drv_System_FmGet(TOP_FM, 0);
+                          break;
+                      }
+                      Ocm_Delay1ms(1);
+                  }
+                  g_stLvdsTx.ulLvdsTxInputClk = ulInclk ;
+              }
+              
+              void Mod_LvdsTx_PllSet(u32 ulInputClk, u8 ucLvdsPortcnt , u8 ucLvdsDatamap)
+              {
+                  Drv_LvdsTx_PllSrcSet();
+                  Drv_LvdsTx_PllDivSet(ulInputClk, ucLvdsPortcnt, ucLvdsDatamap);
+              }
+              
+              void Mod_LvdsTx_SscSet()
+              {
+                  Drv_LvdsTx_SscSet(g_stLvdsTx.b1LvdsTxSscEn);
+              }
+              
+              u8 Mod_LvdsTx_PllCaliIfSucc()
+              {
+                  return Drv_LvdsTx_PllCali();
+              }
+              
+              
+              void Mod_LvdsTx_ResolutionConfig()
+              {
+                  memset(&g_stLvdxTxVideoTiming,0,sizeof(StructTiming));
+                  Drv_VideoCheckAll_Get(&g_stLvdxTxVideoTiming);
+                  LTLog(LOG_DEBUG,"LVDSTX[hfp,hs,hbp,hact,htol,hp]:%d,%d,%d,%d,%d,%bd", g_stLvdxTxVideoTiming.Hfp,g_stLv
+             -dxTxVideoTiming.Hsw, g_stLvdxTxVideoTiming.Hbp, g_stLvdxTxVideoTiming.Hactive, g_stLvdxTxVideoTiming.Htotal, g_stLvdxTxV
+             -ideoTiming.Hspol);
+                  LTLog(LOG_DEBUG,"LVDSTX[vfp,vs,vbp,vact,vtol,vp]:%d,%d,%d,%d,%d,%bd", g_stLvdxTxVideoTiming.Vfp,g_stLv
+             -dxTxVideoTiming.Vsw, g_stLvdxTxVideoTiming.Vbp, g_stLvdxTxVideoTiming.Vactive, g_stLvdxTxVideoTiming.Vtotal, g_stLvdxTxV
+             -ideoTiming.Vspol);
+                  
+                  Drv_LvdsTx_TimingSet(&g_stLvdxTxVideoTiming, g_stLvdsTx.ucLvdsTx3DMode,  g_stLvdsTx.ucLvdsTxDataMap);
+                  Drv_LvdsTx_HactiveAdjust(&g_stLvdxTxVideoTiming, g_stLvdsTx.ucLvdsTxDataMap, g_stLvdsTx.ucLvdsTxPortNu
+             -m);
+                  Drv_LvdsTx_HtotalAdjust(&g_stLvdxTxVideoTiming, g_stLvdsTx.ucLvdsTxDataMap, g_stLvdsTx.ucLvdsTxPortNum
+             -);
+                  
+                  Drv_LvdsTx_InHSyncPol_Sel(g_stLvdxTxVideoTiming.Hspol);
+C51 COMPILER V9.53.0.0   MODLVDSTX                                                         02/13/2025 10:14:09 PAGE 4   
+
+                  Drv_LvdsTx_InVSyncPol_Sel(g_stLvdxTxVideoTiming.Vspol);
+              }
+              
+              void Mod_LvdsTx_AnologConfig()
+              {
+                  Drv_LvdsTx_PhyPortSet(LP0_EN,LP1_EN,LP2_EN,LP3_EN);
+              }
+              
+              void Mod_LvdsTx_DigitalConfig()
+              {
+                  //lane swap
+                  Drv_LvdsTx_PortSwap(g_stLvdsTx.ucLvdsTxPortNum);//accord to downstream 
+                  
+                  //port swap
+                  Drv_LvdsTx_LaneSwap();//accord to downstream 
+                  
+                  if(SUB_LVDS_MODE != g_stLvdsTx.ucLvdsTxDataMap)
+                  {
+                      Drv_LvdsTx_PortSet(g_stLvdsTx.ucLvdsTxPortNum);
+                  }
+                  else
+                  {
+                      Drv_LvdsTx_LaneNumSet(g_stLvdsTx.ucLvdsTxLaneNum);
+                  }
+              
+                  Drv_LvdsTx_DataMapSet(g_stLvdsTx.ucLvdsTxDataMap);
+                  
+                  if(SONY_YUV422_8Bit == g_stLvdsTx.ucLvdsTxDataMap)
+                  {
+                      Drv_LvdsTx_Sony422_DataSet(g_stLvdsTx.ucSonyYuvDataSel);//cb cr Yo ye select
+                  }
+                  
+                  if((INTERNAL_SYNC_MODE == g_stLvdsTx.ucLvdsTxDataMap) || (SUB_LVDS_MODE == g_stLvdsTx.ucLvdsTxDataMap)
+             -)
+                  {
+                      //0xF9F0 bit6:sync code send select ,  0：both in vblanking periodand in vactive period 1:just sen
+             -t in vactive period
+                      Drv_LvdsTx_SyncCodeVblankSet(g_stLvdsTx.ucLvdsVblankSCEn);
+              
+                      //0xF9F1 bit6: sync code send port        0:port send sync code dependent  1: port send sync code 
+             -independent
+                      Drv_LvdsTx_SCSendMethodSel(g_stLvdsTx.ucLvdsSCSendIndependent);
+              
+                      //P video or I video set 
+                      Drv_LvdsTx_PIFormatSet(g_stLvdsTx.ucLvdsTxVidFmt);
+                  }
+                  
+                  Drv_LvdsTx_3DModeSet(g_stLvdsTx.ucLvdsTx3DMode);
+                  Drv_LvdsTx_DEModeSet(g_stLvdsTx.b1LvdsTxDeModeEn); 
+              
+              }
+              
+              
+              void Mod_LvdsTx_StateHandler()
+              {
+                  switch (g_stLvdsTx.ucTxState)
+                  {
+                      case STATE_LVDSTX_POWER_ON_1:
+                          Drv_LvdxTx_VideoSet(DISABLED);
+                                                              Drv_GPIO19Vsync_Set(DISABLED);
+                          Mod_LvdsTx_SetState(STATE_LVDSTX_UPSTREAM_VIDEO_READY_2);
+                      
+C51 COMPILER V9.53.0.0   MODLVDSTX                                                         02/13/2025 10:14:09 PAGE 5   
+
+                      #if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD))
+                          g_stHdmiRx.b1DownstreamDeviceReady = TRUE;
+                                                              #if EDID_FLASH == ENABLED
+                                                              {
+                                                                              Custom_EDID_LoadFromFlash();
+                                                              }
+                                                              #else
+                                                              memcpy(szEdidData,szLvdsEdid,512);
+                                                              #endif
+                      #endif
+              
+                      #if ((CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP))
+                          g_stDpRx.b1DownstreamDeviceReady = TRUE;
+                                                              #if EDID_FLASH == ENABLED
+                                                              {
+                                                                              Custom_EDID_LoadFromFlash();
+                                                              }
+                                                              #else
+                                                              memcpy(szEdidData,szLvdsEdid,512);
+                                                              #endif
+                      #endif
+                      
+                          break;
+                      case STATE_LVDSTX_UPSTREAM_VIDEO_READY_2:
+                          if(g_stLvdsTx.b1UpstreamVideoReady)
+                          {
+                              Mod_LvdsTx_SetState(STATE_LVDSTX_PLL_CALI_3);
+                          }
+                          break;
+                          
+                      case STATE_LVDSTX_PLL_CALI_3:
+                                                              Drv_Sys_DHTxPowerDomain(FALSE); 
+                          Mod_LvdsTx_GetLvdsInClk(); // TODO:
+                          //是否需要判断FM get到的clk 是否稳定？
+                          Mod_LvdsTx_PllSet(g_stLvdsTx.ulLvdsTxInputClk, g_stLvdsTx.ucLvdsTxPortNum, g_stLvdsTx.ucLvdsTx
+             -DataMap);
+                          Mod_LvdsTx_SscSet();
+                          if(Mod_LvdsTx_PllCaliIfSucc())
+                          {
+                              Mod_LvdsTx_SetState(STATE_LVDSTX_CONFIG_4);
+                          }
+                          break;
+                          
+                      case STATE_LVDSTX_CONFIG_4:
+                          Mod_LvdsTx_ResolutionConfig();
+                          Mod_LvdsTx_AnologConfig();
+                          Mod_LvdsTx_DigitalConfig();
+                          Mod_LvdsTx_SetState(STATE_LVDSTX_VIDEO_OUT_5);
+                          break;
+                          
+                      case STATE_LVDSTX_VIDEO_OUT_5:
+                          Drv_LvdxTx_VideoSet(ENABLED);
+                                                              Drv_GPIO19Vsync_Set(ENABLED);
+                          Mod_LvdsTx_SetState(STATE_LVDSTX_AUDIO_OUT_6);
+                          break;
+                          
+                      case STATE_LVDSTX_AUDIO_OUT_6:
+                                                              Drv_Audio_Init();
+                                                              #if TDM_SUPPORT  == ENABLED
+                                                              Drv_Audio_TdmOutInit();                 
+                                                              #endif                  
+                          Mod_LvdsTx_SetState(STATE_LVDSTX_PLAY_BACK_7);                      
+C51 COMPILER V9.53.0.0   MODLVDSTX                                                         02/13/2025 10:14:09 PAGE 6   
+
+                          break;
+              
+                      case STATE_LVDSTX_PLAY_BACK_7:
+                          break;                              
+                      default :
+                          break;
+                  }
+              }
+              
+              
+              void Mod_LvdsTx_EventProc()
+              {
+                  if(g_stLvdsTx.ucTxState > STATE_LVDSTX_UPSTREAM_VIDEO_READY_2)
+                  {
+                      if(FALSE == g_stLvdsTx.b1UpstreamVideoReady )
+                      {
+                          Mod_LvdsTx_SetState(STATE_LVDSTX_POWER_ON_1);
+                      }
+                  }
+              }
+              
+              void Mod_LvdsTx_Handler(void)
+              {
+                  Mod_LvdsTx_StateHandler();
+                  Mod_LvdsTx_EventProc();
+              }
+              
+              void Mod_LvdsTx_Pattern(void)
+              {
+              #if LVDXTX_VID_PATTERN_MODE != NO_PATTERN
+              
+                              ModPattern_Init();
+                  g_stLvdsTx.b1UpstreamVideoReady = TRUE;
+                      
+              #if CSC_SUPPORT == ENABLED
+              
+              #if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD))
+                              LT6911GXE_HdmiRxCscOrEncSel();
+                              LT6911GXE_HdmiRxCscCvt();
+              #endif
+              
+              #if ((CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP))
+                              LT7911GXE_DpRxCscOrEncSel();
+                              LT7911GXE_DpRxCscCvt();
+              #endif
+              
+              #endif
+                  while(1)
+                      {
+                          Mod_LvdsTx_Handler();
+                      }
+              #endif
+              }
+              
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+C51 COMPILER V9.53.0.0   MODLVDSTX                                                         02/13/2025 10:14:09 PAGE 7   
+
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

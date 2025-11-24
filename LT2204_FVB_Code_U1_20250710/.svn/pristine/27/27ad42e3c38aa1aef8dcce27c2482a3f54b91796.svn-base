@@ -1,0 +1,933 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  EqScan.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+#if RX_PORT_SIGN == DP_PORT
+
+#define EQLOCK_THR			0x8001
+
+#if DPRX_EQ_SCAN_MODE == SW_SCANVALIDEQ_EXT
+u8 code SzEq_Stg0[33] =  {0x00,0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F
+						,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F}; //low byte 2-17
+u8 code SzEq_Stg1[33] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+						,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,0x0F}; //high byte
+#else
+u8 code SzEq_Stg0[16] =  {0x00,0x02,0x04,0x06,0x08,0x0A,0x0C,0x0E,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F,0x0F}; //low byte 2-17
+u8 code SzEq_Stg1[16] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x03,0x05,0x07,0x09,0x0B,0x0D,0x0F}; //high byte
+#endif
+
+//u8 code SzEq_Stg0[16] = {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f}; //low byte 2-17
+//u8 code SzEq_Stg1[16] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}; //high byte
+//========================================================================
+// Func Name   : Mod_DpRx_TrainingEqPrint
+// Description : print eq value from training.
+//             : to confirm whether train eq is right.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_DpRx_TrainingEqPrint(void)
+{
+    printLT(PRINT_PRIO_HIG, "\nTraining eq info:");
+    printLT(PRINT_PRIO_HIG, "\nL0 valid[0x%04x],EQ[0x%02bx]", ((u16)BKF1_F3_REG<<8)+BKF1_F4_REG,BKF1_91_REG);
+    printLT(PRINT_PRIO_HIG, "\nL1 valid[0x%04x],EQ[0x%02bx]", ((u16)BKF1_F5_REG<<8)+BKF1_F6_REG,BKF1_93_REG);
+    printLT(PRINT_PRIO_HIG, "\nL2 valid[0x%04x],EQ[0x%02bx]", ((u16)BKF1_F7_REG<<8)+BKF1_F8_REG,BKF1_95_REG);
+    printLT(PRINT_PRIO_HIG, "\nL3 valid[0x%04x],EQ[0x%02bx]", ((u16)BKF1_F9_REG<<8)+BKF1_FA_REG,BKF1_97_REG);
+}
+
+
+#if DPRX_EQ_SCAN_MODE == FIX_MODE
+void Mod_DpRx_FixEqSet(void)
+{
+    u8 ucLoop_Eq;
+    u16 szErrCount_Lane[4] = {0};
+    Drv_DpRx_EqModeSet(SW_MODE);
+    ucLoop_Eq = 7;
+    for(ucLoop_Eq = 0;ucLoop_Eq < 16;ucLoop_Eq++)
+    {
+        BKF1_7D_REG = SzEq_Stg1[ucLoop_Eq];
+		BKF1_7E_REG = SzEq_Stg0[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+		BKF1_7F_REG = SzEq_Stg1[ucLoop_Eq];
+		BKF1_80_REG = SzEq_Stg0[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+		BKF1_81_REG = SzEq_Stg1[ucLoop_Eq];
+		BKF1_82_REG = SzEq_Stg0[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+		BKF1_83_REG = SzEq_Stg1[ucLoop_Eq];
+		BKF1_84_REG = SzEq_Stg0[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;        
+            
+        Drv_DpcdError_Clear(0x0F);
+        Ocm_Delay1ms(100);
+        switch (g_stAuxStatus.ucLink_Count)
+        {
+            case FOUR_LANE:
+                szErrCount_Lane[2] = ((u16)BKF1_D0_REG << 8) + BKF1_D1_REG;
+                szErrCount_Lane[3] = ((u16)BKF1_D2_REG << 8) + BKF1_D3_REG;
+            case TWO_LANE:
+                szErrCount_Lane[1] = ((u16)BKF1_CE_REG << 8) + BKF1_CF_REG;
+            case ONE_LANE:
+                szErrCount_Lane[0] = ((u16)BKF1_CC_REG << 8) + BKF1_CD_REG;
+                break;
+            default:
+                break;
+        }
+        printLT(PRINT_PRIO_HIG, "\nEq = 0x%02bx,0x%04x,0x%04x,0x%04x,0x%04x", BKF1_7E_REG,szErrCount_Lane[0],szErrCount_Lane[1],szErrCount_Lane[2],szErrCount_Lane[3]);
+    }  
+}
+#endif
+
+#if DPRX_EQ_SCAN_MODE == SW_SCANALLEQ
+
+void Mod_DpRx_SoftEqSet(void)
+{
+    u8 ucLoopCnt,ucEq_ScanCnt;
+    u8 ucEqOffset;
+    u8 ucValid_Eq_Lane;
+    u8 ucLoopDelayCnt;
+    u8 ucLaneEqValue[4];
+    u16 szErrCount_Lane[4] = {0};
+    u8 szLane0Eq[2],szLane1Eq[2],szLane2Eq[2],szLane3Eq[2];
+    szLane0Eq[0] = szLane1Eq[0] = szLane2Eq[0] = szLane3Eq[0] = 0;
+    szLane0Eq[1] = szLane1Eq[1] = szLane2Eq[1] = szLane3Eq[1] = 0;
+    printLT(PRINT_PRIO_HIG, "\nsw eq scan info:");
+    Drv_DpRx_EqModeSet(SW_MODE);
+	Drv_DpRx_SkewLock(TRUE);
+//    Drv_DpRx_PcrPllCaliCtrl(DISABLED); 
+    for(ucLoopCnt = 0;ucLoopCnt< 2;ucLoopCnt++)
+    {
+        for(ucEq_ScanCnt = 0;ucEq_ScanCnt < 16;ucEq_ScanCnt++)
+        {
+            ucEqOffset = (ucLoopCnt == 0)?(ucEq_ScanCnt):(15 - ucEq_ScanCnt);//0-15
+			BKF1_7D_REG = SzEq_Stg1[ucEqOffset];
+            BKF1_7E_REG = SzEq_Stg0[ucEqOffset];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+			BKF1_7F_REG = SzEq_Stg1[ucEqOffset];
+            BKF1_80_REG = SzEq_Stg0[ucEqOffset];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+			BKF1_81_REG = SzEq_Stg1[ucEqOffset];
+            BKF1_82_REG = SzEq_Stg0[ucEqOffset];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+			BKF1_83_REG = SzEq_Stg1[ucEqOffset];
+            BKF1_84_REG = SzEq_Stg0[ucEqOffset];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs; 
+			//fec序列检测异常
+			#if DPRX_CDR_MODE == ANACDR 
+			Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+			#endif			
+            Ocm_Delay1ms(1);
+            Drv_DpcdError_Clear(0x0F);
+            ucLoopDelayCnt = 0;
+            while((++ucLoopDelayCnt) < 50)
+            {
+                Ocm_Delay1ms(1);
+                szErrCount_Lane[0] = ((u16)BKF1_CC_REG << 8) + BKF1_CD_REG;
+                szErrCount_Lane[1] = ((u16)BKF1_CE_REG << 8) + BKF1_CF_REG;
+                szErrCount_Lane[2] = ((u16)BKF1_D0_REG << 8) + BKF1_D1_REG;
+                szErrCount_Lane[3] = ((u16)BKF1_D2_REG << 8) + BKF1_D3_REG;
+				if((szErrCount_Lane[0] >= DPRX_ERR_CNT))
+                {
+                    break;
+                }
+                else if((g_stAuxStatus.ucLink_Count >= TWO_LANE)&&(szErrCount_Lane[1] >= DPRX_ERR_CNT))
+                {
+                    break;
+                }
+                else if((g_stAuxStatus.ucLink_Count == FOUR_LANE)&&((szErrCount_Lane[2] >= DPRX_ERR_CNT)||(szErrCount_Lane[3] >= DPRX_ERR_CNT)))
+                {
+                    break;
+                }
+            } 
+			printLT(PRINT_PRIO_HIG, "\nEACHEq = 0x%02bx,0x%04x,0x%04x,0x%04x,0x%04x",BKF1_7E_REG,szErrCount_Lane[0],szErrCount_Lane[1],szErrCount_Lane[2],szErrCount_Lane[3]);
+            if((szLane0Eq[ucLoopCnt] ==0)&&(szErrCount_Lane[0] <= 0x8002))//lane0 have valid eq
+            {
+                szLane0Eq[ucLoopCnt] = ucEqOffset;
+            }
+            if((g_stAuxStatus.ucLink_Count >= TWO_LANE)&&(szLane1Eq[ucLoopCnt] ==0)&&(szErrCount_Lane[1] <= 0x8002))// lane1 have valid eq
+            {
+                szLane1Eq[ucLoopCnt] = ucEqOffset;
+            } 
+            if((g_stAuxStatus.ucLink_Count == FOUR_LANE)&&(szLane2Eq[ucLoopCnt] ==0)&&(szErrCount_Lane[2] <= 0x8002))// lane2 have valid eq
+            {
+                szLane2Eq[ucLoopCnt] = ucEqOffset;
+            }                         
+            if((g_stAuxStatus.ucLink_Count == FOUR_LANE)&&(szLane3Eq[ucLoopCnt] == 0)&&(szErrCount_Lane[3] <= 0x8002))// lane3 have valid eq
+            {
+                szLane3Eq[ucLoopCnt] = ucEqOffset;
+            }
+            if(((g_stAuxStatus.ucLink_Count == ONE_LANE)&&(szLane0Eq[ucLoopCnt]>0))
+             ||((g_stAuxStatus.ucLink_Count == TWO_LANE)&&(szLane0Eq[ucLoopCnt]>0)&&(szLane1Eq[ucLoopCnt] > 0))
+             ||((g_stAuxStatus.ucLink_Count == FOUR_LANE)&&(szLane0Eq[ucLoopCnt]>0)&&(szLane1Eq[ucLoopCnt]>0)&&(szLane2Eq[ucLoopCnt]>0)&&(szLane3Eq[ucLoopCnt]>0)))
+            {
+                printLT(PRINT_PRIO_HIG, "\nEq = 0x%02bx,0x%04x,0x%04x,0x%04x,0x%04x", BKF1_7E_REG,szErrCount_Lane[0],szErrCount_Lane[1],szErrCount_Lane[2],szErrCount_Lane[3]); 
+                break;
+            }             
+        }
+        if((ucLoopCnt == 0)&&(ucEq_ScanCnt >= 15))
+        {
+            break;
+        } 
+    }
+	printLT(PRINT_PRIO_HIG, "\nScan_EQLOW = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", szLane0Eq[0],szLane1Eq[0],szLane2Eq[0],szLane3Eq[0]); 
+	printLT(PRINT_PRIO_HIG, "\nScan_EQHIG = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", szLane0Eq[1],szLane1Eq[1],szLane2Eq[1],szLane3Eq[1]); 
+//----------------------------------------------------------soft eq set----------------------------------------------    
+    ucLaneEqValue[0] =ucLaneEqValue[1] = ucLaneEqValue[2] = ucLaneEqValue[3] = 0xff;
+    switch(g_stAuxStatus.ucLink_Count)
+    {
+        case FOUR_LANE:
+            if((szLane3Eq[0] < 18)&&(szLane3Eq[0]||szLane3Eq[1]))
+            {
+                ucLaneEqValue[3] = (szLane3Eq[1] >= szLane3Eq[0])?((szLane3Eq[0]+szLane3Eq[1])>>1):(szLane3Eq[0]);
+            }
+            if((szLane2Eq[0] < 18)&&(szLane2Eq[0]||szLane2Eq[1]))
+            {
+                ucLaneEqValue[2] = (szLane2Eq[1] >= szLane2Eq[0])?((szLane2Eq[0]+szLane2Eq[1])>>1):(szLane2Eq[0]);
+            }
+        case TWO_LANE:
+            if((szLane1Eq[0] < 18)&&(szLane1Eq[0]||szLane1Eq[1]))
+            {
+                ucLaneEqValue[1] = (szLane1Eq[1] >= szLane1Eq[0])?((szLane1Eq[0]+szLane1Eq[1])>>1):(szLane1Eq[0]);
+            }        
+        case ONE_LANE:
+            if((szLane0Eq[0] < 18)&&(szLane0Eq[0]||szLane0Eq[1]))
+            {
+                ucLaneEqValue[0] = (szLane0Eq[1] >= szLane0Eq[0])?((szLane0Eq[0]+szLane0Eq[1])>>1):(szLane0Eq[0]);
+            }
+            break;
+        default:
+            break;
+    }
+//--------------------------------------------------eq double check-------------------------------------
+    for(ucLoopCnt = 0;ucLoopCnt< 4;ucLoopCnt++)
+    {
+        if(ucLaneEqValue[ucLoopCnt] != 0xff)
+        {
+            ucValid_Eq_Lane = ucLaneEqValue[ucLoopCnt];
+        }
+    }  
+    for(ucLoopCnt = 0;ucLoopCnt< 4;ucLoopCnt++)
+    {
+        if(ucLaneEqValue[ucLoopCnt] == 0xff)
+        {
+            ucLaneEqValue[ucLoopCnt] = ucValid_Eq_Lane;
+        }
+    }
+	BKF1_7D_REG = SzEq_Stg1[ucLaneEqValue[0]];
+    BKF1_7E_REG = SzEq_Stg0[ucLaneEqValue[0]];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+    BKF1_7F_REG = SzEq_Stg1[ucLaneEqValue[1]];
+	BKF1_80_REG = SzEq_Stg0[ucLaneEqValue[1]];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+    BKF1_81_REG = SzEq_Stg1[ucLaneEqValue[2]];
+	BKF1_82_REG = SzEq_Stg0[ucLaneEqValue[2]];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+    BKF1_83_REG = SzEq_Stg1[ucLaneEqValue[3]];
+	BKF1_84_REG = SzEq_Stg0[ucLaneEqValue[3]];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs; 
+	Drv_DpRx_SkewLock(FALSE);
+    printLT(PRINT_PRIO_HIG, "\nValidEq = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", BKF1_7E_REG,BKF1_80_REG,BKF1_82_REG,BKF1_84_REG);    
+}
+#elif DPRX_EQ_SCAN_MODE == SW_SCANMIDEQ
+
+u8 Mod_DpRx_EqHL_Det(u16 usLanex_Eq)
+{
+	u8 ucLvlCnt;
+	u8 ucLanex_EqLow;
+	u8 ucLanex_EqHigh;
+	u8 ucLanex_MidEq;
+	for(ucLvlCnt = 0;ucLvlCnt < 16;ucLvlCnt++)
+	{
+		if((usLanex_Eq>>ucLvlCnt)&BIT0_1)
+		{
+			ucLanex_EqLow = ucLvlCnt;
+			break;
+		}	
+	}
+	for(ucLvlCnt = 15;ucLvlCnt >= 0;ucLvlCnt--)
+	{
+		if((usLanex_Eq>>ucLvlCnt)&BIT0_1)
+		{
+			ucLanex_EqHigh = ucLvlCnt;
+			break;
+		}	
+		if(ucLvlCnt == 0x00)
+		{
+			break;
+		}
+	}
+	ucLanex_MidEq = ((ucLanex_EqLow + ucLanex_EqHigh) >> 1);
+	printLT(PRINT_PRIO_HIG, "\nEQCALI = 0x%02bx,0x%02bx,0x%02bx", ucLanex_EqLow,ucLanex_EqHigh,ucLanex_MidEq); 
+	return ucLanex_MidEq;
+}
+u8 Mod_EQ_Select(u8 Value)
+{
+	u8 Lane_EQ_Level = 0;
+  	switch(Value&0x1f)
+	{
+		case 0x01:	Lane_EQ_Level=0;
+					break;
+		case 0x02:
+		case 0x03:
+		case 0x07:
+		case 0x0b:
+		case 0x13:
+		case 0x17:	Lane_EQ_Level=1;
+					break;
+		case 0x04:
+		case 0x05:
+		case 0x06:
+		case 0x0e:
+		case 0x0f:
+		case 0x15:
+		case 0x16:
+		case 0x1f:	Lane_EQ_Level=2;
+					break;
+		case 0x08:
+		case 0x09:
+		case 0x0a:
+		case 0x0c:
+		case 0x0d:
+		case 0x1b:
+		case 0x1c:
+		case 0x1d:
+		case 0x1e:	Lane_EQ_Level=3;
+					break;
+		default:	Lane_EQ_Level=4;
+					break;	
+	}
+	return Lane_EQ_Level;
+}
+
+u8 Mod_Error_Min(u16 *pDATA)
+{
+	u8 count;
+	u8 Lane_EQ_Value=0;
+	u16 Min_Value=0;
+ 	Min_Value = pDATA[0];
+	(Min_Value<=pDATA[1])?(1):(Min_Value=pDATA[1]);
+	(Min_Value<=pDATA[2])?(1):(Min_Value=pDATA[2]);
+	(Min_Value<=pDATA[3])?(1):(Min_Value=pDATA[3]);
+	(Min_Value<=pDATA[4])?(1):(Min_Value=pDATA[4]);
+
+	for(count=0;count<5;count++)
+	{
+		if(pDATA[count]-Min_Value<=0x01)
+		{
+			Lane_EQ_Value |= (0x01<<count);
+		}
+		else{;}
+	}
+	Lane_EQ_Value = Mod_EQ_Select(Lane_EQ_Value);
+	return Lane_EQ_Value;
+}
+void Mod_DpRx_SoftEqSet(void)
+{
+    u8 ucEq_ScanCnt;	
+	u8 ucLane0_MidEq,ucLane1_MidEq,ucLane2_MidEq,ucLane3_MidEq;
+	u16 usLane0_ValidEq,usLane1_ValidEq,usLane2_ValidEq,usLane3_ValidEq;
+	u16 szLane0_Err[5] = {0};
+	u16 szLane1_Err[5] = {0};
+	u16 szLane2_Err[5] = {0};
+	u16 szLane3_Err[5] = {0};
+	
+	usLane0_ValidEq = ((u16)BKF1_F3_REG<<8)+BKF1_F4_REG;
+	usLane1_ValidEq = ((u16)BKF1_F5_REG<<8)+BKF1_F6_REG;
+	usLane2_ValidEq = ((u16)BKF1_F7_REG<<8)+BKF1_F8_REG;
+	usLane3_ValidEq = ((u16)BKF1_F9_REG<<8)+BKF1_FA_REG;
+	ucLane0_MidEq = Mod_DpRx_EqHL_Det(usLane0_ValidEq);
+	ucLane1_MidEq = Mod_DpRx_EqHL_Det(usLane1_ValidEq);
+	ucLane2_MidEq = Mod_DpRx_EqHL_Det(usLane2_ValidEq);
+	ucLane3_MidEq = Mod_DpRx_EqHL_Det(usLane3_ValidEq);
+    printLT(PRINT_PRIO_HIG, "\nsw eq scan info:");
+    Drv_DpRx_EqModeSet(SW_MODE);
+	Drv_DpRx_SkewLock(TRUE);
+	for(ucEq_ScanCnt = 0;ucEq_ScanCnt < 5;ucEq_ScanCnt++)
+	{
+		BKF1_7D_REG = SzEq_Stg1[ucLane0_MidEq+ucEq_ScanCnt];
+		BKF1_7E_REG = SzEq_Stg0[ucLane0_MidEq+ucEq_ScanCnt];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+		BKF1_7F_REG = SzEq_Stg1[ucLane1_MidEq+ucEq_ScanCnt];
+		BKF1_80_REG = SzEq_Stg0[ucLane1_MidEq+ucEq_ScanCnt];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+		BKF1_81_REG = SzEq_Stg1[ucLane2_MidEq+ucEq_ScanCnt];
+		BKF1_82_REG = SzEq_Stg0[ucLane2_MidEq+ucEq_ScanCnt];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+		BKF1_83_REG = SzEq_Stg1[ucLane3_MidEq+ucEq_ScanCnt];
+		BKF1_84_REG = SzEq_Stg0[ucLane3_MidEq+ucEq_ScanCnt];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+		//fec序列检测异常
+		#if DPRX_CDR_MODE == ANACDR 
+		Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+		#endif			
+		Ocm_Delay1ms(1);
+		Drv_DpcdError_Clear(0x0F);
+		Ocm_Delay1ms(50);
+		szLane0_Err[ucEq_ScanCnt] = ((u16)BKF1_CC_REG << 8) + BKF1_CD_REG;
+		szLane1_Err[ucEq_ScanCnt] = ((u16)BKF1_CE_REG << 8) + BKF1_CF_REG;
+		szLane2_Err[ucEq_ScanCnt] = ((u16)BKF1_D0_REG << 8) + BKF1_D1_REG;
+		szLane3_Err[ucEq_ScanCnt] = ((u16)BKF1_D2_REG << 8) + BKF1_D3_REG;
+		printLT(PRINT_PRIO_HIG, "\nCurEQ = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", BKF1_7E_REG,BKF1_80_REG,BKF1_82_REG,BKF1_84_REG);  
+		printLT(PRINT_PRIO_HIG, "\nError = 0x%04x,0x%04x,0x%04x,0x%04x",szLane0_Err[ucEq_ScanCnt],
+								szLane1_Err[ucEq_ScanCnt],szLane2_Err[ucEq_ScanCnt],szLane3_Err[ucEq_ScanCnt]);       
+	}
+	BKF1_7D_REG = SzEq_Stg1[(Mod_Error_Min(szLane0_Err)+ucLane0_MidEq)];
+	BKF1_7E_REG = SzEq_Stg0[(Mod_Error_Min(szLane0_Err)+ucLane0_MidEq)];
+	BKF1_7F_REG = SzEq_Stg1[(Mod_Error_Min(szLane1_Err)+ucLane1_MidEq)];
+	BKF1_80_REG = SzEq_Stg0[(Mod_Error_Min(szLane1_Err)+ucLane1_MidEq)];
+	BKF1_81_REG = SzEq_Stg1[(Mod_Error_Min(szLane2_Err)+ucLane2_MidEq)];
+	BKF1_82_REG = SzEq_Stg0[(Mod_Error_Min(szLane2_Err)+ucLane2_MidEq)];
+	BKF1_83_REG = SzEq_Stg1[(Mod_Error_Min(szLane3_Err)+ucLane3_MidEq)];
+	BKF1_84_REG = SzEq_Stg0[(Mod_Error_Min(szLane3_Err)+ucLane3_MidEq)];
+
+	Drv_DpRx_SkewLock(FALSE);
+    printLT(PRINT_PRIO_HIG, "\nValidEq = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", BKF1_7E_REG,BKF1_80_REG,BKF1_82_REG,BKF1_84_REG);    
+}
+#else
+u8 Mod_DpRx_EqHig_Det(u16 usLanex_Eq)
+{
+	u8 ucLvlCnt;
+	u8 ucLanex_EqHigh;
+	for(ucLvlCnt = 15;ucLvlCnt >= 0;ucLvlCnt--)
+	{
+		if((usLanex_Eq>>ucLvlCnt)&BIT0_1)
+		{
+			ucLanex_EqHigh = ucLvlCnt;
+			break;
+		}	
+		if(ucLvlCnt == 0x00)
+		{
+			break;
+		}
+	}
+	printLT(PRINT_PRIO_HIG, "\nEQHig = 0x%02bx",ucLanex_EqHigh); 
+	return ucLanex_EqHigh;
+}
+u8 Mod_DpRx_EqLow_Det(u16 usLanex_Eq)
+{
+	u8 ucLvlCnt;
+	u8 ucLanex_EqLow;
+	for(ucLvlCnt = 0;ucLvlCnt < 16;ucLvlCnt++)
+	{
+		if((usLanex_Eq>>ucLvlCnt)&BIT0_1)
+		{
+			ucLanex_EqLow = ucLvlCnt;
+			break;
+		}	
+	}
+	printLT(PRINT_PRIO_HIG, "\nEQLow = 0x%02bx",ucLanex_EqLow); 
+	return ucLanex_EqLow;
+}
+u16 Mod_ValueReturn(u8 *pData)
+{
+	u16 Ret_Val = 0x00;
+	Ret_Val = ((u16)(*pData)<<8) + (*(pData+1));
+	return Ret_Val;
+}
+#if DPRX_EQ_SCAN_MODE == SW_SCANVALIDEQ_EXT
+void Mod_DpRx_SoftEqSet(void)
+{
+	u8 ucEqScanMaxCnt = 0;
+	u8 ucLoopCnt,ucEq_ScanCnt,ucLoopCnt2;
+    u8 ucValid_Eq_Lane = 0x0c;//必须要赋予初值，防止没有用到的lane导致stag数组溢出
+    u8 ucLaneEqValue[4] = {0xff,0xff,0xff,0xff};
+	u8 szLaneXEqLowVal[4] = {0xff,0xff,0xff,0xff};
+	u8 szLaneXEqHigVal[4] = {0xff,0xff,0xff,0xff};	
+	u8 ucLaneX_EqLow[4],ucLaneX_EqHig[4];
+	u8 ucLaneX_Lock[4] = {0};
+	u8 ucLaneXEq_Cnt[4] = {1,1,1,1};
+	u8 ucLaneXRescan[4] = {0};
+	u16 szErrCount_Lane[4];
+	u16 usLaneX_ValidEq[4];
+	for(ucLoopCnt = 0;ucLoopCnt < 4;ucLoopCnt++)
+	{
+		usLaneX_ValidEq[ucLoopCnt] = Mod_ValueReturn((&BKF1_F3_REG)+(ucLoopCnt<<1));
+		ucLaneX_EqLow[ucLoopCnt] = Mod_DpRx_EqLow_Det(usLaneX_ValidEq[ucLoopCnt]);
+		ucLaneX_EqHig[ucLoopCnt] = Mod_DpRx_EqHig_Det(usLaneX_ValidEq[ucLoopCnt]);
+		
+		(ucLaneX_EqHig[ucLoopCnt]-ucLaneX_EqLow[ucLoopCnt]>=ucEqScanMaxCnt)?
+		(ucEqScanMaxCnt = (ucLaneX_EqHig[ucLoopCnt]-ucLaneX_EqLow[ucLoopCnt])+1):(1);
+	}
+    printLT(PRINT_PRIO_HIG, "\nSCAN STRAT");
+
+    Drv_DpRx_EqModeSet(SW_MODE);
+	Drv_DpRx_SkewLock(TRUE);
+       
+	//逻辑上是先扫描valid里面的低档位
+	//如果扫描到了，则返回高档位扫描剩下的档位
+	//如果扫描不到，一直扫描到最大的档位，如果都不满足条件，则停止低档位以及高档位的扫描；最终可能赋予一个固定的值
+	//ucEqScanMaxCnt+2，是因为扫描结束后还要额外最多扫2个EQ....
+	for(ucEq_ScanCnt = 0;ucEq_ScanCnt < ucEqScanMaxCnt+3;ucEq_ScanCnt++)
+	{
+		printLT(PRINT_PRIO_HIG, "\nFECSTATE = 0x%02bx",BKF1_E1_REG);
+		//如果training再次发生，提前退出
+		if(Drv_DpRx_EqModeGet() == HW_MODE)
+		{
+            Drv_DpRx_SkewLock(FALSE);
+			return;
+		}
+        //RX FIFO 是必要的，主要解决因RX不稳定导致异步FIFO余量变小
+        Drv_DpRx_Reset(DP_RX_FIFO_RST);
+		for(ucLoopCnt = 0;ucLoopCnt < g_stAuxStatus.ucLink_Count;ucLoopCnt++)
+		{
+			if((ucLaneX_Lock[ucLoopCnt] & BIT0_1) == 0x00)//LOW Unlock
+			{						
+				if(ucLaneXEq_Cnt[ucLoopCnt] < ((ucLaneX_EqHig[ucLoopCnt]-ucLaneX_EqLow[ucLoopCnt]+1)*2))//从低档位开始扫描，直到LOCK，档位数不超过可用EQ总数
+				{
+					*((&BKF1_7D_REG)+(ucLoopCnt<<1)) = SzEq_Stg1[(ucLaneX_EqLow[ucLoopCnt]*2)+ucLaneXEq_Cnt[ucLoopCnt]];
+					*((&BKF1_7E_REG)+(ucLoopCnt<<1)) = SzEq_Stg0[(ucLaneX_EqLow[ucLoopCnt]*2)+ucLaneXEq_Cnt[ucLoopCnt]];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+					//printLT(PRINT_PRIO_HIG, "\nEQLOW[0x%02bx] = 0x%02bx",ucLoopCnt,(ucLaneX_EqLow[ucLoopCnt]*2)+ucLaneXEq_Cnt[ucLoopCnt]); 
+				}
+			}			
+			else if((ucLaneX_Lock[ucLoopCnt] & BIT1_1) == 0x00)//HIGH Unlock
+			{		
+				if(ucLaneXEq_Cnt[ucLoopCnt] < (((ucLaneX_EqHig[ucLoopCnt]+1)*2)-szLaneXEqLowVal[ucLoopCnt]))//剩余的EQ档位数
+				{
+					*((&BKF1_7D_REG)+(ucLoopCnt<<1)) = SzEq_Stg1[(ucLaneX_EqHig[ucLoopCnt]*2)+1+1-ucLaneXEq_Cnt[ucLoopCnt]];
+					*((&BKF1_7E_REG)+(ucLoopCnt<<1)) = SzEq_Stg0[(ucLaneX_EqHig[ucLoopCnt]*2)+1+1-ucLaneXEq_Cnt[ucLoopCnt]];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+					//printLT(PRINT_PRIO_HIG, "\nEQHIG[0x%02bx] = 0x%02bx",ucLoopCnt,(ucLaneX_EqHig[ucLoopCnt]*2)+2-ucLaneXEq_Cnt[ucLoopCnt]);
+				}
+			}						
+		}
+		
+		//fec序列检测异常
+		#if DPRX_CDR_MODE == ANACDR 
+		Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+		#endif			
+		Ocm_Delay1ms(1);
+		Drv_DpcdError_Clear(0x0F);
+		for(ucLoopCnt = 0x00;ucLoopCnt<50;ucLoopCnt++)
+		{
+			Ocm_Delay1ms(1);
+			szErrCount_Lane[0] = Mod_ValueReturn(&BKF1_CC_REG);
+			szErrCount_Lane[1] = Mod_ValueReturn(&BKF1_CE_REG);
+			szErrCount_Lane[2] = Mod_ValueReturn(&BKF1_D0_REG);
+			szErrCount_Lane[3] = Mod_ValueReturn(&BKF1_D2_REG);
+			//ucLaneX_Lock[7]:1-该lane退出判断成立  0-该lane还在scan，不能退出
+			for(ucLoopCnt2 = 0;ucLoopCnt2 < 4;ucLoopCnt2++)
+			{
+				if(ucLaneX_Lock[ucLoopCnt2] & BIT1_1)//if this lane alreay locked,discard this lane
+				{
+					ucLaneX_Lock[ucLoopCnt2] |= BIT7_1;//
+				}
+				else 
+				{
+					if(szErrCount_Lane[ucLoopCnt2]<=EQLOCK_THR)
+					{
+						ucLaneX_Lock[ucLoopCnt2] &= BIT7_0;//
+					}
+					else if(szErrCount_Lane[ucLoopCnt2]>EQLOCK_THR)//if this lane is unlocked,and error over threshold
+					{
+						ucLaneX_Lock[ucLoopCnt2] |= BIT7_1;//
+					}
+				}
+			}
+			if((ucLaneX_Lock[0]&BIT7_1)&&(ucLaneX_Lock[1]&BIT7_1)&&(ucLaneX_Lock[2]&BIT7_1)&&(ucLaneX_Lock[3]&BIT7_1))
+			{
+				break;
+			}	
+		}	
+		printLT(PRINT_PRIO_HIG, "\nLaneErr = 0x%04x,0x%04x,0x%04x,0x%04x",szErrCount_Lane[0],szErrCount_Lane[1],szErrCount_Lane[2],szErrCount_Lane[3]); 
+		
+		for(ucLoopCnt = 0;ucLoopCnt < g_stAuxStatus.ucLink_Count;ucLoopCnt++)
+		{
+			if((szLaneXEqLowVal[ucLoopCnt] ==0xff))//lane0低档位 没有锁定EQ
+			{
+				if(szErrCount_Lane[ucLoopCnt] <= EQLOCK_THR)//Lane0 低档位锁定EQ
+				{		
+					if(ucLaneXRescan[ucLoopCnt] & BIT0_1)//rescan enable
+					{
+						ucLaneX_Lock[ucLoopCnt] |= BIT0_1;
+						szLaneXEqLowVal[ucLoopCnt] = (ucLaneX_EqLow[ucLoopCnt]*2)+ucLaneXEq_Cnt[ucLoopCnt];
+						ucLaneXEq_Cnt[ucLoopCnt] = 0x01;
+					}
+					else
+					{
+						ucLaneXRescan[ucLoopCnt] |= BIT0_1;
+						//ucLaneX_Lock[ucLoopCnt] |= BIT0_1;
+						//szLaneXEqLowVal[ucLoopCnt] = ucLaneX_EqLow[ucLoopCnt]+ucLaneXEq_Cnt[ucLoopCnt];
+						ucLaneXEq_Cnt[ucLoopCnt] -= 0x01;	
+					}						
+				}
+				else//Lane0 低档位没有EQ，继续扫描
+				{
+					if(ucLaneXRescan[ucLoopCnt] & BIT0_1)//rescan logic
+					{
+						ucLaneX_Lock[ucLoopCnt] |= BIT0_1;
+						szLaneXEqLowVal[ucLoopCnt] = (ucLaneX_EqLow[ucLoopCnt]*2)+1 + ucLaneXEq_Cnt[ucLoopCnt];//
+						ucLaneXEq_Cnt[ucLoopCnt] = 0x01;
+					}
+					else
+					{
+						ucLaneXEq_Cnt[ucLoopCnt] += 0x02;//跳档
+					}
+				}
+			}
+			else if((szLaneXEqHigVal[ucLoopCnt] ==0xff))//lane0高档位 没有锁定EQ
+			{
+				if(szErrCount_Lane[ucLoopCnt] <= EQLOCK_THR)//Lane0 高档位锁定EQ
+				{
+					if(ucLaneXRescan[ucLoopCnt] & BIT1_1)//rescan logic
+					{
+						ucLaneX_Lock[ucLoopCnt] |= BIT1_1;
+						szLaneXEqHigVal[ucLoopCnt] = (ucLaneX_EqHig[ucLoopCnt]*2)+2-ucLaneXEq_Cnt[ucLoopCnt];
+					}
+					else
+					{
+						ucLaneXRescan[ucLoopCnt] |= BIT1_1;
+//						ucLaneX_Lock[ucLoopCnt] |= BIT1_1;
+//						szLaneXEqHigVal[ucLoopCnt] = ucLaneX_EqHig[ucLoopCnt]-ucLaneXEq_Cnt[ucLoopCnt];
+						ucLaneXEq_Cnt[ucLoopCnt] -= 0x01;
+					}
+				}
+				else
+				{
+					if(ucLaneXRescan[ucLoopCnt] & BIT1_1)//rescan logic
+					{
+						ucLaneX_Lock[ucLoopCnt] |= BIT1_1;
+						szLaneXEqHigVal[ucLoopCnt] = (ucLaneX_EqHig[ucLoopCnt]*2)+2 - (ucLaneXEq_Cnt[ucLoopCnt] + 1);//
+					}
+					else
+					{
+						ucLaneXEq_Cnt[ucLoopCnt] += 0x02;
+					}
+				}
+			}
+		}
+		if((g_stAuxStatus.ucLink_Count == ONE_LANE)&&(ucLaneX_Lock[0] & BIT1_1))//只有1lane，并且低和高档位都lock
+		{
+			break;
+		}
+		else if((g_stAuxStatus.ucLink_Count == TWO_LANE)&&(ucLaneX_Lock[0] & BIT1_1)&&(ucLaneX_Lock[1] & BIT1_1))//只有2lane，并且低和高档位都lock
+		{
+			break;
+		}
+		else if((g_stAuxStatus.ucLink_Count == FOUR_LANE)&&(ucLaneX_Lock[0] & BIT1_1)&&(ucLaneX_Lock[1] & BIT1_1)//有4lane，并且低和高档位都lock
+			&&(ucLaneX_Lock[2] & BIT1_1)&&(ucLaneX_Lock[3] & BIT1_1))
+		{
+			break;
+		}
+    }
+	printLT(PRINT_PRIO_HIG, "\nScan_EQLOW = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", szLaneXEqLowVal[0],szLaneXEqLowVal[1],szLaneXEqLowVal[2],szLaneXEqLowVal[3]); 
+	printLT(PRINT_PRIO_HIG, "\nScan_EQHIG = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", szLaneXEqHigVal[0],szLaneXEqHigVal[1],szLaneXEqHigVal[2],szLaneXEqHigVal[3]); 
+//----------------------------------------------------------soft eq set----------------------------------------------    
+	for(ucLoopCnt = 0;ucLoopCnt < g_stAuxStatus.ucLink_Count;ucLoopCnt++)
+	{
+		if((ucLaneX_Lock[ucLoopCnt] &BIT0_1) == 0x00)
+		{
+//			ucLaneEqValue[0] = 0x06;//完全没有LOCK，给一个固定值，暂定
+		}
+		else if((ucLaneX_Lock[ucLoopCnt] &BIT1_1) == 0x00)//低档位LOCK，高档位没有LOCK,使用低档位的EQ
+		{
+			ucLaneEqValue[ucLoopCnt] = szLaneXEqLowVal[0];
+		}
+		else
+		{
+			ucLaneEqValue[ucLoopCnt] = ((szLaneXEqLowVal[ucLoopCnt]+szLaneXEqHigVal[ucLoopCnt]+1)>>1);
+		}
+		if(ucLaneEqValue[ucLoopCnt] != 0xff)//save valid eq
+        {
+            ucValid_Eq_Lane = ucLaneEqValue[ucLoopCnt];
+        }
+	}
+//--------------------------------------------------eq double check-------------------------------------
+//    for(ucLoopCnt = 0;ucLoopCnt< 4;ucLoopCnt++)//保存有EQ 的lane的EQ
+//    {
+//        if(ucLaneEqValue[ucLoopCnt] != 0xff)
+//        {
+//            ucValid_Eq_Lane = ucLaneEqValue[ucLoopCnt];
+//			break;
+//        }
+//    }  
+    for(ucLoopCnt = 0;ucLoopCnt< 4;ucLoopCnt++)//赋值给没有找到EQ的Lane,并且将没有用到的lane也赋值，防止SzEq_Stg1溢出
+    {
+        if(ucLaneEqValue[ucLoopCnt] == 0xff)
+        {
+            ucLaneEqValue[ucLoopCnt] = ucValid_Eq_Lane;
+        }
+    }
+//	for(ucLoopCnt = 0;ucLoopCnt< 4;ucLoopCnt++)//
+//	{
+//		*((&BKF1_7D_REG)+(ucLoopCnt<<1)) = SzEq_Stg1[ucLaneEqValue[ucLoopCnt]];
+//		*((&BKF1_7E_REG)+(ucLoopCnt<<1)) = SzEq_Stg0[ucLaneEqValue[ucLoopCnt]];//
+//	}
+	
+	BKF1_7D_REG = SzEq_Stg1[ucLaneEqValue[0]];
+    BKF1_7E_REG = SzEq_Stg0[ucLaneEqValue[0]];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+    BKF1_7F_REG = SzEq_Stg1[ucLaneEqValue[1]];
+	BKF1_80_REG = SzEq_Stg0[ucLaneEqValue[1]];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+	BKF1_81_REG = SzEq_Stg1[ucLaneEqValue[2]];
+	BKF1_82_REG = SzEq_Stg0[ucLaneEqValue[2]];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+    BKF1_83_REG = SzEq_Stg1[ucLaneEqValue[3]];
+	BKF1_84_REG = SzEq_Stg0[ucLaneEqValue[3]];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs; 
+	
+	//in case of ANACDR unlock issue	
+	Drv_DpcdError_Clear(0x0F);
+	Ocm_Delay1ms(2);
+	if(Mod_ValueReturn(&BKF1_CC_REG) == 0xffff)
+	{
+		#if DPRX_CDR_MODE == ANACDR 
+		Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+		#endif
+		printLT(PRINT_PRIO_HIG, "\nACDR_ISSUE");
+	}	
+	Drv_DpRx_SkewLock(FALSE);
+    printLT(PRINT_PRIO_HIG, "\nValidEq = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", BKF1_7E_REG,BKF1_80_REG,BKF1_82_REG,BKF1_84_REG);
+	printLT(PRINT_PRIO_HIG, "\nSkew = 0x%02bx,0x%02bx,0x%02bx,0x%02bx",BKF1_DD_REG,BKF1_DE_REG,BKF1_DF_REG,BKF1_E0_REG);
+}	
+#elif DPRX_EQ_SCAN_MODE == SW_SCANVALIDEQ
+void Mod_DpRx_SoftEqSet(void)
+{
+	u8 ucLoopCnt,ucEq_ScanCnt,ucLoopCnt2;
+    u8 ucValid_Eq_Lane = 0x0A;//必须要赋予初值，防止没有用到的lane导致stag数组溢出
+    u8 ucLaneEqValue[4] = {0xff,0xff,0xff,0xff};
+	u8 szLaneXEqLowVal[4] = {0xff,0xff,0xff,0xff};
+	u8 szLaneXEqHigVal[4] = {0xff,0xff,0xff,0xff};	
+	u8 ucLaneX_EqLow[4],ucLaneX_EqHig[4];
+	u8 ucLaneX_Lock[4] = {0};
+	u8 ucLaneXEq_Cnt[4] = {0};
+	u16 szErrCount_Lane[4];
+	u16 usLaneX_ValidEq[4];
+	for(ucLoopCnt = 0;ucLoopCnt < 4;ucLoopCnt++)
+	{
+		usLaneX_ValidEq[ucLoopCnt] = Mod_ValueReturn((&BKF1_F3_REG)+(ucLoopCnt<<1));
+		ucLaneX_EqLow[ucLoopCnt] = Mod_DpRx_EqLow_Det(usLaneX_ValidEq[ucLoopCnt]);
+		ucLaneX_EqHig[ucLoopCnt] = Mod_DpRx_EqHig_Det(usLaneX_ValidEq[ucLoopCnt]);
+	}
+	
+    printLT(PRINT_PRIO_HIG, "\nSCAN STRAT");
+    Drv_DpRx_EqModeSet(SW_MODE);
+	Drv_DpRx_SkewLock(TRUE);
+
+	//逻辑上是先扫描valid里面的低档位
+	//如果扫描到了，则返回高档位扫描剩下的档位
+	//如果扫描不到，一直扫描到最大的档位，如果都不满足条件，则停止低档位以及高档位的扫描；最终可能赋予一个固定的值
+	for(ucEq_ScanCnt = 0;ucEq_ScanCnt < 16;ucEq_ScanCnt++)
+	{
+		printLT(PRINT_PRIO_HIG, "\nFECSTATE = 0x%02bx",BKF1_E1_REG);
+		//如果training再次发生，提前退出
+		if(Drv_DpRx_EqModeGet() == HW_MODE)
+		{
+            Drv_DpRx_SkewLock(FALSE);
+			return;
+		}
+        //RX FIFO 是必要的，主要解决因RX不稳定导致异步FIFO余量变小
+        Drv_DpRx_Reset(DP_RX_FIFO_RST);
+		for(ucLoopCnt = 0;ucLoopCnt < g_stAuxStatus.ucLink_Count;ucLoopCnt++)
+		{
+			if((ucLaneX_Lock[ucLoopCnt] & BIT0_1) == 0x00)//LOW Unlock
+			{						
+				if(ucLaneXEq_Cnt[ucLoopCnt] < (ucLaneX_EqHig[ucLoopCnt]-ucLaneX_EqLow[ucLoopCnt]))//从低档位开始扫描，直到LOCK，档位数不超过可用EQ总数
+				{
+					*((&BKF1_7D_REG)+(ucLoopCnt<<1)) = SzEq_Stg1[ucLaneX_EqLow[ucLoopCnt]+ucLaneXEq_Cnt[ucLoopCnt]];
+					*((&BKF1_7E_REG)+(ucLoopCnt<<1)) = SzEq_Stg0[ucLaneX_EqLow[ucLoopCnt]+ucLaneXEq_Cnt[ucLoopCnt]];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+				}
+			}			
+			else if((ucLaneX_Lock[ucLoopCnt] & BIT1_1) == 0x00)//HIGH Unlock
+			{		
+				if(ucLaneXEq_Cnt[ucLoopCnt] < (ucLaneX_EqHig[ucLoopCnt]-szLaneXEqLowVal[ucLoopCnt]))//剩余的EQ档位数
+				{
+					*((&BKF1_7D_REG)+(ucLoopCnt<<1)) = SzEq_Stg1[ucLaneX_EqHig[ucLoopCnt]-ucLaneXEq_Cnt[ucLoopCnt]];
+					*((&BKF1_7E_REG)+(ucLoopCnt<<1)) = SzEq_Stg0[ucLaneX_EqHig[ucLoopCnt]-ucLaneXEq_Cnt[ucLoopCnt]];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+				}
+			}
+		}
+		//fec序列检测异常
+		#if DPRX_CDR_MODE == ANACDR 
+		Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+		#endif			
+		Ocm_Delay1ms(1);
+		Drv_DpcdError_Clear(0x0F);
+		for(ucLoopCnt = 0x00;ucLoopCnt<50;ucLoopCnt++)
+		{
+			Ocm_Delay1ms(1);
+			szErrCount_Lane[0] = Mod_ValueReturn(&BKF1_CC_REG);
+			szErrCount_Lane[1] = Mod_ValueReturn(&BKF1_CE_REG);
+			szErrCount_Lane[2] = Mod_ValueReturn(&BKF1_D0_REG);
+			szErrCount_Lane[3] = Mod_ValueReturn(&BKF1_D2_REG);
+			//ucLaneX_Lock[7]:1-该lane退出判断成立  0-该lane还在scan，不能退出
+			for(ucLoopCnt2 = 0;ucLoopCnt2 < 4;ucLoopCnt2++)
+			{
+				if(ucLaneX_Lock[ucLoopCnt2] & BIT1_1)//if this lane alreay locked,discard this lane
+				{
+					ucLaneX_Lock[ucLoopCnt2] |= BIT7_1;//
+				}
+				else 
+				{
+					if(szErrCount_Lane[ucLoopCnt2]<=EQLOCK_THR)
+					{
+						ucLaneX_Lock[ucLoopCnt2] &= BIT7_0;//
+					}
+					else if(szErrCount_Lane[ucLoopCnt2]>EQLOCK_THR)//if this lane is unlocked,and error over threshold
+					{
+						ucLaneX_Lock[ucLoopCnt2] |= BIT7_1;//
+					}
+				}
+			}
+			if((ucLaneX_Lock[0]&BIT7_1)&&(ucLaneX_Lock[1]&BIT7_1)&&(ucLaneX_Lock[2]&BIT7_1)&&(ucLaneX_Lock[3]&BIT7_1))
+			{
+				break;
+			}
+		}	
+		printLT(PRINT_PRIO_HIG, "\nLaneErr = 0x%04x,0x%04x,0x%04x,0x%04x",szErrCount_Lane[0],szErrCount_Lane[1],szErrCount_Lane[2],szErrCount_Lane[3]); 
+		
+		for(ucLoopCnt = 0;ucLoopCnt < g_stAuxStatus.ucLink_Count;ucLoopCnt++)
+		{
+			if((szLaneXEqLowVal[ucLoopCnt] ==0xff))//lane0低档位 没有锁定EQ
+			{
+				if(szErrCount_Lane[ucLoopCnt] <= EQLOCK_THR)//Lane0 低档位锁定EQ
+				{		
+					ucLaneX_Lock[ucLoopCnt] |= BIT0_1;
+					szLaneXEqLowVal[ucLoopCnt] = ucLaneX_EqLow[ucLoopCnt]+ucLaneXEq_Cnt[ucLoopCnt];
+					ucLaneXEq_Cnt[ucLoopCnt] = 0x00;
+				}
+				else//Lane0 低档位没有EQ，继续扫描
+				{
+					ucLaneXEq_Cnt[ucLoopCnt]++;
+				}
+			}
+			else if((szLaneXEqHigVal[ucLoopCnt] ==0xff))//lane0高档位 没有锁定EQ
+			{
+				if(szErrCount_Lane[ucLoopCnt] <= EQLOCK_THR)//Lane0 高档位锁定EQ
+				{
+					ucLaneX_Lock[ucLoopCnt] |= BIT1_1;
+					szLaneXEqHigVal[ucLoopCnt] = ucLaneX_EqHig[ucLoopCnt]-ucLaneXEq_Cnt[ucLoopCnt];
+				}
+				else
+				{
+					ucLaneXEq_Cnt[ucLoopCnt]++;
+				}
+			}
+		}
+		if((g_stAuxStatus.ucLink_Count == ONE_LANE)&&(ucLaneX_Lock[0] & BIT1_1))//只有1lane，并且低和高档位都lock
+		{
+			break;
+		}
+		else if((g_stAuxStatus.ucLink_Count == TWO_LANE)&&(ucLaneX_Lock[0] & BIT1_1)&&(ucLaneX_Lock[1] & BIT1_1))//只有2lane，并且低和高档位都lock
+		{
+			break;
+		}
+		else if((g_stAuxStatus.ucLink_Count == FOUR_LANE)&&(ucLaneX_Lock[0] & BIT1_1)&&(ucLaneX_Lock[1] & BIT1_1)//有4lane，并且低和高档位都lock
+			&&(ucLaneX_Lock[2] & BIT1_1)&&(ucLaneX_Lock[3] & BIT1_1))
+		{
+			break;
+		}
+    }
+	printLT(PRINT_PRIO_HIG, "\nScan_EQLOW = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", szLaneXEqLowVal[0],szLaneXEqLowVal[1],szLaneXEqLowVal[2],szLaneXEqLowVal[3]); 
+	printLT(PRINT_PRIO_HIG, "\nScan_EQHIG = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", szLaneXEqHigVal[0],szLaneXEqHigVal[1],szLaneXEqHigVal[2],szLaneXEqHigVal[3]); 
+//----------------------------------------------------------soft eq set----------------------------------------------    
+	for(ucLoopCnt = 0;ucLoopCnt < g_stAuxStatus.ucLink_Count;ucLoopCnt++)
+	{
+		if((ucLaneX_Lock[ucLoopCnt] &BIT0_1) == 0x00)
+		{
+//			ucLaneEqValue[0] = 0x06;//完全没有LOCK，给一个固定值，暂定
+		}
+		else if((ucLaneX_Lock[ucLoopCnt] &BIT1_1) == 0x00)//低档位LOCK，高档位没有LOCK,使用低档位的EQ
+		{
+			ucLaneEqValue[ucLoopCnt] = szLaneXEqLowVal[0];
+		}
+		else
+		{
+			ucLaneEqValue[ucLoopCnt] = ((szLaneXEqLowVal[ucLoopCnt]+szLaneXEqHigVal[ucLoopCnt])>>1);
+		}
+		if(ucLaneEqValue[ucLoopCnt] != 0xff)//save valid eq
+        {
+            ucValid_Eq_Lane = ucLaneEqValue[ucLoopCnt];
+        }
+	}
+//--------------------------------------------------eq double check-------------------------------------
+//    for(ucLoopCnt = 0;ucLoopCnt< 4;ucLoopCnt++)//保存有EQ 的lane的EQ
+//    {
+//        if(ucLaneEqValue[ucLoopCnt] != 0xff)
+//        {
+//            ucValid_Eq_Lane = ucLaneEqValue[ucLoopCnt];
+//			break;
+//        }
+//    }  
+    for(ucLoopCnt = 0;ucLoopCnt< 4;ucLoopCnt++)//赋值给没有找到EQ的Lane,并且将没有用到的lane也赋值，防止SzEq_Stg1溢出
+    {
+        if(ucLaneEqValue[ucLoopCnt] == 0xff)
+        {
+            ucLaneEqValue[ucLoopCnt] = ucValid_Eq_Lane;
+        }
+    }
+//	for(ucLoopCnt = 0;ucLoopCnt< 4;ucLoopCnt++)//
+//	{
+//		*((&BKF1_7D_REG)+(ucLoopCnt<<1)) = SzEq_Stg1[ucLaneEqValue[ucLoopCnt]];
+//		*((&BKF1_7E_REG)+(ucLoopCnt<<1)) = SzEq_Stg0[ucLaneEqValue[ucLoopCnt]];//
+//	}
+	
+	BKF1_7D_REG = SzEq_Stg1[ucLaneEqValue[0]];
+    BKF1_7E_REG = SzEq_Stg0[ucLaneEqValue[0]];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+    BKF1_7F_REG = SzEq_Stg1[ucLaneEqValue[1]];
+	BKF1_80_REG = SzEq_Stg0[ucLaneEqValue[1]];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+	BKF1_81_REG = SzEq_Stg1[ucLaneEqValue[2]];
+	BKF1_82_REG = SzEq_Stg0[ucLaneEqValue[2]];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+    BKF1_83_REG = SzEq_Stg1[ucLaneEqValue[3]];
+	BKF1_84_REG = SzEq_Stg0[ucLaneEqValue[3]];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs; 
+	Drv_DpRx_SkewLock(FALSE);
+    printLT(PRINT_PRIO_HIG, "\nValidEq = 0x%02bx,0x%02bx,0x%02bx,0x%02bx", BKF1_7E_REG,BKF1_80_REG,BKF1_82_REG,BKF1_84_REG);
+	printLT(PRINT_PRIO_HIG, "\nSkew = 0x%02bx,0x%02bx,0x%02bx,0x%02bx",BKF1_DD_REG,BKF1_DE_REG,BKF1_DF_REG,BKF1_E0_REG);
+}	
+#endif
+#endif
+
+#if DPRX_EQ_SCAN_MODE == HW_MODE
+void Mod_DpRx_HardEqSet(void) 
+{
+    u16 szErrCount_Lane[4] = {0};
+    switch (g_stAuxStatus.ucLink_Count)
+    {
+        case FOUR_LANE:
+            szErrCount_Lane[2] = ((u16)BKF1_D0_REG << 8) + BKF1_D1_REG;
+            szErrCount_Lane[3] = ((u16)BKF1_D2_REG << 8) + BKF1_D3_REG;
+        case TWO_LANE:
+            szErrCount_Lane[1] = ((u16)BKF1_CE_REG << 8) + BKF1_CF_REG;
+        case ONE_LANE:
+            szErrCount_Lane[0] = ((u16)BKF1_CC_REG << 8) + BKF1_CD_REG;
+            break;
+        default:
+            break;
+    }
+    printLT(PRINT_PRIO_HIG, "\nError = 0x%04x,0x%04x,0x%04x,0x%04x",szErrCount_Lane[0],szErrCount_Lane[1],szErrCount_Lane[2],szErrCount_Lane[3]);
+}
+#endif
+void Mod_DpRx_EqSet(void)
+{
+    Mod_DpRx_TrainingEqPrint();
+    
+    #if DPRX_EQ_SCAN_MODE == FIX_MODE
+    Mod_DpRx_FixEqSet();
+    #endif
+    #if ((DPRX_EQ_SCAN_MODE != FIX_MODE)&&(DPRX_EQ_SCAN_MODE != HW_MODE))
+    Mod_DpRx_SoftEqSet();
+    #endif
+    #if DPRX_EQ_SCAN_MODE == HW_MODE
+    Mod_DpRx_HardEqSet();
+    #endif       
+}
+
+#if DPRX_LINK_CTS == ENABLED
+u8 Mod_DpRx_8b10bErrorChk(void)
+{
+    u16 szErrCount_Lane[4] = {0};
+    Drv_DpcdError_Clear(0x0F);
+    Ocm_Delay1ms(5);
+    switch (g_stAuxStatus.ucLink_Count)
+    {
+        case FOUR_LANE:
+            szErrCount_Lane[2] = ((u16)BKF1_D0_REG << 8) + BKF1_D1_REG;
+            szErrCount_Lane[3] = ((u16)BKF1_D2_REG << 8) + BKF1_D3_REG;
+        case TWO_LANE:
+            szErrCount_Lane[1] = ((u16)BKF1_CE_REG << 8) + BKF1_CF_REG;
+        case ONE_LANE:
+            szErrCount_Lane[0] = ((u16)BKF1_CC_REG << 8) + BKF1_CD_REG;
+            break;
+        default:
+            break;
+    }
+    if (szErrCount_Lane[0] == 0xFFFF)//1,2,4 lane
+    {
+        return TRUE;
+    }
+    if (szErrCount_Lane[1] == 0xFFFF)//2,4 lane
+    {
+        return TRUE;
+    }
+    if ((szErrCount_Lane[2] == 0xFFFF) || (szErrCount_Lane[3] == 0xFFFF))//4 lane
+    {
+        return TRUE;
+    }
+    return FALSE;
+}
+#endif
+
+#endif

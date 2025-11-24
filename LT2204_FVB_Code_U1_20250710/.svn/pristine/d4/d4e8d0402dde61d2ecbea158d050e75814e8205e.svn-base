@@ -1,0 +1,2531 @@
+/******************************************************************************
+  * @project: LT2101
+  * @file: dprx.c
+  * @author: qihan
+  * @company: LONTIUM
+  * @date: 2021.10.12
+/******************************************************************************/
+
+#include "Include.h"
+
+#if RX_PORT_SIGN == DP_PORT
+
+/*
+u8 code szDpRxEqConfig[4][6] = {
+//EQ0IS/RL,EQ1IS/RL,BF0IS/RL,BF1IS/RL,FB0IS/1IS, CS/RS.
+{ 0x48,    0x48,    0x48,    0x48,     0x62,     0x8e}, //1.62g
+{ 0x48,    0x48,    0x48,    0x48,     0x62,     0x8e}, //2.7g
+{ 0x48,    0x48,    0x48,    0x48,     0x62,     0x8e}, //5.4g
+{ 0x68,    0x68,    0xcc,    0xcc,     0xff,     0xfe}, //8.1g
+};
+*/
+u8 code szDpRxEqConfig[4][6] = {
+{0x21, 0x20, 0x21, 0x20, 0x00, 0xf0}, //1.62g
+{0x22, 0x22, 0x22, 0x22, 0x23, 0x80}, //2.7g
+//{0x44, 0x44, 0x46, 0x46, 0x6a, 0xf0}, //5.4g
+{0x56, 0x56, 0xaa, 0xaa, 0x40, 0x63},//海康10m长线，需要把EQIS从6改成5
+//{0x56, 0x56, 0x8c, 0x8c, 0xf0, 0xcf}, //8.1g
+//{0x55, 0x58, 0x8c, 0x8a, 0xc6, 0xcc}, //8.1g setting update for CTS test and M42d compatibility
+
+//{0x88, 0x88, 0xcc, 0xcc, 0xc0, 0x8e}, //20230816
+//CTS PASS
+{0x68, 0x68, 0xcc, 0xcc, 0xC0, 0xfe},
+//{0x76, 0x76, 0xcc, 0xcc, 0xc0, 0x8e}, //20230816
+//{0x88, 0x88, 0x8f, 0x8f, 0xf0, 0xcf},//Lenovo needs Large DC Gain while HP needs Large Bandwidth
+};
+
+#define FREQ_INTG_UP_LIMIT      0x65
+#define FREQ_INTG_DOWN_LIMIT    0x20
+
+
+void Drv_DpRx_AuxInit(void)
+{
+    //[6:0]rgd_dprx_aux_clk_div_num, freq(sys_clk)/2
+    #if SYSCLK == SYS_CLK_40M
+    BKF4_09_REG = 0x13;
+    #endif
+    
+    #if SYSCLK == SYS_CLK_48M
+    BKF4_09_REG = 0x17;
+    #endif
+    
+    BKF1_00_REG |= BIT6_1; //[6]DPCD mode select: 1-Register mode, 0-aux mode;
+    BKF4_08_REG |= BIT1_1; //[1]rgd_aux_soft_mode, 1-en
+    BKF4_08_REG &= BIT2_0; //[2]aux-ch native work mode: 0-Hardware mode,1-Combined hardware and software mode;
+    BKF4_08_REG &= BIT3_0; //[3]AUX-CH interrupt mode: 0-All AUX transaction generate interrupt,1-Only Native AUX transaction generate interrupt.
+    #if DPRX_AUX_MODE == SOFTMODE
+    BKF4_30_REG |= BIT0_1;
+    #endif
+
+    BKA3_56_REG |= BIT5_1; //aux pullup or pulldown resistance select:1M.
+    BKA3_57_REG = 0x2C; //RG_DHRX_AUX_EN = 1;  
+    BKA3_58_REG = 0xBA;//AC AUX Set to 50R
+    Drv_DpRx_DcAuxResCtrl(ENABLED);
+    Drv_DpRx_AcAuxTermCtrl(ENABLED);
+    
+    //DPRX INT SRC: F1A7 BIT3-0 and F1A8 BIT0
+    BKF1_A8_REG &= BIT0_0;
+}
+
+void Drv_DpRx_DcAuxResCtrl(u8 b1IsEn)
+{
+    if(b1IsEn == ENABLED)
+    {
+        BKA3_56_REG |= BIT4_1;//DC AUX Term EN
+    }
+    else
+    {
+        BKA3_56_REG &= BIT4_0;//DC AUX Term EN
+    }
+}
+void Drv_DpRx_AuxSwap(u8 b1SwapEn)
+{
+    if (b1SwapEn == TRUE)
+    {
+        BKA3_57_REG |= BIT7_1;//bit2 aux swap
+    }
+    else
+    {
+        BKA3_57_REG &= BIT7_0;//bit2 aux swap
+    }
+}
+//In order to solve Samsung Charging Warning issue
+void Drv_DpRx_AcAuxTermCtrl(u8 b1IsEn)
+{
+    if(b1IsEn == ENABLED)
+    {
+        BKA3_58_REG |= 0xB0;//AC AUX Set to 50R
+    }
+    else
+    {
+        BKA3_58_REG &= 0x0F;//AC AUX Set to Max , Large than 1MR
+    }
+}
+//========================================================================
+// Func Name   : Drv_DpRx_AuxDcDet
+// Description : detect source is present or not.
+//             : if source is pulg, the voltge level of dc-aud pin will changes too.
+// Input       : void
+// Output      : None
+// Return      : TRUE-> source plug.
+//             : FALSE-> source unplug.
+//========================================================================
+u8 Drv_DpRx_AuxDcDet(void)
+{
+//    if(((BKE5_A3_REG & BIT6_1))&&((BKE5_A3_REG & BIT7_1) == 0))//auxp=1,auxn =0 not connect
+//    {
+//        return FALSE; //source unplug.
+//    }
+//    else
+//    {
+//        return TRUE; //source pulg.
+//    }
+    //对于SOURCE关机的case，检测AUXN 比较合理
+    if(BKE5_A3_REG & BIT7_1)//auxp=1,auxn =0 not connect
+    {
+        return TRUE; //source plug.
+    }
+    else
+    {
+        return FALSE; //source unpulg.
+    }
+}
+
+
+void Drv_DpRx_HpdSet(u8 b1IsHigh,u8 b1IsIrqHigh)
+{
+    #if SYSCLK == SYS_CLK_40M
+    BKF1_BD_REG = 0x7d;
+    #endif
+    #if SYSCLK == SYS_CLK_48M
+    BKF1_BD_REG = 0x98;
+    #endif
+    if (b1IsHigh == HPD_HIGH)
+    {
+        if (b1IsIrqHigh == IRQ_HIGH)
+        {
+            printLT(PRINT_PRIO_HIG,"\nDpRx HPD IRQ");
+            BKF1_BB_REG |= BIT2_1;//[2]rgd_hpd_irq_sft_en: 1-en
+            BKF1_BB_REG &= BIT2_0;//[2]rgd_hpd_irq_sft_en: 0-dis
+        }
+        else
+        {
+            printLT(PRINT_PRIO_HIG,"\nDpRx HPD High");
+            BKF1_BB_REG |= BIT1_1;//[1]rgd_rx_hpd_auto_en: 1-high
+        }
+    }
+    else
+    {
+        printLT(PRINT_PRIO_HIG,"\nDpRx HPD Low");
+        BKF1_BB_REG &= BIT1_0;//[1]rgd_rx_hpd_auto_en: 0-low
+    }
+}
+
+
+void Drv_DpRx_Dpcd_HighAddrWrite(IN u8 ucAddr15_8)
+{
+    BKF1_03_REG = 0x00;
+    BKF1_04_REG = ucAddr15_8;
+}
+
+//===========================================
+//func  :used to intital the dpcd addr bit7:0 and value
+//input :ucAddr7_0/ucValue
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Drv_DpRx_Dpcd_ValueWrite(IN u8 ucAddr7_0,IN u8 ucValue)
+{
+    BKF1_05_REG = ucAddr7_0;
+    BKF1_53_REG = ucValue;
+}
+#if DPRX_ADAPTIVE_SYNC == ENABLED
+void Drv_DpRx_AdaptiveSyncInit(void)
+{
+    BKF3_87_REG |= BIT7_1; //[7]g_follow_vac=1: fix VFP output adapptive_sync
+    //BKF3_4B_REG |= 0x30; //[5]rgd_adaptive_sync_sw_en=1:set software mode [4]rgd_adaptive_sync_en=1:enable adaptive_sync output
+   // BKF3_57_REG &= BIT6_0;//rgd_async_line_set_sw_en=0:set hardware mode
+    #if DPRX_ADAPTIVE_SYNC_WITHOUT_SDP == ENABLED
+    //BKF3_4B_REG &= 0xcf; 
+    #endif
+}
+#endif
+
+//========================================================================
+// Func Name   : Drv_DpRx_DpcdInit
+// Description : initial dpcd field of dp rx.
+// Input       : IN StructDpRx pstDpRx  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_DpRx_DpcdInit(IN StructDpRx pstDpRx)
+{
+    u8 ucTps3Support,ucTps4Support;
+    u8 ucSscCap;
+    u8 Dpcd007;
+    #if DPRX_ADAPTIVE_SYNC == ENABLED
+    
+    if(pstDpRx.ucAdaptiveSync_En == TRUE)
+    {
+        Dpcd007 = 0x41;
+    }
+    else
+    {
+        Dpcd007 = 0x01;
+    }
+    #else
+    Dpcd007 = 0x01;
+    #endif
+    ucSscCap      = (pstDpRx.b1Ssc_Support)?(0x01):(0x00);
+    ucTps3Support = (pstDpRx.b1Tps3_Support)?(0xc0):(0x80);
+    ucTps4Support = (pstDpRx.b1Tps4_Support)?(0x80):(0x00);
+    
+    Drv_DpRx_Dpcd_HighAddrWrite(0x00);
+    Drv_DpRx_Dpcd_ValueWrite(0x00, DP1_2);//fixed to DP1.1
+    if(pstDpRx.ucRxMaxLinkRate == HBR3)
+    {
+        Drv_DpRx_Dpcd_ValueWrite(0x01, HBR2);
+    }
+    else
+    {
+        Drv_DpRx_Dpcd_ValueWrite(0x01, pstDpRx.ucRxMaxLinkRate);
+    }
+    Drv_DpRx_Dpcd_ValueWrite(0x02,ucTps3Support | pstDpRx.ucRxMaxLaneCount);
+    #if (DPRX_VERSION <= DP1_2)
+    Drv_DpRx_Dpcd_ValueWrite(0x03,0x00|ucSscCap);
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x03,ucTps4Support|ucSscCap);  
+    #endif
+    Drv_DpRx_Dpcd_ValueWrite(0x04,0x01);
+    #if (DPRX_DFP_TYPE == BRANCH_HDMI)
+    Drv_DpRx_Dpcd_ValueWrite(0x05,0x1d);//bit3:format conversion support
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x05,0x00);//bit3:format conversion support
+    #endif
+    Drv_DpRx_Dpcd_ValueWrite(0x06,0x01);
+
+    Drv_DpRx_Dpcd_ValueWrite(0x07,Dpcd007);//[6]msa_timing_par_ignored set 1 for adative sync mode
+
+    #if (DPRX_TIMING_HBE == ENABLED)
+    Drv_DpRx_Dpcd_ValueWrite(0x08,0x2a);//bit1:local edid bit3:HBE;bit4-5:Buffer size unit and per port
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x08,0x02);//bit1:local edid bit3:HBE;bit4-5:Buffer size unit and per port
+    #endif
+    
+    Drv_DpRx_Dpcd_ValueWrite(0x09,0x0f);//bit7-0:buffer size
+    Drv_DpRx_Dpcd_ValueWrite(0x0a,0x04);//DPRX CTS 5.2.2.6
+    Drv_DpRx_Dpcd_ValueWrite(0x0b,0x00);
+    Drv_DpRx_Dpcd_ValueWrite(0x0c,0x00);//iic speed
+    Drv_DpRx_Dpcd_ValueWrite(0x0d,0x00);//eDP configuration cap
+    //dp1.4 support 2200h,100us for cr_lock,4ms for eq
+    #if (DPRX_VERSION <= DP1_2)
+    Drv_DpRx_Dpcd_ValueWrite(0x0e,0x01);
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x0e,0x81);
+    #endif
+    #if DPRX_MST_MODE_EN == ENABLED
+    Drv_DpRx_Dpcd_ValueWrite(0x21,0x01);//support mst
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x21,0x00);//not support mst
+    #endif
+    Drv_DpRx_Dpcd_ValueWrite(0x22,0x00);
+    Drv_DpRx_Dpcd_ValueWrite(0x23,0x00);
+
+    Drv_DpRx_Dpcd_ValueWrite(0x60,0x00);//[0]dsc enable
+    Drv_DpRx_Dpcd_ValueWrite(0x61,0x00);//[7:4]dsc minor verison, [3:0]dsc major version
+    Drv_DpRx_Dpcd_ValueWrite(0x62,0x00);//[1:0]dsc rc buff, 03-64K
+    
+    #if ((DPRX_DSC_DEC_SUPPORT == ENABLED) || (DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+
+    #if (DPRX_DSC_DEC_SUPPORT == DISABLED)//Only Bypass
+    if(g_stHdmiEdidInfo.ucMaxFrlDscRate == FRL_NOT_SPT)
+    {
+        ;
+    }
+    else
+    {
+        Drv_DpRx_Dpcd_ValueWrite(0x60,0x03);//[0]dsc enable
+        Drv_DpRx_Dpcd_ValueWrite(0x61,0x21);//[7:4]dsc minor verison, [3:0]dsc major version
+        Drv_DpRx_Dpcd_ValueWrite(0x62,0x03);//[1:0]dsc rc buff, 03-64K
+    }
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x60,0x03);//[0]dsc enable
+    Drv_DpRx_Dpcd_ValueWrite(0x61,0x21);//[7:4]dsc minor verison, [3:0]dsc major version
+    Drv_DpRx_Dpcd_ValueWrite(0x62,0x03);//[1:0]dsc rc buff, 03-64K
+    #endif
+    if(pstDpRx.b1DscAbnormal == TRUE)
+    {
+        Drv_DpRx_Dpcd_ValueWrite(0x60,0x00);//[0]dsc enable
+    }
+    
+    Drv_DpRx_Dpcd_ValueWrite(0x63,0x7f);//[7:0]rc buff size, 7f-128, 64Kx128 is 8MB
+    #if (DPRX_DSC_DEC_SUPPORT == DISABLED)//Only Dscpass
+    if(g_stHdmiEdidInfo.ucMaxFrlDscRate == FRL_NOT_SPT)
+    {
+        ;
+    }
+    else
+    {
+        Drv_DpRx_Dpcd_ValueWrite(0x64,0x2b);//slice capability, 2b-8,4,2,1 slice support --4k144Hz
+    }
+    #elif (DPRX_DSC_BYPASS_SUPPORT == DISABLED)//Only decode
+    Drv_DpRx_Dpcd_ValueWrite(0x64,0x0b);//slice capability, 2b-8,4,2,1 slice support --4k144Hz
+    #else//
+    if(g_stHdmiEdidInfo.ucMaxFrlDscRate == FRL_NOT_SPT)
+    {
+        Drv_DpRx_Dpcd_ValueWrite(0x64,0x0b);//slice capability, 2b-8,4,2,1 slice support --4k144Hz
+    }
+    else
+    {
+        Drv_DpRx_Dpcd_ValueWrite(0x64,0x2b);//slice capability, 2b-8,4,2,1 slice support --4k144Hz
+    }
+    #endif
+    Drv_DpRx_Dpcd_ValueWrite(0x65,0x04);//line buff depth, 04-13bit needed
+    Drv_DpRx_Dpcd_ValueWrite(0x66,0x03);//[0]1-block prediction is support
+	#if (DPRX_DFP_TYPE == BRANCH_HDMI)
+	//bypass mode, Asus 4k144 4k120,BPP大于18不显示
+    Drv_DpRx_Dpcd_ValueWrite(0x67,0x00);//[7:0]dsc max bpp support
+	Drv_DpRx_Dpcd_ValueWrite(0x68,0x01);//[9:8]dsc max bpp support, a0-10bpp
+	#else
+	Drv_DpRx_Dpcd_ValueWrite(0x67,0x00);//[7:0]dsc max bpp support
+	Drv_DpRx_Dpcd_ValueWrite(0x68,0x01);//[9:8]dsc max bpp support, a0-10bpp
+	#endif
+    
+    Drv_DpRx_Dpcd_ValueWrite(0x69,0x17);//color space support, 1f-all color space support
+    Drv_DpRx_Dpcd_ValueWrite(0x6a,0x06);//bpc support,06 - 8,10bpc support
+    Drv_DpRx_Dpcd_ValueWrite(0x6b,0x11);//peak dsc throughout ,peak 400M
+    Drv_DpRx_Dpcd_ValueWrite(0x6c,0x08);//slice width is 8 x 320
+    Drv_DpRx_Dpcd_ValueWrite(0x6d,0x00);//16 20 24 slice num support
+    Drv_DpRx_Dpcd_ValueWrite(0x6e,0x00);//reserved
+    Drv_DpRx_Dpcd_ValueWrite(0x6f,0x00);//dsc bpp increment: 00-1/16bpp, 04-1bpp
+    #endif
+    #if (DPRX_DFP_TYPE == BRANCH_HDMI)
+    Drv_DpRx_Dpcd_ValueWrite(0x80,0x4b);
+    Drv_DpRx_Dpcd_ValueWrite(0x81,0xF0);//TMDS 600Mhz
+    Drv_DpRx_Dpcd_ValueWrite(0x82,0x16);//8/10/12bit
+    Drv_DpRx_Dpcd_ValueWrite(0x83,0x1e);//CSC support and 420/422 support
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x80,0x08);
+    #endif
+
+    #if ((DPRX_FEC_SUPPORT == ENABLED)||(DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+    Drv_DpRx_Dpcd_ValueWrite(0x90,0xbf);
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x90,0x00);
+    #endif
+    //DPCD10A default value is 0x02
+    Drv_DpRx_Dpcd_HighAddrWrite(0x01);
+    Drv_DpRx_Dpcd_ValueWrite(0x0a,0x00);//to fix not support non-enhanced framing mode issue.
+
+////the reason why remove DPCD200 is the value returned to TX is from software
+////the reason why remove DPCD2002 is 2002 can not be programmed
+//    Drv_DpRx_Dpcd_HighAddrWrite(0x02);
+//    #if DPRX_MST_MODE_EN == ENABLED
+//    Drv_DpRx_Dpcd_ValueWrite(0x00,DPRX_MST_SINK_CNT);//sink cnt is 1
+//    #else
+//    Drv_DpRx_Dpcd_ValueWrite(0x00,0x01);//sink cnt is 1
+//    #endif
+    
+//    Drv_DpRx_Dpcd_HighAddrWrite(0x20);
+//    Drv_DpRx_Dpcd_ValueWrite(0x02,0x01);//sink cnt = 1
+
+    #if DPRX_MST_MODE_EN == ENABLED
+    Drv_DpRx_Dpcd_HighAddrWrite(0x05);
+    Drv_DpRx_Dpcd_ValueWrite(0x00,0x90);
+    Drv_DpRx_Dpcd_ValueWrite(0x01,0xcc);
+    Drv_DpRx_Dpcd_ValueWrite(0x02,0x24);
+    Drv_DpRx_Dpcd_ValueWrite(0x03,0x53);
+    Drv_DpRx_Dpcd_ValueWrite(0x04,0x59);
+    Drv_DpRx_Dpcd_ValueWrite(0x05,0x4e);
+    Drv_DpRx_Dpcd_ValueWrite(0x06,0x41);
+    Drv_DpRx_Dpcd_ValueWrite(0x07,0x53);
+    Drv_DpRx_Dpcd_ValueWrite(0x08,0x20);
+
+    Drv_DpRx_Dpcd_ValueWrite(0x10,0xbe);
+    Drv_DpRx_Dpcd_ValueWrite(0x11,0x05);
+    #endif
+    #if DPRX_VERSION <= DP1_2
+    Drv_DpRx_Dpcd_HighAddrWrite(0x22);
+    Drv_DpRx_Dpcd_ValueWrite(0x00,0x00);
+    Drv_DpRx_Dpcd_ValueWrite(0x01,0x00); 
+    Drv_DpRx_Dpcd_ValueWrite(0x02,0x00);
+    Drv_DpRx_Dpcd_ValueWrite(0x06,0x00);
+    Drv_DpRx_Dpcd_ValueWrite(0x07,0x00);//1DFPs
+    Drv_DpRx_Dpcd_ValueWrite(0x0e,0x00);
+    #else
+    Drv_DpRx_Dpcd_HighAddrWrite(0x22);
+    Drv_DpRx_Dpcd_ValueWrite(0x00,DP1_4);//fixed to DP1.4
+    Drv_DpRx_Dpcd_ValueWrite(0x01,pstDpRx.ucRxMaxLinkRate);
+    Drv_DpRx_Dpcd_ValueWrite(0x02,ucTps3Support|pstDpRx.ucRxMaxLaneCount);
+    Drv_DpRx_Dpcd_ValueWrite(0x03,ucTps4Support|ucSscCap);  
+    Drv_DpRx_Dpcd_ValueWrite(0x04,0x01);
+    #if (DPRX_DFP_TYPE == BRANCH_HDMI)
+    Drv_DpRx_Dpcd_ValueWrite(0x05,0x1d);
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x05,0x00);
+    #endif
+
+    Drv_DpRx_Dpcd_ValueWrite(0x06,0x01);
+//在HDMI Mode下，14号笔记本一定要将Bit0置1
+    Drv_DpRx_Dpcd_ValueWrite(0x07,Dpcd007);//[6]msa_timing_par_ignored set 1 for adative sync mode
+
+
+    #if DPRX_TIMING_HBE == ENABLED
+    Drv_DpRx_Dpcd_ValueWrite(0x08,0x2a);//bit1:local edid bit3:HBE;bit4-5:Buffer size unit and per port
+    #else
+    Drv_DpRx_Dpcd_ValueWrite(0x08,0x02);//bit1:local edid bit3:HBE;bit4-5:Buffer size unit and per port
+    #endif
+    Drv_DpRx_Dpcd_ValueWrite(0x09,0x0f);//port0 bit7-0:buffer size in pixels (512)
+    Drv_DpRx_Dpcd_ValueWrite(0x0a,0x04);//This port is used for the secondary isochronous stream of the main stream received
+    Drv_DpRx_Dpcd_ValueWrite(0x0b,0x00);//port1 bit7-0:buffer size in pixels (00)
+    Drv_DpRx_Dpcd_ValueWrite(0x0c,0x00);
+    Drv_DpRx_Dpcd_ValueWrite(0x0d,0x00);
+    //4ms for symbol lock
+    Drv_DpRx_Dpcd_ValueWrite(0x0e,0x81);
+    Drv_DpRx_Dpcd_ValueWrite(0x10,0x08);//VSC support
+
+    #if DPRX_ADAPTIVE_SYNC == ENABLED
+    Drv_DpRx_Dpcd_ValueWrite(0x14,0x01);//[1]adaptive_sync_sdp_supported
+    #endif
+    #endif
+}
+
+//========================================================================
+// Func Name   : Drv_DpRx_PhyInit
+// Description : Select which phy dig_wclk for link clock.
+                 //            connector----phy-------------digitail
+                 //            D0-----------D0---------------D0
+                 //            D1-----------D1---------------D1
+                 //            D2-----------D2---------------D2
+                 //            D3-----------D3---------------D3
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_DpRx_PhyInit(void)
+{
+    BKA1_08_REG = 0x0b;//[7]rg_dhrx_ldo_en: 0-disable, eq power use external vcc11_dhrx;
+                       //[6:4]rg_dhrx_ldo_vset: 000-1.1v
+                       //[3]rg_dhrx_en: 0-dis, 1-en;
+                       //[2:0]rg_dhrx_vcm_adj: 011-0.75v
+
+    BKA1_09_REG = 0xff;//[7:4]rg_dhrx_d0(d0~d3)_hseq_en
+    //PKT DET needs to be 1
+    BKA1_0A_REG = 0xf0;//[7:4]rg_dhrx_d0(d0~d3)_pkdet_en; 
+                       //[3:0]rg_dhrx_d0(d0~d3)_clkdet_en;
+    BKA1_0B_REG = 0x8f;//[7:4]D0 link clk enable.
+                       //[3:0]D0/D1/D2/D3 dig_clk enable.
+    BKA1_0C_REG  = 0x7c;//[2:0]rg_dhrx_pkdet_sdth:
+    BKA1_0D_REG = 0xa8;//[7:6]rg_dhrx_temp_sense_vset; 
+                       //[5]rg_dhrx_temp_sense_en
+                       //[4]rg_dhrx_eqrg_sel: 0-small range, 1-large range for 121 mode only
+                       //[3]rg_dhrx_mxchsel: do not touch this bit, default is 1
+                       //[2]rg_dhrx_refclk_sel: 0-sel from eq path, 1-sel from dhrxpll
+                       //[1]rg_dhrx_linkclk_sel: 0-sel from dhrx, 1-sel from dhrxpll
+                       //[0]rg_dhrx_linkclk_div2_en: 0-use from normal half-rate mode, 1-use for new full-rate mede;
+    BKA1_0E_REG &= 0xfc;
+    BKA1_0E_REG |= 0x03;
+    BKA1_0E_REG &= 0xf3;//[7:4]rg_dhrx_d0(d0~d3)bf2cdr_en; [3:2]2'b00 = Stronger DFE; [1:0]rg_dhrx_bf2cdr_fbis;
+    BKA1_0E_REG |= 0x04;//DFE 
+}
+
+void Drv_DpRx_PhyShut(void)//主要是关term
+{
+    BKA1_09_REG = 0x00;
+    BKA1_1F_REG = 0x0f;//[4]rg_dhrxpi_bias_en: 0-dis;
+                       //[3:0]rg_dhrxpi_pd: 4'b1111 = four channel power down
+}
+
+void Drv_DpRx_RtermCal(void)
+{
+    u8 ucIndex;
+    u8 ucResult = FAIL;
+    
+    BKA1_08_REG |= BIT3_1;//[3]rg_dhrx_en: 0-dis, 1-en;
+    ucIndex = 10;
+    while(ucIndex--)
+    {
+        BKE2_00_REG &= BIT0_0;//[0]rgd_dhrx_rterm_cali_en, 0-dis
+        Ocm_Delay1ms(1);
+        BKE2_00_REG |= BIT0_1;//[0]rgd_dhrx_rterm_cali_en, 1-en
+        Ocm_Delay1ms(2);
+        if(0x02 == (BKE2_07_REG & 0x03))//[1]rgod_dhrx_rterm_cali_done: 1-done; [0]rgod_dhrx_rterm_cali_fail: 1-fail
+        {
+            ucResult = SUCCESS;
+            break;
+        }
+    }
+    printLT(PRINT_PRIO_HIG, "\nRx Rterm is 0x%02bx", BKE2_08_REG);
+    if(ucResult == SUCCESS)//Rterm calibration done
+    {
+        printLT(PRINT_PRIO_HIG, "\nCali success");
+    }
+    else
+    {
+        printLT(PRINT_PRIO_HIG, "\nCali failed");
+    }
+}
+
+
+//========================================================================
+// Func Name   : Drv_DpRx_CrLockThresholdSet
+// Description : Set threshold of cr lock, to force tps1 fail.
+//             : is used to get a higher swing level.
+// Input       : TRUE-> force tps1 fail.
+//             : FLASE-> tps normal.
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_DpRx_CrLockThresholdSet(u8 b1IsLock)
+{
+    if (b1IsLock == TRUE)
+    {
+        BKF1_19_REG = 0x00; 
+        BKF1_1A_REG = 0x00; //err cnt threshold for cr lock.
+        BKF1_06_REG = 0xff; //rx data force 0xff
+        BKF1_52_REG = 0x0f;
+    }
+    else
+    {
+        BKF1_19_REG = 0x00;
+        BKF1_1A_REG = 0x02;
+        BKF1_06_REG = 0x00;
+        BKF1_52_REG = 0x00;
+    }
+}
+
+void Drv_DpRx_PiEnable(u8 ucOpt)
+{
+    if (ON == ucOpt)
+    {
+        BKA1_1F_REG = 0x10;//[4]rg_dhrxpi_bias_en: 1-en
+                           //[3:0]rg_dhrxpi_pd: 4'b0000 = four channel normal
+    }
+    else
+    {
+        BKA1_1F_REG = 0x0f;//[4]rg_dhrxpi_bias_en: 0-dis;
+                           //[3:0]rg_dhrxpi_pd: 4'b1111 = four channel power down.
+    }
+}
+
+void Drv_DpRx_PiSet(u8 ucLinkRate)
+{
+    switch(ucLinkRate)
+    {
+        case RBR:
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKA1_25_REG = 0x84;
+            BKA1_26_REG = 0x9e;
+            BKA1_27_REG = 0x9e;
+            BKA1_28_REG = 0x16;
+            #else
+            BKA1_26_REG = 0x13;
+            BKA1_27_REG = 0x13;
+            #endif
+            break;
+        case HBR:
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKA1_25_REG = 0x8d;
+            BKA1_26_REG = 0x9e;
+            BKA1_27_REG = 0x9e;
+            BKA1_28_REG = 0x16;
+            #else
+            BKA1_26_REG = 0x13;
+            BKA1_27_REG = 0x13;
+            #endif
+            break;
+        case HBR2:
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKA1_25_REG = 0x9c;
+            BKA1_26_REG = 0x8f;
+            BKA1_27_REG = 0x8f;
+            BKA1_28_REG = 0x17;
+            #else
+            BKA1_26_REG = 0x13;
+            BKA1_27_REG = 0x13;
+            #endif
+        break;
+        case HBR3:
+            BKA1_25_REG = 0x03;
+            BKA1_26_REG = 0x80;
+            BKA1_27_REG = 0x80;
+            BKA1_28_REG = 0x03;
+        break;
+        default:
+            BKA1_25_REG = 0x03;
+            BKA1_26_REG = 0x13;
+            BKA1_27_REG = 0x13;
+            BKA1_28_REG = 0x03;
+        break;
+    }
+}
+
+void Drv_DpRx_FreqIntg(void)
+{
+    BKC8_20_REG = 0x0a;
+    BKC8_21_REG = 0xcd;//soft freq intg value lane0
+    BKC8_22_REG = 0x0a;
+    BKC8_23_REG = 0xcd;//soft freq intg value lane1
+    BKC8_24_REG = 0x0a;
+    BKC8_25_REG = 0xcd;//soft freq intg value lane2
+    BKC8_26_REG = 0x0a;
+    BKC8_27_REG = 0xcd;//soft freq intg value lane3
+}
+//========================================================================
+// Func Name   : Drv_DpRx_TrainingReset
+// Description : Include phy, pi, cdr reset, to ensure cdr working normally
+// Input       : u8 b1SscEnable  
+// Output      : None
+// Return      : void
+//========================================================================
+
+#if DPRX_CDR_MODE == ANACDR
+void Drv_DpRx_AnaCdrRst(u8 ucLinkRate)
+{
+    BKA1_44_REG = 0xc0; //anacdr extref mode enable
+
+    BKE1_0D_REG &= 0xfe; //[0]1'b0:dhrxpll cdr reset
+    BKE1_0D_REG |= 0x01; //[0]1'b1:dhrxpll cdr release
+
+    BKE1_0C_REG &= 0xf0; //[3:0]dhrx d3~d0 reset
+    BKE1_0D_REG &= 0xe1; //[4:1]dhrx pi3~0 reset
+    BKC9_03_REG &= 0x0f; //[7:4]dig cdr reset
+    Ocm_Delay1us(10);
+    BKA1_38_REG = (ucLinkRate >= HBR2)?(0x37):(0x27);
+    BKA1_44_REG = 0x80; //anacdr extref mode disable
+    
+    BKE1_0C_REG |= 0x0f; //[3:0]dhrx d3~d0 release
+    BKE1_0D_REG |= 0x1e; //[4:1]dhrx pi3~0 release
+    BKC9_03_REG |= 0xf0; //[7:4]dig cdr release
+    
+    BKA1_44_REG = 0x00;
+}
+#endif
+#if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR)||(DPRX_CDR_MODE == HALF_SPEED_DIGCDR))
+void Drv_DpRx_DigCdrRst(u8 b1SscEnable)
+{
+    if(b1SscEnable == TRUE)
+    {
+        BKC8_28_REG = 0xf0; //7:4rgd_cdr_sw_freq_intg_en: 1-en
+    }
+
+    BKE1_0C_REG &= 0xf0;//[6]rgd_sw_dhrx_rst_n: 0-en
+    BKE1_0D_REG &= 0xe1;//[4:1]rg_sw_dhrxpi3(3~0)_rst_n: 0-en ;
+    BKC9_03_REG &= 0x0f;// rx cdr reset
+
+    BKE1_0C_REG |= 0x0f;//[6]rgd_sw_dhrx_rst_n: 1-dis
+    BKE1_0D_REG |= 0x1e;//[4:1]rg_sw_dhrxpi3(3~0)_rst_n: 1-dis; 
+    BKC9_03_REG |= 0xf0;//rx cdr reset
+    
+    BKC8_28_REG = 0x00; //rgd_cdr_sw_freq_intg_en: 0-dis
+    
+}
+#endif
+#if DPRX_CDR_MODE == ANACDR
+void Drv_DpRx_CdrSet(u8 ucLinkRate)
+{
+    BKC8_11_REG = 0x00;
+    switch (ucLinkRate)
+    {
+        case RBR : //1.62G
+        case HBR : //2.7G
+            BKC8_12_REG = 0x00;
+            break;
+        case HBR2 : //5.4G
+        case HBR3 : //8.1G
+            BKC8_12_REG = 0x02;
+            break;
+        default:
+            break;
+    }
+}
+#else
+void Drv_DpRx_CdrSet(u8 b1SscEnable,u8 ucLinkRate)
+{
+    #if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR)||(DPRX_CDR_MODE == HALF_SPEED_DIGCDR))
+    BKC8_11_REG |= BIT0_1; //rgd_cdr_ord_sel = 1: second order.
+    switch (ucLinkRate)
+    {
+        case RBR : //1.62G
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKC8_12_REG = (b1SscEnable == 0)?(0x3a):(0x7a); //[3:0]phug,[7:4]frug
+            #else
+            BKC8_12_REG = (b1SscEnable == 0)?(0x37):(0x79); //[3:0]phug,[7:4]frug
+            #endif
+            break;
+        case HBR : //2.7G
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKC8_12_REG = (b1SscEnable == 0)?(0x3a):(0x7a); //[3:0]phug,[7:4]frug
+            #else
+            BKC8_12_REG = (b1SscEnable == 0)?(0x37):(0x69); //[3:0]phug,[7:4]frug
+            #endif
+            break;
+        case HBR2 : //5.4G
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKC8_12_REG = (b1SscEnable == 0)?(0x39):(0x78); //[3:0]phug,[7:4]frug
+            #else
+            BKC8_12_REG = (b1SscEnable == 0)?(0x37):(0x77); //[3:0]phug,[7:4]frug
+            #endif
+            break;
+        case HBR3 : //8.1G
+            BKC8_12_REG = (b1SscEnable == 0)?(0x36):(0x77);  //[3:0]phug,[7:4]frug
+            break;
+        default:
+            break;
+    }
+    #endif
+}
+#endif
+void Drv_DpRx_CdrLoopDivSet(u8 ucLinkRate)//issue for the cdr
+{
+    #if DPRX_CDR_MODE == ANACDR
+    BKA1_1B_REG = 0x90; //[5:4]:11-cdr loop div 8
+    BKC8_19_REG = 0x05;//[1:0]:11-cdr loop div 8
+    switch (ucLinkRate)
+    {
+        case RBR :
+            break;
+        case HBR :
+            break;
+        case HBR2 :
+            break;
+        case HBR3 :       
+            break;
+        default:
+            break;
+    }
+    #endif
+    #if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR)||(DPRX_CDR_MODE == HALF_SPEED_DIGCDR))
+    switch (ucLinkRate)
+    {
+        case RBR :
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKA1_1B_REG = 0xb0; //[5:4]:11-cdr loop div 4
+            BKC8_19_REG = 0x0f; //[3]1'b1:CDR full rate enable
+                                //[2]1'b1:CDR s2p divder set software
+                                //[1:0]2'b:CDR s2p div set sel:DIV 4
+            #else
+            BKA1_1B_REG = 0xb0; //[5:4]:11-cdr loop div 4
+            BKC8_19_REG = 0x07;
+            #endif
+            break;
+        case HBR :
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKA1_1B_REG = 0x90; //[5:4]:11-cdr loop div 8
+            BKC8_19_REG = 0x0d; //[3]1'b1:CDR full rate enable
+                                //[2]1'b1:CDR s2p divder set software
+                                //[1:0]2'b01:CDR s2p div set sel:DIV 8
+            #else
+            BKA1_1B_REG = 0xb0; //[5:4]:11-cdr loop div 4
+            BKC8_19_REG = 0x07;
+            #endif
+            break;
+        case HBR2 :
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKA1_1B_REG = 0x90; //[5:4]:11-cdr loop div 10
+            BKC8_19_REG = 0x0d; //[3]1'b1:CDR full rate enable
+                                //[2]1'b1:CDR s2p divder set software
+                                //[1:0]2'b00:CDR s2p div set sel:DIV 10
+            #else
+            BKA1_1B_REG = 0x90; //[5:4]:11-cdr loop div 8
+            BKC8_19_REG = 0x05;
+            #endif
+            break;
+        case HBR3 :
+            BKA1_1B_REG = 0x90; //[5:4]:11-cdr loop div 8
+            BKC8_19_REG = 0x05;//[1:0]:11-cdr loop div 8            
+            break;
+        default:
+            break;
+    }
+    #endif
+}
+
+void Drv_DpRx_PcrPllInit(void)
+{
+    BKA3_20_REG &= BIT4_0;//[4]rg_pcrpll_pd: 0-normal work
+    BKA3_20_REG &= 0xfc;  //[1:0]rg_pcrpll_ref_sel: 00-Xtal_25m_clk
+    BKA3_23_REG = 0x01;//[6:4]rg_pcrpll_half_pcrck_muxsel : 010-aa_pll_half_pix_clk
+    BKA3_24_REG = 0x00;//[6:4]rg_pcrpll_half_pixck_muxsel : 010-sel pixel clk
+    BKA3_25_REG = 0x01;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    BKA3_26_REG = 0x01;//[6:4]rg_pcrpll_dscin_muxsel      : 000-aa_pll_pix_clk
+
+    BKE2_3D_REG = 0x20;//ks =2;
+//    BKE2_3D_REG &= BIT3_0;
+    BKE2_3D_REG |= BIT3_1;//pcrpll_cal_en = 1: 
+}
+
+
+void Drv_DpRx_ClkMux(void)
+{
+    //sel rx link ckk
+    BKA3_3D_REG = 0x20;//[6:4]rg_clkgen_div_link_muxsel //aa_dhrx_link_clk
+    
+    //sel pixel clk
+    BKA3_45_REG = 0x00; //[4]rg_clkgen_dscin_clk_recvsel     : 0-aa_pcrpll_dsc_in_clk
+                        //[3:1]rg_clkgen_divpcr_clk_recvsel  : 000-aa_pcrpll_div_pcr_clk
+                        //[0]rg_clkgen_pix_clk_recvsel       : 0-aa_pcrpll_pix_clk
+    BKA3_46_REG = 0x00;//[2:0]rg_clkgen_pcr_clk_recvsel      : 000-aa_pcrpll_pcr_clk
+
+    //sel pixel clk 
+    BKA3_3C_REG = 0x01;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                            //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 1
+    BKA3_3E_REG = 0x11;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                       //[3:0]rg_clkgen_dscout_divse        : div 2
+    BKA3_3F_REG = 0x01;//ad_dscrx_dsc_clk    2f/2
+    BKA3_40_REG = 0x11;//ad_dscrx_dsc_rd_clk 2f/2
+    
+    BKA3_41_REG = 0x01;//[6:4]rg_clkgen_dsctx_dsc_muxsel    : 000-aa_pcrpll_pix_clk
+    BKA3_42_REG = 0x11;//[6:4]rg_clkgen_dsctx_dscrd_muxsel  : 001-aa_pcrpll_pix_clk
+                         //[3:0]rg_clkgen_dsctx_dscrd_divsel : div 2  
+}
+
+
+void Drv_DpRx_RxPllBand(u8 ucLinkRate)
+{
+    #if DPRX_CDR_MODE == ANACDR
+    switch(ucLinkRate)
+    {
+        case RBR:
+        case HBR:
+            BKA1_31_REG = 0x08; //[3:0]rxpll cp
+            BKA1_33_REG = 0x60; //[2]1'b0:anacdr new fd mode disable
+            BKA1_3A_REG = 0x02; //[7:4]:acdr fdcp;[3:0]:acdr pdcp
+                                //[7:4]4'b0000:dhrxpll_fdcp_cursel;//[3:0]4'b0010:dhrxpll_pdcp_cursel
+            BKA1_3B_REG = 0x87; //anacdr v2i
+            break;
+        case HBR2:
+//            BKA1_31_REG = 0x08; //[3:0]rxpll cp
+//            BKA1_33_REG = 0x60; //[2]1'b0:anacdr new fd mode disable
+//			//03-->07 solve ANACDR unlock issue
+//            BKA1_3A_REG = 0x04; //[7:4]:acdr fdcp;[3:0]:acdr pdcp
+//                                //[7:4]4'b0000:dhrxpll_fdcp_cursel;//[3:0]4'b0100:dhrxpll_pdcp_cursel
+//            //R7 360 0xc7 cause Training fail
+//			BKA1_3B_REG = 0xc7; //anacdr v2i
+//            
+            BKA1_31_REG = 0x08; //[3:0]rxpll cp
+            BKA1_33_REG = 0x64; //[2]1'b0:anacdr new fd mode disable
+            BKA1_38_REG = 0x37; //[2]1'b0:anacdr new fd mode disable
+			//03-->07 solve ANACDR unlock issue
+            BKA1_39_REG = 0x06;
+            BKA1_3A_REG = 0x12; //[7:4]:acdr fdcp;[3:0]:acdr pdcp
+                                //[7:4]4'b0000:dhrxpll_fdcp_cursel;//[3:0]4'b0100:dhrxpll_pdcp_cursel
+            //R7 360 0xc7 cause Training fail
+			BKA1_3B_REG = 0xA7; //anacdr v2i
+        
+//            BKA1_31_REG = 0x08; //[3:0]rxpll cp
+//            BKA1_33_REG = 0x64; //[2]1'b0:anacdr new fd mode disable
+//			//03-->07 solve ANACDR unlock issue
+//            BKA1_38_REG = 0x37; //[2]1'b0:anacdr new fd mode disable
+//            BKA1_39_REG = 0x06;
+//            BKA1_3A_REG = 0x12; //[7:4]:acdr fdcp;[3:0]:acdr pdcp
+//                                //[7:4]4'b0000:dhrxpll_fdcp_cursel;//[3:0]4'b0100:dhrxpll_pdcp_cursel
+//            //R7 360 0xc7 cause Training fail
+//			BKA1_3B_REG = 0xA7; //anacdr v2i
+            break;
+        case HBR3:
+		//for 5M cable
+            BKA1_31_REG = 0x08; //[3:0]rxpll cp
+            BKA1_33_REG = 0x64; //[2]1'b1:anacdr new fd mode
+            BKA1_38_REG = 0x37; //[2]1'b0:anacdr new fd mode disable
+            BKA1_39_REG = 0x04;
+            BKA1_3A_REG = 0x48; //[7:4]:acdr fdcp;[3:0]:acdr pdcp
+                                //[7:4]4'b0110:dhrxpll_fdcp_cursel;//[3:0]4'b0110:dhrxpll_pdcp_cursel
+            BKA1_3B_REG = 0x87; //anacdr v2i
+                                //兼容AMD6900 ecc error问题,0x47->0x87----2023.7.10
+                                //兼容980B 出图后误码突增的问题----2023.7.11
+            break;
+        default:
+            break;
+    }
+    #endif
+    #if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR)||(DPRX_CDR_MODE == HALF_SPEED_DIGCDR))
+    switch(ucLinkRate)
+    {
+        case RBR:
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKC7_E6_REG |= BIT3_1; //[3]1'b1:RX full speed for DP enable
+            BKA1_0D_REG = 0xa9;    //[0]1'b1:Use for new full-rate mode
+            BKA1_31_REG = 0x08;    //[3:0]rxpll cp
+            BKA1_3E_REG = 0x50;    //1.62g full speed-fb div /2
+            #else
+            BKA1_31_REG = 0x01;    //[3:0]rxpll cp
+            BKA1_42_REG = 0x90;    //rxpll freqset= 1
+            #endif
+            break; 
+        case HBR:
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR 
+            BKC7_E6_REG |= BIT3_1; //[3]1'b1:RX full speed for DP enable
+            BKA1_0D_REG = 0xa9;    //[0]1'b1:Use for new full-rate mode
+            BKA1_31_REG = 0x08;    //[3:0]rxpll cp
+            BKA1_3E_REG = 0x50;    //2.7g full speed-fb div /2
+            #else
+            BKA1_31_REG = 0x08;   //[3:0]rxpll cp
+            BKA1_42_REG = 0x80;   //rxpll freqset= 0
+            #endif
+            break;
+        case HBR2:
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKC7_E6_REG |= BIT3_1; //[3]1'b1:RX full speed for DP enable
+            BKA1_0D_REG = 0xa9;    //[0]1'b1:Use for new full-rate mode
+            BKA1_31_REG = 0x88;    //[7]1'b1:iband enhace enable; [3:0]rxpll cp
+            BKA1_3E_REG = 0x50;    //5.4g full speed-fb div /2
+            #else
+            BKA1_31_REG = 0x08;   //[3:0]rxpll cp
+            BKA1_42_REG = 0x80;   //rxpll freqset= 0
+            #endif
+            break;
+        case HBR3:
+            #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+            BKC7_E6_REG &= BIT3_0; //[3]1'b0:RX full speed for DP disable
+            BKA1_0D_REG = 0xa8;    //[0]1'b0:use for normal half-rate mode
+            BKA1_3E_REG = 0x60;    //8.1g-fb div /1
+            #endif
+            BKA1_31_REG = 0x08;    //[7]1'b0:iband enhace disable;[3:0]rxpll cp
+            BKA1_42_REG = 0x80;    //rxpll freqset= 0
+            break;
+        default:
+             break;
+    }
+    BKA1_30_REG &= BIT5_0;//[5]rg_dhrxpll_vcodiv_rst_n: 0-en
+    BKA1_30_REG |= BIT5_1;//[5]rg_dhrxpll_vcodiv_rst_n: 1-dis
+    #endif
+}
+
+void Drv_DpRx_RxPllCali(void)
+{
+    u8 ucCnt;
+    u8 ucloop_rxpll_cal;
+    #if DPRX_CDR_MODE == ANACDR
+    u8 ucLoop_Cnt;
+    u8 ucCal_Det_Cnt,ucCal_Cnt;
+    u16 usRxpll_Ref_Cnt,usRxpll_Cal_Cnt,usRxpll_Avg_CalCnt;
+    u16 usRxpll_Sum_CalCnt[5];
+    u16 usTemp_Min_Cnt; 
+    #endif
+    BKA1_30_REG &= BIT7_0; //pd disable
+    BKA1_30_REG |= BIT3_1; //bias enable
+    BKA1_30_REG |= BIT2_1; //sel dp mode
+    BKA1_30_REG &= 0xfc;   //bit7 pll power on [1:0]rg_dhrxpll_ref_sel: 00-xtal_25m_clk or xtal_50m_clk
+
+    BKA1_33_REG = 0x60; //rxpll prediv = 1
+    BKA1_3E_REG = 0x60; //rxpll fb div = 1;
+    BKA1_42_REG = 0x80; //rxpll freqset= 0
+    BKA1_3B_REG = 0x00;//not ana cdr V2T need close
+    BKA1_44_REG = 0x80;    //[7]1'b1:dhrxpll cdr extref mode software mode;[6]1'b0:anacdr extref mode set:0-disable
+                           //dhrxpll cdr extref mode sel software mode and set anacdr extref mode is 0;
+
+    BKE3_00_REG &= BIT1_0; //[1]rgd_dhrxpll_cal_pll_cal_en_auto_en: 1-> calibrate multiple frequency.
+    BKE3_01_REG = 0x20;    //[5:4]ks = 2;
+
+
+    #if DPRX_CDR_MODE == ANACDR
+    BKA1_32_REG = 0x00; //dhrxpll v2i close when anacdr mode
+    BKA1_38_REG = 0x27; //[5]1'b1:anacdr lpf for high speed;[0]1'b1:anacdr pd buffer enable
+    BKA1_39_REG = 0x06; //[3:0]4'b0111:analog cdr fd loop bandwidth select:1/4
+    BKA1_3B_REG = 0x87;//not ana cdr V2T need close
+    BKA1_43_REG |= 0x30; // force ana cdr open
+    BKA1_44_REG |= 0x30;// rxpll open mode
+    BKE3_01_REG |=BIT0_1; //[0]1'b1:dhrxpll cal_cdr cal en
+    #endif
+    
+    BKE3_09_REG = 0x03;   // [3:2] = 00: calibration HDMI/DP select: 00-> HDMI1.4/2.0, to fix bug.
+                          // [1:0] = 11: calibration train_sel: software control mode
+    BKE3_0B_REG &= BIT0_0;// [0]rgd_dhrxpll_cal_pll_band_sw_en: 0-dis
+    
+    ucloop_rxpll_cal = 2;
+    for(ucloop_rxpll_cal = 0; ucloop_rxpll_cal < 4;ucloop_rxpll_cal++)
+    {
+        #if DPRX_CDR_MODE == FULL_SPEED_DIGCDR
+        BKA1_31_REG = (ucloop_rxpll_cal == 2)?(0x88):(0x08);   //5.4g:iband enhace
+        BKA1_3E_REG = (ucloop_rxpll_cal <= 2)?(0x50):(0x60);   //1.62g,2.7g,5.4g:fb div/2;8.1g:fb div/1
+        #endif
+        #if DPRX_CDR_MODE == HALF_SPEED_DIGCDR
+        BKA1_42_REG = (ucloop_rxpll_cal == 0)?(0x90):(0x80); //freq set
+        #endif
+        
+        BKE3_0A_REG &= 0x3f;//[5:4]rgd_dhrxpll_cal_frl_set_mode_sel: 00-auto ctrl mode
+        switch(ucloop_rxpll_cal)
+        {
+            case 0x00:
+                BKE3_0A_REG |= 0x00; //[7:6] = 00: train_sel software set: 1.62G
+                break;
+            case 0x01:
+                BKE3_0A_REG |= 0x40; //[7:6] = 01: train_sel software set: 2.7G
+                break;
+            case 0x02:
+                BKE3_0A_REG |= 0x80; //[7:6] = 10: train_sel software set: 5.4G
+                break;
+            case 0x03:
+                BKE3_0A_REG |= 0xc0; //[7:6] = 11: train_sel software set: 8.1G
+                break;
+            default:
+                break;
+        }        
+        ucCnt = 3;
+        while(ucCnt--)
+        {
+            BKE1_05_REG &= 0xfc;//[0]rgd_sw_dhrxpll_cal_rst_n: 0-en
+            BKA1_30_REG &= BIT6_0;//[6]rg_dhrxpll_rst_n: 0-en
+            BKE3_00_REG &= BIT0_0;//[0]rgd_dhrxpll_cal_pll_cal_en: 0-dis
+            Ocm_Delay1ms(1);
+            BKE1_05_REG |= 0x03;//[0]rgd_sw_dhrxpll_cal_rst_n: 1-dis
+            BKA1_30_REG |= BIT6_1;//[6]rg_dhrxpll_rst_n: 1-dis
+            BKE3_00_REG |= BIT0_1;//[0]rgd_dhrxpll_cal_pll_cal_en: 1-en
+            Ocm_Delay1ms(2);//KF增大后，delay需要加长，否则Cali失败
+            if((BKE3_24_REG&0x03) == 0x02) //[1]rgod_dhrxpll_pll_cal_done: 1-done
+            {
+                break;
+            }
+        }
+        #if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR) ||(DPRX_CDR_MODE == HALF_SPEED_DIGCDR))  
+        switch(ucloop_rxpll_cal)
+        {
+            case 0x00:
+                BKE3_12_REG =   BKE3_1D_REG; 
+                break;
+            case 0x01:
+                BKE3_13_REG =   BKE3_1E_REG; 
+                break;
+            case 0x02:
+                BKE3_14_REG =   BKE3_1F_REG; 
+                break;
+            case 0x03:
+                BKE3_15_REG =   BKE3_20_REG; 
+                break;
+            default:
+                break;
+        }
+        #endif
+        #if DPRX_CDR_MODE == ANACDR
+        BKE3_0B_REG |= BIT0_1;//[0]rgd_dhrxpll_cal_pll_band_sw_en: 1-en
+        BKE3_09_REG |= 0x0c;
+        
+        usRxpll_Ref_Cnt  =  ((u16)BKE3_29_REG << 8) + BKE3_2A_REG;
+        for(ucLoop_Cnt = 0; ucLoop_Cnt < 5;ucLoop_Cnt++)
+        {
+            switch(ucloop_rxpll_cal)
+            {
+                case 0x00:
+                    BKE3_12_REG =   BKE3_1D_REG + ucLoop_Cnt - 2; 
+                    break;
+                case 0x01:
+                    BKE3_13_REG =   BKE3_1E_REG + ucLoop_Cnt - 2;
+                    break;
+                case 0x02:
+                    BKE3_14_REG =   BKE3_1F_REG + ucLoop_Cnt - 2; 
+                    break;
+                case 0x03:
+                    BKE3_15_REG =   BKE3_20_REG + ucLoop_Cnt - 2;
+                    break;
+                default:
+                    break;
+            }
+            usRxpll_Avg_CalCnt  = 0;
+            ucCal_Det_Cnt       = 0;
+            ucCal_Cnt           = 0;
+            while(ucCal_Cnt < 100)
+            {
+                Ocm_Delay1ms(1);
+                ucCal_Cnt++;
+                usRxpll_Cal_Cnt =  ((u16)BKE3_26_REG << 8) + BKE3_27_REG;    
+                if(abs(usRxpll_Cal_Cnt - usRxpll_Ref_Cnt) < 0x80) //in case fm split issue
+                {
+                     usRxpll_Avg_CalCnt += usRxpll_Cal_Cnt;
+                     ucCal_Det_Cnt++;
+                }
+                if(ucCal_Det_Cnt == 8)
+                {
+                    usRxpll_Sum_CalCnt[ucLoop_Cnt] = usRxpll_Avg_CalCnt/8;
+                    break;
+                }
+            }
+        }
+        usTemp_Min_Cnt = 0xffff;
+        for(ucLoop_Cnt = 0; ucLoop_Cnt < 5;ucLoop_Cnt++)
+        {
+            if(usTemp_Min_Cnt > abs(usRxpll_Sum_CalCnt[ucLoop_Cnt] - usRxpll_Ref_Cnt))
+            {
+                switch(ucloop_rxpll_cal)
+                {
+                    case 0x00:
+                        BKE3_12_REG =   BKE3_1D_REG + ucLoop_Cnt - 2; 
+                        break;
+                    case 0x01:
+                        BKE3_13_REG =   BKE3_1E_REG + ucLoop_Cnt - 2;
+                        break;
+                    case 0x02:
+                        BKE3_14_REG =   BKE3_1F_REG + ucLoop_Cnt - 2; 
+                        break;
+                    case 0x03:
+                        BKE3_15_REG =   BKE3_20_REG + ucLoop_Cnt - 2;
+                        break;
+                    default:
+                        break;
+                }
+                usTemp_Min_Cnt =  abs(usRxpll_Sum_CalCnt[ucLoop_Cnt] - usRxpll_Ref_Cnt);
+            }         
+        }
+        BKE3_0B_REG &= BIT0_0;//[0]rgd_dhrxpll_cal_pll_band_sw_en: 1-en
+        BKE3_09_REG &= 0xf3;
+        #endif
+    }
+    printLT(PRINT_PRIO_TEST, "\nDp rxpll band = 0x%02bx,0x%02bx,0x%02bx,0x%02bx",BKE3_12_REG, BKE3_13_REG, BKE3_14_REG, BKE3_15_REG);
+    #if DPRX_CDR_MODE == ANACDR
+    BKA1_43_REG &= 0xcf;
+    BKA1_44_REG = 0xc0;
+    #endif
+    BKE3_0B_REG |= BIT0_1;//[0]rgd_dhrxpll_cal_pll_band_sw_en: 1-en
+    BKE3_09_REG = 0x0d;   // [3:2] = 11: calibration HDMI/DP select: 11-> dp mode.
+                          // [1:0] = 01: calibration train_sel: dp tx mainlink control mode
+    BKE3_0A_REG &= 0x3f;  //[7:6]training sel = 0
+}
+#if DPRX_CDR_MODE == ANACDR
+u8 Drv_DpRxPll_LockGet(void)
+{
+    if(BKE3_24_REG & BIT4_1)
+    {
+        return TRUE;
+    }
+    else
+    {
+        return FALSE;
+    }
+}
+#endif
+void Drv_DpRx_LinkClkSel(u8 uclinkClk)
+{
+    BKA1_0B_REG &= 0x0f;
+    switch (uclinkClk)
+    {
+        case LANE_0 :
+            BKA1_0B_REG |= BIT7_1;
+            break;
+        case LANE_1 :
+            BKA1_0B_REG |= BIT6_1; 
+            break;
+        case LANE_2 :
+            BKA1_0B_REG |= BIT5_1;
+            break;
+        case LANE_3 :
+            BKA1_0B_REG |= BIT4_1;
+            break;
+        default:
+            break;
+    }
+}
+
+u8 Drv_DpRx_DscFifoEmptyGet(void)
+{
+    return BKEE_AD_REG;
+}
+u8 Drv_DpRx_DscFifoFullGet(void)
+{
+    return BKEE_AE_REG;
+}
+void Drv_DpRx_CtleSet(u8 ucLinkRate)
+{
+    switch (ucLinkRate)
+    {
+        case RBR :
+            memcpy(&BKA1_02_REG,szDpRxEqConfig[0],6); 
+            break;
+        case HBR :
+            memcpy(&BKA1_02_REG,szDpRxEqConfig[1],6); 
+            break;
+        case HBR2 :
+            memcpy(&BKA1_02_REG,szDpRxEqConfig[2],6);
+            break;
+        case HBR3 :
+            memcpy(&BKA1_02_REG,szDpRxEqConfig[3],6);
+            break;
+        default:
+            break;
+    }
+}
+
+void Drv_DpRx_DpRxChlSwap(void)
+{
+    #if DPRX_CDR_MODE == ANACDR
+    BKA1_0E_REG &= 0x0f;//[7:4]rg_dhrx_d0_bf2cdr_en,only enable one lane when use anacdr
+    #endif    
+
+    #if DPRX_LANE_COUNT == FOUR_LANE
+    BKA1_09_REG = 0xff;
+    BKA1_1F_REG = 0x10;
+    #else
+    BKA1_09_REG = 0xcc;
+    BKA1_1F_REG = 0x1c;
+    #endif
+
+    BKC7_E6_REG &= 0x0f;//pn swap
+    BKC7_E7_REG = 0x01; //[7:4]dhrx logical channel data 0 source select, 1-chl1;
+                        //[3:0]dhrx logical channel data 1 source select, 2-chl2;
+    BKC7_E8_REG = 0x23; //[7:4]dhrx logical channel data 2 source select, 3-chl3;
+                        //[3:0]dhrx logical channel data 3 source select, 0-chl0;
+    #if DPRX_CDR_MODE == ANACDR
+    BKA1_0E_REG |= BIT7_1;//[7:4]rg_dhrx_d0_bf2cdr_en,only enable one lane when use anacdr
+    #endif
+    Drv_DpRx_AuxSwap(FALSE);
+    Drv_DpRx_LinkClkSel(LANE_0);
+
+    BKC7_E6_REG |= BIT0_1;//eq mode sel dp rx
+}
+
+#if TYPECRX_EN == ENABLED
+void Drv_DpRx_TypecRxChlSwap(u8 ucInputSel, StructCcStatus pUCCStatus)
+{
+    #if DPRX_CDR_MODE == ANACDR
+    BKA1_0E_REG &= 0x0F;//[7:4]rg_dhrx_d0_bf2cdr_en,only enable one lane when use anacdr
+    #endif    
+    switch(ucInputSel)
+    {
+        case TYPEC_MALE:
+            if(pUCCStatus.uclaneCount == FOUR_LANE)
+            {
+                BKA1_09_REG = 0xff;
+                BKA1_1F_REG = 0x10;
+            }
+            else
+            {
+                BKA1_09_REG = 0xcc;
+                BKA1_1F_REG = 0x1c;
+            }
+            BKC7_E6_REG &= 0x0F;//pn swap
+            BKC7_E7_REG = 0x01; //[7:4]dhrx logical channel data 0 source select, 1-chl1;
+                                //[3:0]dhrx logical channel data 1 source select, 2-chl2;
+            BKC7_E8_REG = 0x23; //[7:4]dhrx logical channel data 2 source select, 3-chl3;
+                                //[3:0]dhrx logical channel data 3 source select, 0-chl0;
+            #if DPRX_CDR_MODE == ANACDR
+            BKA1_0E_REG |= BIT7_1;//[7:4]rg_dhrx_d0_bf2cdr_en,only enable one lane when use anacdr
+            #endif
+            Drv_DpRx_AuxSwap(FALSE);
+            Drv_DpRx_LinkClkSel(LANE_0);
+            break;
+                        
+        case TYPEC_FEMALE_FLIP:
+            if(pUCCStatus.uclaneCount == FOUR_LANE)
+            {
+                BKA1_09_REG = 0xff;
+                BKA1_1F_REG = 0x10;
+            }
+            else
+            {
+                #if PINE_SUPPORT == ENABLED
+                if(pUCCStatus.ucPin_Assignment == PIN_E)
+                {
+                    BKA1_09_REG = 0x33;//term2.3EN
+                    BKA1_1F_REG = 0x13;//PI 0.1 OFF
+                }
+                else
+                #endif
+                {
+                    BKA1_09_REG = 0xcc;//term0.1EN
+                    BKA1_1F_REG = 0x1c;//PI 2.3 OFF
+                }
+            }
+            #if PINE_SUPPORT == ENABLED
+            if(pUCCStatus.ucPin_Assignment == PIN_E)
+            {
+                BKC7_E6_REG &= 0x0F; //pn swap
+                BKC7_E6_REG |= 0x50;//pn swap
+                
+                BKC7_E7_REG = 0x23; //[7:4]dhrx logical channel data 0 source select, 1-chl1;
+                                    //[3:0]dhrx logical channel data 1 source select, 2-chl2;
+                BKC7_E8_REG = 0x10; //[7:4]dhrx logical channel data 2 source select, 3-chl3;
+                                        //[3:0]dhrx logical channel data 3 source select, 0-chl0;
+            
+                #if DPRX_CDR_MODE == ANACDR
+                BKA1_0E_REG |= BIT5_1;//[7:4]rg_dhrx_d0_bf2cdr_en,only enable one lane when use anacdr
+                #endif
+                Drv_DpRx_AuxSwap(FALSE);
+                Drv_DpRx_LinkClkSel(LANE_2);
+            }
+            else
+            #endif
+            {
+                BKC7_E6_REG &=0x0F; //pn swap
+                BKC7_E6_REG |= 0xA0;//pn swap
+                BKC7_E7_REG = 0x10; //[7:4]dhrx logical channel data 0 source select, 1-chl1;
+                                    //[3:0]dhrx logical channel data 1 source select, 2-chl2;
+                BKC7_E8_REG = 0x23; //[7:4]dhrx logical channel data 2 source select, 3-chl3;
+                                        //[3:0]dhrx logical channel data 3 source select, 0-chl0;
+            
+                #if DPRX_CDR_MODE == ANACDR
+                BKA1_0E_REG |= BIT6_1;//[7:4]rg_dhrx_d0_bf2cdr_en,only enable one lane when use anacdr
+                #endif
+                Drv_DpRx_AuxSwap(TRUE);
+                Drv_DpRx_LinkClkSel(LANE_1);
+            }
+            break;        
+        case TYPEC_FEMALE_NOFLIP:
+            if(pUCCStatus.uclaneCount == FOUR_LANE)
+            {
+                BKA1_09_REG = 0xff;    
+                BKA1_1F_REG = 0x10;
+            }
+            else
+            {
+                #if PINE_SUPPORT == ENABLED
+                if(pUCCStatus.ucPin_Assignment == PIN_E)
+                {
+                    BKA1_09_REG = 0xCC;//PHY0 needs enabled
+                    BKA1_1F_REG = 0x1C;//PI
+                }
+                else
+                #endif
+                {
+                    BKA1_09_REG = 0x33;//PHY0 needs enabled
+                    BKA1_1F_REG = 0x13;//PI
+                }
+            }
+            #if PINE_SUPPORT == ENABLED
+            if(pUCCStatus.ucPin_Assignment == PIN_E)
+            {
+                BKC7_E6_REG &= 0x0F; //pn swap
+                BKC7_E6_REG |= 0x50;//pn swap
+                BKC7_E7_REG = 0x01; //[7:4]dhrx logical channel data 0 source select, 1-chl1;
+                                    //[3:0]dhrx logical channel data 1 source select, 2-chl2;
+                BKC7_E8_REG = 0x32; //[7:4]dhrx logical channel data 2 source select, 3-chl3;
+                                    //[3:0]dhrx logical channel data 3 source select, 0-chl0;
+                #if DPRX_CDR_MODE == ANACDR
+                BKA1_0E_REG |= BIT7_1;//[7:4]rg_dhrx_d0_bf2cdr_en,only enable one lane when use anacdr
+                #endif
+                Drv_DpRx_AuxSwap(TRUE);
+                Drv_DpRx_LinkClkSel(LANE_0);
+            }
+            else
+            #endif
+            {
+                BKC7_E6_REG &= 0x0F; //pn swap
+                BKC7_E6_REG |= 0xA0;//pn swap
+                BKC7_E7_REG = 0x32; //[7:4]dhrx logical channel data 0 source select, 1-chl1;
+                                    //[3:0]dhrx logical channel data 1 source select, 2-chl2;
+                BKC7_E8_REG = 0x01; //[7:4]dhrx logical channel data 2 source select, 3-chl3;
+                                    //[3:0]dhrx logical channel data 3 source select, 0-chl0;
+                #if DPRX_CDR_MODE == ANACDR
+                BKA1_0E_REG |= BIT4_1;//[7:4]rg_dhrx_d0_bf2cdr_en,only enable one lane when use anacdr
+                #endif
+                Drv_DpRx_AuxSwap(FALSE);
+                Drv_DpRx_LinkClkSel(LANE_3);
+            }
+            break;
+        default:
+        break;
+    }
+    BKC7_E6_REG |= BIT0_1;//eq mode sel dp rx
+}
+#endif
+
+void Drv_DpRx_EqModeSet(u8 ucEqMode)
+{
+    if(ucEqMode == HW_MODE)
+    {
+        BKF1_5D_REG |= BIT6_1;//hard eq enable
+    }
+    else
+    {
+        BKF1_5D_REG &= BIT6_0;//hard eq disable
+    }
+}
+u8 Drv_DpRx_EqModeGet(void)
+{
+    if(BKF1_5D_REG & BIT6_1)
+    {
+        return HW_MODE;
+    }
+    return SW_MODE;
+}
+//for switch 480p pcr unstable issue
+//void Drv_DpRx_HsyncPcrErrSet(StructDpRx g_stDpMsa)
+//{
+//    if(g_stDpMsa.usHactive <= 720)
+//    {
+//        BKF3_50_REG = 0x01;
+//    }
+//    else
+//    {
+//        BKF3_50_REG = 0x14;
+//    }
+//}
+
+//========================================================================
+// Func Name   : Drv_DpRx_DigitalInit
+// Description : DpRx top settings.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_DpRx_DigitalInit(void)
+{
+    BKA3_7F_REG &= BIT3_0;//[3]rgd_sw_en_dhrx_hpd: 0-hw;
+    
+    BKC7_D7_REG &= BIT0_0;//[0]rgd_rx_da_src_sel: 0-dhrx_hpd_auto
+    
+    BKF1_BB_REG = 0x59;   //[0]rgd_rx_hpd_auto_sel: 1-auto, [1]rgd_rx_hpd_auto_en: 1-en
+                          //[2]rgd_hpd_irq_sft_en: 0-dis, [3]rgd_cp_hpd_irq_en: 1-en
+                          //[4]link_fail_int_en: 1-en, [5]r0_available_int_en: 0-dis
+                          //[6]v_rdy_int_en: 1-en, [7]ecf_chg_int_en: 0-dis
+    BKF1_C4_REG |= BIT1_1;//[1]rgd_dprx_hdcp_bypass_en: 1-dprx hdcp bypass enable
+
+}
+
+void Drv_DpRx_HwResetSet(void)
+{
+    BKE1_0C_REG &= BIT4_0; //disable rx RXPLL_CAL_RX_HW_RST_EN
+    BKE1_0C_REG &= BIT5_0; //disable rx hard reset
+    #if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR)||(DPRX_CDR_MODE == HALF_SPEED_DIGCDR))
+    BKE1_0D_REG &= BIT7_0; //disable anacdr hw rst.
+    #endif
+    BKE1_0D_REG &= BIT6_0; //disable anacdr hw rst.
+    BKE1_0D_REG &= BIT5_0; //disable pi hard reset
+    
+    BKE1_0E_REG &= BIT7_0;//[7]rg_audpll_hw_rst_en: 0-dis
+    #if DPRX_PCRPLL_HRST == DISABLED
+    //PCRPLL hard control has logic issue, maybe enter into dead loop
+    BKE1_0E_REG &= BIT6_0; //pcrpll0_hw_reset = 0;
+    BKE1_0E_REG &= BIT5_0; //pcrpll1 hw reset = 0;
+    #endif
+    //design of RX FIFO doubled, easy to occur SKEW issue
+    //need to hard reset when skew occurs
+    BKC9_0A_REG |= BIT1_1; //rx_fifo_rst enable //sovle the no align down issue
+}
+
+void Drv_DpRx_SkewLock(u8 IsLock)
+{
+    if(IsLock == TRUE)
+    {
+        BKF1_8A_REG |= BIT1_1;
+    }
+    else
+    {
+        BKF1_8A_REG &= BIT1_0;
+    }    
+}
+
+void Drv_DpRx_FecSoftModeSet(u8 b1IsFecEn)
+{
+    if(b1IsFecEn == ENABLED)
+    {
+        BKF1_B7_REG |= 0x30;//fec decode
+
+    }
+    else
+    {
+        BKF1_B7_REG &= 0xcf;//bypass fec decode
+    }
+}
+//========================================================================
+// Func Name   : Drv_DpRx_MainLink
+// Description : The initalization of main link.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_DpRx_MainLink(void)
+{
+    //修改training基准定时器设置,由默认的1us基准时间改为2us的基准时间,基准时间寄存器配置都加倍.
+    //CR lock time,training eq scan wait time,training eq scan total time寄存器配置减半.
+    BKF1_10_REG = 0xa2; //1.62g定时器基准时间:1us->2us
+    BKF1_11_REG = 0x01; //2.7g定时器基准时间:1us->2us
+    BKF1_12_REG = 0x0e; //2.7g定时器基准时间
+    BKF1_13_REG = 0x02; //5.4g定时器基准时间:1us->2us
+    BKF1_14_REG = 0x1c; //5.4g定时器基准时间
+    BKF1_15_REG = 0x03; //8.1g定时器基准时间:1us->2us
+    BKF1_16_REG = 0x2a; //8.1g定时器基准时间
+//    BKF1_0C_REG = 0x32; //CR lock time
+    BKF1_0C_REG = 0x1E; //CR lock time
+    //19=50us,OK 32=100us(M1 NOTEBOOK NG) --0E == OK
+    BKF1_39_REG = 0x0E;
+    #if DPRX_CDR_MODE == ANACDR
+    //set anacdr training wait time,EQ scan time
+    BKF1_0D_REG = 0x0E;//26us each EQ Level Scan time(Whole time)
+    BKF1_0E_REG = 0x08;//16us wait time(include CDR reset time)
+    #else
+    //set digcdr training wait time,EQ scan time
+    BKF1_0D_REG = 0x0a;//20us each EQ Level Scan time(Whole time)
+    BKF1_0E_REG = 0x03;//6us wait time(include CDR reset time)
+    #endif
+
+    BKF1_1B_REG = 0x02; //err conter mode in tps2/3/4 stage select: 8b10b err only.
+                        //to fix tps4 training fail at non-enhanced mode issue.
+    BKF1_5F_REG = 0xe4; //eq swap
+    
+    
+    //eq index in mainlink.
+	#if DPRX_EQ_SCAN_MODE == SW_SCANVALIDEQ_EXT
+	BKF1_4A_REG = SzEq_Stg0[1];
+    BKF1_4C_REG = SzEq_Stg0[3];
+    BKF1_4E_REG = SzEq_Stg0[5];
+    BKF1_50_REG = SzEq_Stg0[7];
+    BKF1_64_REG = SzEq_Stg0[9];
+    BKF1_66_REG = SzEq_Stg0[11];
+    BKF1_68_REG = SzEq_Stg0[13];
+    BKF1_6C_REG = SzEq_Stg0[15];
+    BKF1_6E_REG = SzEq_Stg0[17];
+    BKF1_70_REG = SzEq_Stg0[19];
+    BKF1_72_REG = SzEq_Stg0[21];
+    BKF1_74_REG = SzEq_Stg0[23];
+    BKF1_76_REG = SzEq_Stg0[25];
+    BKF1_78_REG = SzEq_Stg0[27];
+    BKF1_7A_REG = SzEq_Stg0[29];
+    BKF1_7C_REG = SzEq_Stg0[31];
+    
+    BKF1_49_REG = SzEq_Stg1[1];
+    BKF1_4B_REG = SzEq_Stg1[3];
+    BKF1_4D_REG = SzEq_Stg1[5];
+    BKF1_4F_REG = SzEq_Stg1[7];
+                                 
+    BKF1_63_REG = SzEq_Stg1[9];
+    BKF1_65_REG = SzEq_Stg1[11];
+    BKF1_67_REG = SzEq_Stg1[13];
+    BKF1_6B_REG = SzEq_Stg1[15];
+    
+    BKF1_6D_REG = SzEq_Stg1[17];
+    BKF1_6F_REG = SzEq_Stg1[19];
+    BKF1_71_REG = SzEq_Stg1[21];
+    BKF1_73_REG = SzEq_Stg1[23];
+    
+    BKF1_75_REG = SzEq_Stg1[25];
+    BKF1_77_REG = SzEq_Stg1[27];
+    BKF1_79_REG = SzEq_Stg1[29];
+    BKF1_7B_REG = SzEq_Stg1[31];
+    #else
+    
+    BKF1_4A_REG = SzEq_Stg0[0];
+    BKF1_4C_REG = SzEq_Stg0[1];
+    BKF1_4E_REG = SzEq_Stg0[2];
+    BKF1_50_REG = SzEq_Stg0[3];
+    BKF1_64_REG = SzEq_Stg0[4];
+    BKF1_66_REG = SzEq_Stg0[5];
+    BKF1_68_REG = SzEq_Stg0[6];
+    BKF1_6C_REG = SzEq_Stg0[7];
+    BKF1_6E_REG = SzEq_Stg0[8];
+    BKF1_70_REG = SzEq_Stg0[9];
+    BKF1_72_REG = SzEq_Stg0[10];
+    BKF1_74_REG = SzEq_Stg0[11];
+    BKF1_76_REG = SzEq_Stg0[12];
+    BKF1_78_REG = SzEq_Stg0[13];
+    BKF1_7A_REG = SzEq_Stg0[14];
+    BKF1_7C_REG = SzEq_Stg0[15];
+    
+    BKF1_49_REG = SzEq_Stg1[0];
+    BKF1_4B_REG = SzEq_Stg1[1];
+    BKF1_4D_REG = SzEq_Stg1[2];
+    BKF1_4F_REG = SzEq_Stg1[3];
+                                 
+    BKF1_63_REG = SzEq_Stg1[4];
+    BKF1_65_REG = SzEq_Stg1[5];
+    BKF1_67_REG = SzEq_Stg1[6];
+    BKF1_6B_REG = SzEq_Stg1[7];
+    
+    BKF1_6D_REG = SzEq_Stg1[8];
+    BKF1_6F_REG = SzEq_Stg1[9];
+    BKF1_71_REG = SzEq_Stg1[10];
+    BKF1_73_REG = SzEq_Stg1[11];
+    
+    BKF1_75_REG = SzEq_Stg1[12];
+    BKF1_77_REG = SzEq_Stg1[13];
+    BKF1_79_REG = SzEq_Stg1[14];
+    BKF1_7B_REG = SzEq_Stg1[15];
+    #endif
+        
+//    BKF1_4A_REG = SzMainLink_Eq[0];
+//    BKF1_4C_REG = SzMainLink_Eq[1];
+//    BKF1_4E_REG = SzMainLink_Eq[2];
+//    BKF1_50_REG = SzMainLink_Eq[3];
+//    BKF1_64_REG = SzMainLink_Eq[4];
+//    BKF1_66_REG = SzMainLink_Eq[5];
+//    BKF1_68_REG = SzMainLink_Eq[6];
+//    BKF1_6C_REG = SzMainLink_Eq[7];
+//    BKF1_6E_REG = SzMainLink_Eq[8];
+//    BKF1_70_REG = SzMainLink_Eq[9];
+//    BKF1_72_REG = SzMainLink_Eq[10];
+//    BKF1_74_REG = SzMainLink_Eq[11];
+//    BKF1_76_REG = SzMainLink_Eq[12];
+//    BKF1_78_REG = SzMainLink_Eq[13];
+//    BKF1_7A_REG = SzMainLink_Eq[14];
+//    BKF1_7C_REG = SzMainLink_Eq[15];
+    
+    BKF1_8A_REG = 0x14; //RGD_FEC_PM_MODE
+    #if DPRX_CDR_MODE == ANACDR
+    BKF1_B8_REG &= 0x0f;//10us CDR reset time  
+    BKF1_B8_REG |= 0x50;
+    #endif
+    BKF1_B9_REG |= BIT4_1;    //8b10b error count enable
+    
+    //link lock sel 
+    BKF1_C2_REG |= BIT5_1; //link lock en sel soft mode
+    BKF1_C2_REG &= BIT6_0; //link lock en = 0.
+                           //8b/10b boundary is real-time updating.
+    Drv_DpRx_FecSoftModeSet(FALSE);//hardmode
+}
+
+void Drv_DpRx_Reset(EnumDpRxRstType ucOpt)
+{
+    switch(ucOpt)
+    {
+        case DP_RX_PCR_RST:
+            BKF1_B4_REG &= BIT1_0;//[1]dprx video pcr soft reset en
+            BKF1_B4_REG |= BIT1_1;//[1]dprx video pcr soft reset dis
+           break;
+        case DP_RX_SDP_RST:
+            BKF1_B4_REG &= BIT5_0;//[5]DPRX sdp logic soft reset en
+            BKF1_B4_REG |= BIT5_1;//[5]DPRX sdp logic soft reset dis
+            break;
+        case DP_RX_FIFO_RST:
+            BKC9_08_REG &= BIT4_0;
+            BKC9_08_REG |= BIT4_1;
+            break;
+        case DP_FEC_DEC_RST:
+            BKF1_B5_REG &= BIT3_0;
+            BKF1_B5_REG |= BIT3_1;
+            break;
+        case DP_MLC_DAT_RST:
+            BKF1_B5_REG &= BIT2_0;
+            BKF1_B5_REG |= BIT2_1;
+            break;   
+        case DP_MLC_DPCD_RST:
+            BKF1_B5_REG &= BIT1_0;
+            BKF1_B5_REG |= BIT1_1;
+            break;   
+            
+        default:
+            break;
+    }
+}
+
+//========================================================================
+// Func Name   : Drv_DpRx_PcrInit
+// Description : The setting for pcr digital block.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_DpRx_PcrInit(void)
+{
+    BKF3_00_REG = 0x40;//org-0x80
+    
+    BKF3_62_REG |= BIT4_1;//cbcr swap edid cts use
+
+    //just valid for mst mode, sst mode [7] must be set 0
+    BKF3_12_REG &= BIT7_0;//[7]rg_lane_cnt_soft_mode: 1-soft en, 0-soft dis
+    BKF3_1E_REG |= BIT7_1;//[7]video timing regenerate if fifo over: 1-dis
+    BKF3_21_REG = 0x94;//ratio lw lmt(lw max is 08)
+    BKF3_22_REG = 0xe2;//ratio up lmt(up max is 1f)
+    
+    BKF3_23_REG = 0x7b;
+    BKF3_31_REG = 0xa4;//lin_cnt_sel = 64
+    BKF3_47_REG = 0x7b;
+    BKF3_55_REG = 0x00;//pcrpll_rst_end  =0
+
+    BKF3_63_REG = 0x06;//bit2 soft freq sel =1
+//    BKF3_77_REG = 0x7a;//[0]fifo overflow than restart, 1-en
+    //F377 BIT0:如果是HSYNC Mode，2204 SRAM溢出逻辑有问题
+    BKF3_77_REG = 0x7f;//[0]fifo overflow than restart, 0-dis [2]:PCR hsync模式使能vblank微调
+    BKF3_32_REG = 0x0b;//frequecy change to 2.5Mhz
+    BKF3_79_REG = 0x30;
+    BKF3_7B_REG = 0x41;
+    BKF3_7D_REG = 0x52;
+     //for dp rx cts test
+    BKF3_7E_REG = 0x10;//[4]1-support crc for dp video cts
+    
+    BKF3_86_REG = 0x14;//[7]ycbcr420
+    BKF3_87_REG = 0xe2;//[7]pcr adaptive sync mode: 1-en
+                       //[6:0]ratio up lmt
+
+    BKC8_B0_REG = 0x00;//gd_pcr_stb_chk_sel
+    #if SYSCLK == SYS_CLK_40M
+    BKC8_B1_REG = 0x28;//rgd_sys_cnt_1us[6:0]
+    #endif
+    #if SYSCLK == SYS_CLK_48M
+    BKC8_B1_REG = 0x30;//rgd_sys_cnt_1us[6:0]
+    #endif
+    BKC8_B2_REG = 0x0f;//rgd_pcr_stb_chk1_cnt
+}
+
+
+void Drv_DpRx_PcrHsyncMode(void)
+{
+    BKF3_00_REG = 0x40;//pixel count save for fifo for dsc org-0x80
+#if 1
+    BKF3_23_REG = 0x02;
+    BKF3_24_REG = 0x02;
+    BKF3_25_REG = 0x02;
+    BKF3_26_REG = 0x00;
+    BKF3_47_REG = 0x91;
+    BKF3_48_REG = 0x35;
+    BKF3_49_REG = 0x30;
+    BKF3_4A_REG = 0x2a;
+
+    BKF3_4B_REG = 0x02;
+    BKF3_4C_REG = 0x98;
+    BKF3_4D_REG = 0x02;
+    BKF3_4E_REG = 0x98;
+    BKF3_4F_REG = 0x04;
+    #else// macbook M1/M2 can not work stable
+    BKF3_23_REG = 0x00;
+    BKF3_24_REG = 0x00;
+    BKF3_25_REG = 0x00;
+    BKF3_26_REG = 0x00;
+    BKF3_47_REG = 0xe1;
+    BKF3_48_REG = 0xc5;
+    BKF3_49_REG = 0x30;
+    BKF3_4A_REG = 0x2a;
+
+    BKF3_4B_REG = 0x01;
+    BKF3_4C_REG = 0x00;
+    BKF3_4D_REG = 0x01;
+    BKF3_4E_REG = 0x00;
+    BKF3_4F_REG = 0x02;
+	#endif
+
+    BKF3_46_REG |= BIT5_1;//[5]1-hsync mode, 0-de mode
+    Drv_DpRx_420DetectMode(SOFTMODE);
+
+    printLT(PRINT_PRIO_TEST, "\npcr hsync mode");
+}
+
+u8 Drv_DpRx_DeSkewCheck(void)
+{
+    BKF1_C2_REG |= BIT4_1;
+    BKF1_C2_REG &= BIT4_0; //clear deskew status
+    Ocm_Delay1ms(10);
+    if(BKF1_FD_REG&BIT4_1)
+    {
+        return FAIL;
+    }
+    return SUCCESS;
+}
+
+void Drv_DpRx_Cp2520KeyCodeSet(u8 ucPtnMode)
+{
+    BKF1_B7_REG &= 0x37;
+    switch(ucPtnMode)
+    {
+        case 0x03: //prbs7 pattern
+            BKF1_B7_REG |= 0xc0;
+            BKF1_C2_REG |= BIT6_1;
+        break;
+        case 0x05: //cp2520 pattern1: Data align use CP;
+            BKF1_B7_REG |= 0x48;
+            BKF1_C2_REG |= BIT6_1;
+        break;
+        case 0x06: //cp2520 pattern2: Data align use BF-;
+            BKF1_B7_REG |= 0x88;
+            BKF1_C2_REG |= BIT6_1;
+        break;
+        case 0x07: //cp2520 pattern3: Data align use BS;
+            BKF1_B7_REG |= 0xc8;//tps4 pattern3 bit error 
+            BKF1_C2_REG |= BIT6_1;
+        break;
+        default:
+            BKF1_B7_REG |= 0xc8;//video bit error 
+            BKF1_C2_REG &= BIT6_0;
+            BKF1_B9_REG |= BIT4_1;
+        break;
+    }
+}
+
+//========================================================================
+// Func Name   : Drv_DpRx_EccErrorCheck
+// Description : Check ECC error, if ECC error is checked, the SDP data uncorrect.
+// Input       : void  
+// Output      : None
+// Return      : SUCCESS: no ECC error.
+//             : FAIL: ECC error.
+//========================================================================
+u8 Drv_DpRx_EccErrorCheck(void)
+{ 
+    if (BKF2_EF_REG != 0)
+    {
+        BKF2_10_REG |= BIT6_1;//[6]fec err clr en
+        BKF2_10_REG &= BIT6_0;//[6]fec err clr dis
+        return FAIL;
+    }
+    return SUCCESS;
+}
+void Drv_DpRx_MsaPktDetEn(void)
+{
+    BKF3_05_REG &= BIT6_0;//hardmsa
+    BKF2_17_REG |= BIT2_1;//Msa valid interrupt enable
+
+    BKF2_19_REG |= BIT2_1;//clear msa interrupt
+    BKF2_19_REG &= BIT2_0;//clear msa interrupt
+}
+void Drv_DpRx_420DetectMode(u8 b1Softmode)
+{
+    if(b1Softmode == SOFTMODE)
+    {
+        BKF3_62_REG |= BIT7_1;//420 soft control
+    }
+    else
+    {
+        BKF3_62_REG &= BIT7_0;//420 vsc control
+    }
+}
+
+//========================================================================
+// Func Name   : Drv_DpRx_VscPktCheck
+// Description : Vsc packet is an option SDP, this function is to check soucer whether send vsc packet.
+// Input       : None
+// Output      : None
+// Return      : TRUE->source send vsc packet.
+//             : FALSE->source did not send vsc packet
+//========================================================================
+u8 Drv_DpRx_VscPktCheck()
+{
+    if((MSA_MISC1 & BIT6_1)&&(VSC_HB1 == 0x07)&&(VSC_HB2 == 0x05)&&(VSC_HB3 == 0x13)&&((VSC_DB16&0xf0) <= 0x30))
+    {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void Drv_DpRx_VidColorInfoGet(ColorInfo_S *pstInfo)
+{
+    if(Drv_DpRx_VscPktCheck() == TRUE)
+    {
+        pstInfo->b1VscPkg            = TRUE;
+        pstInfo->b1DynamicRange      = (VSC_DB17 >> 7) & BIT0_1;//1-cta range limit, 0-vesa range full
+        pstInfo->ucPixelEncoding     = (VSC_DB16 >> 4) & 0x0f;//00-rgb, 01-ycc444, 10-ycc222, 11-ycc420
+        
+        if(pstInfo->ucPixelEncoding == DP_VSC_YCC422_2)
+        {
+            pstInfo->ucPixelEncoding = YCbCr422_1;
+        }
+        else  if(pstInfo->ucPixelEncoding == DP_VSC_YCC444_1)
+        {
+            pstInfo->ucPixelEncoding = YCbCr444_2;
+        }
+        
+        pstInfo->ucColorimetryFormat = VSC_DB16 & 0x0f;
+        pstInfo->ucBitDepth          = (VSC_DB17 & 0x07);//0-rgb 6bit 1-8bit, 2-10bit, 3-12bit: +3 is 4-8bit, 5-10bit, 6-12bit
+    }
+    else
+    {
+        pstInfo->b1VscPkg            = FALSE;
+        pstInfo->b1DynamicRange      = (MSA_MISC0 >> 3) & BIT0_1;//1-cta range limit, 0-vesa range full
+        pstInfo->ucPixelEncoding     = (MSA_MISC0 >> 1) & 0x03;  //00 rgb 01 ycc422 10 ycc444  11 rgb wide
+
+        if(pstInfo->ucPixelEncoding == MISC_RGB_WIDE_3)
+        {
+            pstInfo->ucPixelEncoding = RGB_WIDE_4;
+        }
+        
+        pstInfo->ucColorimetryFormat = (MSA_MISC0 >> 3) & 0x03;//
+        pstInfo->ucBitDepth = ((MSA_MISC0 >> 5) & 0x07);//0-rgb 6bit 1-8bit, 2-10bit, 3-12bit: +3 is 4-8bit, 5-10bit, 6-12bit
+    }
+}
+
+void Drv_DpRx_RxTimingGet(LtTiming_S *pstTiming)
+{
+    u16 usStart;
+    //get H timing by dp rx msa
+    pstTiming->usHact  = ((u16)BKF2_E7_REG << 8)          + BKF2_E8_REG;//msa hact
+    pstTiming->usHsync = ((u16)(BKF2_DF_REG & 0x7f) << 8) + BKF2_E0_REG;//msa hsync
+    usStart            = ((u16)BKF2_E1_REG << 8)          + BKF2_E2_REG;//msa hstart
+    pstTiming->usHbp   = usStart - pstTiming->usHsync;
+    pstTiming->usHtol  = ((u16)BKF2_DB_REG << 8)          + BKF2_DC_REG;//msa htol
+    pstTiming->usHfp   = pstTiming->usHtol - pstTiming->usHact - usStart;
+
+    //get V timing by dp rx msa
+    pstTiming->usVact   = ((u16)BKF2_E9_REG << 8)          + BKF2_EA_REG;//msa vact
+    pstTiming->usVsync  = ((u16)(BKF2_E5_REG & 0x7f) << 8) + BKF2_E6_REG;//msa vsync
+    usStart             = ((u16)BKF2_E3_REG << 8)          + BKF2_E4_REG;//msa vstart
+    pstTiming->usVbp    = usStart - pstTiming->usVsync;
+    pstTiming->usVtol   = ((u16)BKF2_DD_REG << 8)          + BKF2_DE_REG;//msa vtol
+    pstTiming->usVfp    = pstTiming->usVtol - pstTiming->usVact - usStart;
+}
+
+//u16 Drv_DpRx_FrameRate_Get(void)
+//{
+//    u16 usFrameRate = 0x00;
+//    static u32 ulSyncVTime = 0x00;
+//    Ocm_Delay1ms(30);
+//    //Framerate = 1/SYNCTIME = Tsys_CLK/Tvsync
+//    ulSyncVTime = ((u32)BKC8_3B_REG<<16) + ((u16)BKC8_3C_REG<<8) + BKC8_3D_REG;//1hz
+//    ulSyncVTime /= 1000;//1Khz
+//    
+//    //48000 is Sysclk
+//    usFrameRate = (48000/ulSyncVTime);
+////    usFrameRate = ceil((float)48000/ulSyncVTime);
+//    printLT(PRINT_PRIO_TEST, "\nFrameRate = %d",usFrameRate);
+//    return usFrameRate;
+//}
+void Drv_DpRx_AudioInfoGet(AudioChlInfo_S *pstInfo)
+{
+    #if TX_AUDIO_SEL == RX_AUDIO_DATA
+    pstInfo->ucFsValue = BKC6_7C_REG;
+
+    pstInfo->ucLayout  = (BKF2_F1_REG >> 3) & BIT0_1;
+    pstInfo->ucChannel = BKF2_F5_REG & 0x07;//audio stream packet(asp), hb3
+    pstInfo->ucCodingType = BKF2_F5_REG & 0xf0;
+    pstInfo->szAudioInfo[0] = BKF2_63_REG;//aud db0, is cta db1
+    pstInfo->szAudioInfo[1] = BKF2_64_REG;//aud db1, is cta db2
+    pstInfo->szAudioInfo[2] = BKF2_65_REG;//aud db2, is cta db3
+    pstInfo->szAudioInfo[3] = BKF2_66_REG;//aud db3, is cta db4
+    pstInfo->szAudioInfo[4] = BKF2_67_REG;//aud db4, is cta db5
+    #elif TX_AUDIO_SEL == I2SIN_AUDIO_DATA
+    pstInfo->ucFsValue = BKC6_98_REG;//WS VAL
+    #endif
+}
+void Drv_DpRx_AudioFormatSet(void)
+{
+    if((BKF2_F5_REG & 0xf0)== 0x10)//1-IEC61937
+    {
+        //Enable HBR Audio out
+        Drv_Audio_IisHbrSet(TRUE);
+        BKF2_15_REG &= BIT1_0;       
+        if((BKF2_F5_REG & 0x07) > 0x01)
+        {
+            BKF2_15_REG |= BIT0_1;
+        }
+        else
+        {
+            BKF2_15_REG &= BIT0_0;
+        }
+    }
+    else
+    {
+        //Disable HBR Audio out
+        Drv_Audio_IisHbrSet(FALSE);
+        
+        BKF2_15_REG &= BIT0_0;
+        BKF2_15_REG |= BIT1_1;
+    }
+}
+u8 Drv_DpRx_SscJudgeByRxFm(u8 ucLinkRate)
+{
+    u8 b1IsSscFlag;
+    u16 usLinkClk;
+    b1IsSscFlag = FALSE;
+    BKC7_40_REG |= BIT7_1;//[7]freq_khz_frz_en: 1-en
+    usLinkClk = ((u16)BKC7_59_REG<<8) + BKC7_5A_REG;
+    switch(ucLinkRate)
+    {
+        case HBR3:
+            if((BKC7_58_REG&0x0f) == 0x06)
+            {
+                b1IsSscFlag = (usLinkClk <0x2da4)?(TRUE):(FALSE);
+            }
+            break;
+        case HBR2:
+            if((BKC7_58_REG&0x0f) == 0x04)
+            {   
+                b1IsSscFlag = (usLinkClk <0x1e4c)?(TRUE):(FALSE);
+            }
+            break;
+        case HBR:
+            if((BKC7_58_REG&0x0f) == 0x02)
+            {
+                b1IsSscFlag = (usLinkClk <0x0ef4)?(TRUE):(FALSE);
+            }
+            break;
+        case RBR:
+            if((BKC7_58_REG&0x0f) == 0x01)
+            {
+                b1IsSscFlag = (usLinkClk <0x3c04)?(TRUE):(FALSE);
+            }
+            break;
+        default:
+            break;
+    }
+    BKC7_40_REG &= BIT7_0;
+    return b1IsSscFlag;
+}
+
+void Drv_DpRx_SyncPolSet(u8 ucOpt)
+{
+    if (ucOpt == ENABLED)
+    {
+        BKF3_05_REG |= BIT4_1;//[4]rg_vspol_soft_mode: 1-en
+        BKF3_05_REG |= BIT2_1;//[4]rg_hspol_soft_mode: 1-en
+    }
+    else
+    {
+        BKF3_05_REG &= 0xc3;//[5:4]Vpol default
+                            //[3:2]Hpol default
+    }
+}
+
+//#if DPRX_CDR_MODE != ANACDR
+//void DRV_DpRxCdr_FreqMonitor(u8 ucLaneCnt)
+//{
+//    if((FREQ_INTG_DOWN_LIMIT < BKC8_00_REG) && (BKC8_00_REG < FREQ_INTG_UP_LIMIT)) //lane0
+//    {
+//        BKC8_28_REG |= BIT7_1;
+//        BKC8_28_REG &= BIT7_0;
+//        return;
+//    }
+//    if(ucLaneCnt > 1)
+//    {
+//        if((FREQ_INTG_DOWN_LIMIT < BKC8_02_REG) && (BKC8_02_REG < FREQ_INTG_UP_LIMIT)) //lane1
+//        {
+//            BKC8_28_REG |= BIT6_1;
+//            BKC8_28_REG &= BIT6_0;
+//            return;
+//        }
+//    }
+//    if(ucLaneCnt > 2)
+//    {
+//        if((FREQ_INTG_DOWN_LIMIT < BKC8_04_REG) && (BKC8_04_REG < FREQ_INTG_UP_LIMIT)) //lane2
+//        {
+//            BKC8_28_REG |= BIT5_1;
+//            BKC8_28_REG &= BIT5_0;
+//            return;
+//        }
+//        if((FREQ_INTG_DOWN_LIMIT < BKC8_06_REG) && (BKC8_06_REG < FREQ_INTG_UP_LIMIT)) //lane3
+//        {
+//            BKC8_28_REG |= BIT4_1;
+//            BKC8_28_REG &= BIT4_0;
+//            return;
+//        }
+//    }
+//}
+
+//void DRV_Timer2Cnt_Start()
+//{
+//    TH2 = 0xFF;
+//    #if SYSCLK == SYS_CLK_48M
+//    TL2 = 0xFB;
+//    #endif
+//    #if SYSCLK == SYS_CLK_40M
+//    TL2 = 0xFC;
+//    #endif
+//    TR2 = 1;
+//}
+
+//    #endif
+
+
+//========================================================================
+// Func Name   : DRV_DpRx_VideoStreamFlag
+// Description : 1. can no do eq scan during source is sending idle pattern(no video stream).
+//             : 2. wait source sending video stream.
+// Input       : void  
+// Output      : None
+// Return      : TRUE:->video stream.
+//             : FALSE:->Idel pattern(no video stream).
+//========================================================================
+u8 DRV_DpRx_VideoStreamFlag(void)
+{
+//    static u8 ucNovideoFlagCnt = 0;
+    //VB-ID[3]: NoVideoStream_Flag
+    if(((BKF2_F6_REG&BIT3_1)==0x00)&&((BKF2_F7_REG&BIT3_1)==0x00)&&((BKF2_F8_REG&BIT3_1)==0x00)&&((BKF2_F9_REG&BIT3_1)==0x00))
+    {
+//        ucNovideoFlagCnt++;
+//        if(ucNovideoFlagCnt == 10)
+//        {
+//            ucNovideoFlagCnt = 0;
+            return TRUE;
+//        }
+    }
+    else
+    {
+//        ucNovideoFlagCnt = 0;
+    }
+    return FALSE;
+}
+
+u8 Drv_DpRx_InterlaceGet(void)
+{
+    if(((BKF2_F6_REG&BIT2_1)==BIT2_1)&&((BKF2_F7_REG&BIT2_1)==BIT2_1)&&((BKF2_F8_REG&BIT2_1)==BIT2_1)&&((BKF2_F9_REG&BIT2_1)==BIT2_1))
+    {
+        return FORMAT_INTL;
+    }
+    else
+    {
+        return FORMAT_PROG;
+    }
+}
+
+#if (DPRX_TIMING_HBE == ENABLED)
+
+void Drv_DpRx_TimingHBE(void)
+{
+    ;
+}
+
+void Drv_DpRx_TimingFifoReset(void)
+{
+    ;
+}
+
+#endif
+
+
+#if ((DPRX_FEC_SUPPORT == ENABLED)||(DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+
+u8 Drv_DpRx_FecDecDet(void)
+{
+    //use static var can't clear when hotplug
+    if((!(BKF1_60_REG&BIT6_1))&&(BKF1_E1_REG & BIT5_1))
+    {
+        printLT(PRINT_PRIO_HIG, "\nDet fec en sequence");
+        return TRUE;
+    }
+    else if((BKF1_60_REG&BIT6_1) && ((BKF1_E1_REG & BIT5_1) == 0x00))
+    {
+        printLT(PRINT_PRIO_HIG, "\nDet fec dis sequence");
+        return FALSE;
+    }
+    return UNKNOWN;
+}
+
+
+//========================================================================
+// Func Name   : Drv_DpRx_FecDataPathSet
+// Description : Select data path for fec data.
+// Input       : ENABLED-> data path is fec decode, the data will be corrected by fec decode.
+//             : DISABLED-> data bypass fec decode, the data will not be corrected. 
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_DpRx_FecDataPathSet(u8 b1IsFecEn)
+{
+    if(b1IsFecEn == ENABLED)
+    {
+        BKF1_60_REG |= BIT6_1;//fec decode
+        BKF1_B8_REG |= BIT1_1;//FEC DIS enable
+    }
+    else
+    {
+        BKF1_60_REG &= BIT6_0;//bypass fec decode
+        BKF1_B8_REG &= BIT1_0;
+    }
+}
+
+void Drv_DpRx_FecDisclr(void)
+{
+    BKF1_B9_REG |= BIT2_1;//FEC DIS CLR EN
+    BKF1_B9_REG &= BIT2_0;//FEC DIS CLR EN
+}
+
+//void Drv_DpRx_FecSoftModeSet(u8 b1IsFecEn)
+//{
+//    if(b1IsFecEn == ENABLED)
+//    {
+//        BKF1_B7_REG |= 0x30;//fec decode
+
+//    }
+//    else
+//    {
+//        BKF1_B7_REG &= 0xcf;//bypass fec decode
+//    }
+//}
+
+#if DPRX_LINK_CTS == ENABLED
+void Drv_DpRx_FecErrClr(void)
+{
+    BKF1_60_REG |= BIT7_1; //[7]1'b1:fec error clr en
+    BKF1_60_REG &= BIT7_0; //[7]1'b0:fec error clr disable
+}
+
+void Drv_DpRx_FecCtsSet(u8 ucFecErrSel)
+{
+    if((ucFecErrSel & 0x0e) == 0x00)
+    {
+        BKF1_C2_REG &= BIT6_0; //[6]1'b1:link lock dis
+        BKF1_8A_REG &= BIT1_0; //[1]1'b1:de-skew lock dis
+        BKF1_8A_REG |= BIT4_1;  //[5:4]2'b00:fec PM update
+        Ocm_Delay1us(50);
+        Drv_DpRx_FecErrClr();
+    }
+    else
+    {
+        BKF1_C2_REG |= BIT6_1; //[6]1'b1:link lock en
+        BKF1_8A_REG |= BIT1_1; //[1]1'b1:de-skew lock en
+        BKF1_8A_REG &= 0xcf;  //[5:4]2'b00:fec PM not update
+    }
+}
+#endif
+#endif
+
+u8 Drv_DpRx_DscDecState(void)
+{
+    #if (((DPRX_DSC_DEC_SUPPORT == ENABLED) ||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))&&(DPRX_FEC_SUPPORT == ENABLED))
+    if ((BKF2_F6_REG & BIT6_1)&&(BKF2_F7_REG & BIT6_1)&&(BKF2_F8_REG & BIT6_1)&&(BKF2_F9_REG & BIT6_1))//dp rx vb-id0
+    {
+        return ENABLED;//-wangtt- wait update
+    }
+    else
+    #endif    
+    {
+        return DISABLED;
+    }
+}
+void Drv_DpRx_FecAbnormalDet(void)
+{
+    #if CHIP_VERSION_SEL > U1_VERSION 
+            //maximum wait time equal ((512*256)/810M)*2 = 324us
+    BKF1_01_REG |= BIT7_1;//ECO ENABLED 
+    Ocm_Delay1ms(1);//
+    BKF1_01_REG &= BIT7_0;//ECO DISABLED 
+    #endif
+}
+
+u8 Drv_DpRx_PpsInfoCheck(void)
+{
+    //BKF2_EE_REG[4]pps packet interrupt flag
+    if ((BKF2_EE_REG & BIT4_1) && (BKF3_E2_REG & BIT4_1))//[4]pixel frequency stable read_only register
+    {
+        return SUCCESS;
+    }
+    else
+    {
+        return FAIL;
+    }
+}
+
+u8 Drv_DpRx_PixelStableCheck(void)
+{
+    //BKF2_EE_REG[4]pps packet interrupt flag
+    if (BKF3_E2_REG & BIT4_1)//[4]pixel frequency stable read_only register
+    {
+        return TRUE;
+    }
+    else
+    {
+        return FALSE;
+    }
+}
+
+//Packet type value Packet type
+//80h Reserved
+//81h Vendor specific
+//82h AVI
+//83h Source Product Description
+//84h Audio
+//85h MPEG source
+//86h NTSC VBI
+//87h HDR
+//20h DP_VSC_EXT_VESA
+//21h DP_VSC_EXT_CTA
+//22h Adaptive Sync
+//07h VSC
+#if SPD_SUPPORT  == ENABLED
+void Drv_DpRx_SpdPacketType_Set(void)
+{
+    BKF2_0F_REG = 0x83;//Vender spec Source product descrption
+}
+
+u8 Drv_DpRxSpdVer_Get(void)//
+{
+    u8 b2SpdVision = HDR_SDPNone;
+    if((BKF2_87_REG == 0x83)&&(BKF2_88_REG == 0x1D)&&(BKF2_89_REG == 0x4C))//hdr SDPv13
+    {
+        b2SpdVision = HDR_SDPVer13;
+    }
+    else if((BKF2_87_REG == 0x83)&&(BKF2_88_REG == 0x1B)/*&&(BKF2_89_REG == 0x48)*/)//hdr SDPv12
+    {
+        b2SpdVision = HDR_SDPVer12;
+    }
+    else
+    {
+        b2SpdVision = HDR_SDPNone;
+    }
+    return b2SpdVision;
+}
+#endif
+
+#if DPRX_LINK_CTS == ENABLED
+void Drv_DpRx_DscPpsDataChg_IntSet(IN u8 b1IsIntEn)
+{
+    if(b1IsIntEn == ENABLED)
+    {
+        BKE5_88_REG |= BIT3_1; //[3]1'b1:software pps cksum enable
+        BKE6_EE_REG |= BIT0_1; //[0]1'b1:pps data cksum enable
+    }
+    else
+    {
+        BKE5_88_REG &= BIT3_0; //[3]1'b0:software pps cksum disable
+        BKE6_EE_REG &= BIT0_0; //[0]1'b0:pps data cksum disable
+    }
+}
+
+#endif
+void Drv_DpcdError_Clear(IN u8 ucI)
+{
+    BKF1_A5_REG |= ucI;//clear the error
+    BKF1_A5_REG &= 0xf0;//clear the error
+}
+
+void Drv_Dpcd270_PhyLaneSel(u8 ucPhyLane) //PHY SINK TEST LANE SEL:dpcd00270 [5:4]
+{
+    BKA1_0B_REG &= 0x0f;
+    BKA1_0E_REG &= 0x0f;
+    
+    switch(ucPhyLane & 0xf0)
+    {
+        case 0x80: //lane0
+            BKA1_0B_REG |= BIT7_1;
+            #if DPRX_CDR_MODE == ANACDR
+            BKA1_0E_REG |= BIT7_1;
+            #endif
+        break;
+        case 0x90: //lane1
+            BKA1_0B_REG |= BIT6_1;
+            #if DPRX_CDR_MODE == ANACDR
+            BKA1_0E_REG |= BIT6_1;
+            #endif
+        break;
+        case 0xa0: //lane2
+            BKA1_0B_REG |= BIT5_1;
+            #if DPRX_CDR_MODE == ANACDR
+            BKA1_0E_REG |= BIT5_1;
+            #endif
+        break;
+        case 0xb0: //lane3
+            BKA1_0B_REG |= BIT4_1;
+            #if DPRX_CDR_MODE == ANACDR
+            BKA1_0E_REG |= BIT4_1;
+            #endif
+        break;
+        default:
+        break;
+    }
+}
+
+u8 Drv_DpRx_NoErrCheck(u8 ucLaneCount)
+{
+    if((BKF1_CC_REG == 0x80)&&(BKF1_CD_REG <= 0x10))
+    {
+        ;
+    }
+    else
+    {
+        return FALSE; 
+    }
+    if(ucLaneCount >= TWO_LANE)
+    {
+        if((BKF1_CE_REG == 0x80)&&(BKF1_CF_REG <= 0x10))
+        {
+            ;
+        }
+        else
+        {
+            return FALSE; 
+        }
+    }
+    if(ucLaneCount >= FOUR_LANE)
+    {
+        if((BKF1_D0_REG == 0x80)&&(BKF1_D1_REG <= 0x10))
+        {
+            ;
+        }
+        else
+        {
+            return FALSE; 
+        }
+        if((BKF1_D2_REG == 0x80)&&(BKF1_D3_REG <= 0x10))
+        {
+            ;
+        }
+        else
+        {
+            return FALSE; 
+        }
+    }
+    return TRUE;
+}
+#if DPRX_PCRPLL_HRST == DISABLED
+void Drv_DpRx_PcrPllRst(u8 b1IsRst)
+{
+    if(b1IsRst == ENABLED)
+    {
+        BKE1_0E_REG |= BIT6_0; //pcrpll0_hw_reset = 0;
+        BKE1_0E_REG |= BIT5_0; //pcrpll1 hw reset = 0;
+    }
+    else
+    {
+        BKE1_0E_REG &= BIT6_0; //pcrpll0_hw_reset = 0;
+        BKE1_0E_REG &= BIT5_0; //pcrpll1 hw reset = 0;
+    }
+}
+#endif
+u32 Drv_DpRx_PixFreqGet(void)
+{
+    return (((u32)(BKF3_F8_REG&0x0f)<<16) + ((u16)BKF3_F9_REG<<8) + BKF3_FA_REG);
+}
+
+u8 Drv_DpRx_PcrStableCheck(void)
+{
+    if (BKC8_B4_REG & BIT2_1)
+    {
+        return STABLE;
+    }
+    else
+    {
+        return UNSTABLE;
+    }
+}
+
+void Drv_DpRx_VidFreqSetCheck(u8 ucOpt)
+{
+    u8 ucSoftFreqSet;
+    u32 ulFreqSet = 0;
+    if(ucOpt == DISABLED)
+    {
+        BKF3_62_REG  &= 0xf0;
+    }
+    else
+    {
+        if (BKF3_E2_REG & BIT4_1)
+        {
+            ulFreqSet =  ((u32)(BKF3_F8_REG&0x0f)<<16) + ((u16)BKF3_F9_REG<<8)+ BKF3_FA_REG;
+        }
+        if((ulFreqSet == 0)||(ulFreqSet >= 1200000))
+        {
+            return;
+        }
+        if(ulFreqSet < 18750)
+        {
+            ucSoftFreqSet = 6;
+        }
+        else if(ulFreqSet < 37500)
+        {
+            ucSoftFreqSet = 5;
+        }
+        else if(ulFreqSet < 75000)
+        {
+            ucSoftFreqSet = 4;
+        }
+        else if(ulFreqSet < 150000)
+        {
+            ucSoftFreqSet = 3;
+        }
+        else if(ulFreqSet < 300000)
+        {
+            ucSoftFreqSet = 2;
+        }
+        else if(ulFreqSet < 600000)
+        {
+            ucSoftFreqSet = 1;
+        }
+        else if(ulFreqSet < 1200000)
+        {
+            ucSoftFreqSet = 0;
+        }
+        if(ucSoftFreqSet != ((BKF3_F8_REG>>4)&0x07))
+        {
+            ucSoftFreqSet |= BIT3_1;
+            BKF3_62_REG  = (BKF3_62_REG&0xf0) | ucSoftFreqSet;
+        }
+    }
+}
+//========================================================================
+// Func Name   : Drv_DpRx_PowerOnInit
+// Description : The setting init for power on
+//             : Be called only one time at power on.
+// Input       : None
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_DpRx_PowerOnInit()
+{
+    //ana
+    Drv_DpRx_AuxInit();
+    Drv_DpRx_PhyInit();
+    Drv_DpRx_RtermCal();
+    Drv_DpRx_PiEnable(TRUE);
+    Drv_DpRx_RxPllCali();
+    Drv_DpRx_PcrPllInit();
+
+    //dig
+    Drv_DpRx_FreqIntg();
+    Drv_DpRx_DigitalInit();
+    Drv_DpRx_MainLink();
+    Drv_DpRx_PcrInit();
+    Drv_DpRx_PcrHsyncMode();
+    Drv_DpRx_HwResetSet();
+
+    #if SPD_SUPPORT  == ENABLED
+    Drv_DpRx_SpdPacketType_Set();
+    #endif
+}
+
+//========================================================================
+// Func Name   : Drv_DpRx_SettingInit
+// Description : The setting init for HPD High.
+//             : Shall be called every time before HPD go to high.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+
+void Drv_DpRx_SettingInit(void)
+{
+    Drv_DpRx_DpcdInit(g_stDpRx);
+    Drv_DpRx_ClkMux();
+
+    Drv_DpRx_Reset(DP_RX_PCR_RST);
+    Drv_DpRx_Cp2520KeyCodeSet(FALSE);
+    Drv_HdcpRx_Enable(DPRX_HDCP_DEC_MODE);
+    #if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR) || (DPRX_CDR_MODE == HALF_SPEED_DIGCDR))
+    Drv_DpRx_DigCdrRst(g_stDpRx.b1Ssc_Support);
+    #endif
+    Drv_System_FmSet(RX_FM,RXFM_LINK_CLK);//used for link clk det
+    #if ((DPRX_FEC_SUPPORT == ENABLED)||(DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+    Drv_DpRx_FecDataPathSet(DISABLED);
+    #endif
+    Drv_System_IntClr(IRQ_DPRX_AUX_INT);
+    Drv_System_IntSet(IRQ_DPRX_AUX_INT, ON);
+    
+    #if HDR_SUPPORT == ENABLED
+    Drv_System_IntSet(IRQ_DPRX_STATICHDR_INT, ON);
+    Drv_System_IntClr(IRQ_DPRX_STATICHDR_INT);
+    #endif
+    #if DOBLY_VISION_SUPPORT == ENABLED
+    Drv_System_IntSet(IRQ_DPRX_VSI_INT, ON);
+    Drv_System_IntClr(IRQ_DPRX_VSI_INT);
+    #endif
+    #if DPRX_ADAPTIVE_SYNC == ENABLED
+    Drv_DpRx_AdaptiveSyncInit();
+    Drv_System_IntSet(IRQ_DPRX_ADAPTIVE_SYNC_INT, ON);
+    Drv_System_IntClr(IRQ_DPRX_ADAPTIVE_SYNC_INT);
+    #endif
+}
+
+#endif

@@ -1,0 +1,858 @@
+/******************************************************************************
+  * @project: LT2101
+  * @file: edid.c
+  * @author: qihan
+  * @company: LONTIUM
+  * @date: 2021.10.12
+/******************************************************************************/
+#include "include.h"
+
+#if TX_PORT_SIGN == HDMI_PORT
+
+u8 code szEdidDefault[512] =
+{
+    0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x00,0x32,0x8D,0x02,0x2C,0x01,0x01,0x01,0x01,
+    0x01,0x15,0x01,0x03,0x80,0x59,0x32,0x78,0x0A,0x0D,0xC9,0xA0,0x57,0x47,0x98,0x27,
+    0x12,0x48,0x4C,0x20,0x00,0x00,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,0x01,
+    0x01,0x01,0x01,0x01,0x01,0x01,0x02,0x3A,0x80,0x18,0x71,0x38,0x2D,0x40,0x58,0x2C,
+    0x45,0x00,0xA0,0x5A,0x00,0x00,0x00,0x1E,0x01,0x1D,0x00,0x72,0x51,0xD0,0x1E,0x20,
+    0x6E,0x28,0x55,0x00,0x76,0xF2,0x31,0x00,0x00,0x1E,0x00,0x00,0x00,0xFD,0x00,0x32,
+    0x3C,0x1E,0x46,0x0F,0x00,0x0A,0x20,0x20,0x20,0x20,0x20,0x20,0x00,0x00,0x00,0xFC,
+    0x00,0x4C,0x43,0x44,0x0A,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x01,0xC7,
+    
+    0x02,0x03,0x19,0xc1,0x44,0x83,0x03,0x02,0x01,0x23,0x09,0x07,0x07,0x83,0x01,0x00,
+    0x00,0x67,0x03,0x0C,0x00,0x10,0x00,0x00,0x1E,0x01,0x1D,0x00,0x72,0x51,0xD0,0x1E,
+    0x20,0x6E,0x28,0x55,0x00,0x76,0xF2,0x31,0x00,0x00,0x1E,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x61
+	
+//0x00,0xff,0xff,0xff,0xff,0xff,0xff,0x00,0x1e,0x6d,0x01,0x00,0x01,0x01,0x01,0x01,
+//0x01,0x1c,0x01,0x04,0xc5,0xa0,0x5a,0x78,0x3b,0xee,0x91,0xa3,0x54,0x4c,0x99,0x26,
+//0x0f,0x50,0x54,0xa1,0x08,0x00,0x31,0x40,0x45,0x40,0x61,0x40,0x71,0x40,0x81,0x80,
+//0x01,0x01,0x01,0x01,0x01,0x01,0x4d,0xd0,0x00,0xa0,0xf0,0x70,0x3e,0x80,0x30,0x20,
+//0x35,0x00,0x78,0x68,0x21,0x00,0x00,0x1e,0x02,0x3a,0x80,0x18,0x71,0x38,0x2d,0x40,
+//0x58,0x2c,0x45,0x00,0x40,0x84,0x63,0x00,0x00,0x1e,0x00,0x00,0x00,0xfd,0x00,0x3a,
+//0x79,0x1e,0x88,0x3c,0x00,0x0a,0x20,0x20,0x20,0x20,0x20,0x20,0x00,0x00,0x00,0xfc,
+//0x00,0x4c,0x47,0x20,0x54,0x56,0x0a,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x01,0xeb,
+
+//0x02,0x03,0x51,0xf1,0x5a,0x61,0x60,0x10,0x1f,0x66,0x65,0x04,0x13,0x05,0x14,0x03,
+//0x02,0x12,0x20,0x21,0x22,0x15,0x01,0x5d,0x5e,0x5f,0x62,0x63,0x64,0x3f,0x40,0x23,
+//0x09,0x07,0x07,0x6e,0x03,0x0c,0x00,0x20,0x00,0xb8,0x3c,0x20,0x00,0x80,0x01,0x02,0x03,
+//0x04,0x67,0xd8,0x5d,0xc4,0x01,0x78,0x80,0x03,0xe2,0x00,0xcf,0xe3,0x05,0xc0,0x00,
+//0xe3,0x06,0x0d,0x01,0xeb,0x01,0x46,0xd0,0x00,0x26,0x1c,0x09,0x45,0x8a,0x5e,0xa3,
+//0x66,0x21,0x50,0xb0,0x51,0x00,0x1b,0x30,0x40,0x70,0x36,0x00,0x40,0x84,0x63,0x00,
+//0x00,0x1e,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+//0x00,0x00,0x78,
+};
+
+u8 szEdidData[MAXEDID_LENGTH];
+u8 szEdidData_Tmp[MAXEDID_LENGTH];
+
+EDID_S g_stHdmiEdidInfo;
+
+u8 Mod_Check_Sum(u8 *pucEDID_Data)
+{
+    u8 ucCheckSum = 0x00;
+    u8 ucloop;
+    for (ucloop = 0; ucloop<0x7F; ucloop++)
+    {
+        ucCheckSum += pucEDID_Data[ucloop]; //checksum
+    }
+    pucEDID_Data[0x7F] = (256 - ucCheckSum)%256;
+	return pucEDID_Data[0x7F];
+}
+
+void Mod_Check_DisplayIdSum(u8 *pucEDID_Data)
+{
+    u8 ucCheckSum = 0x00;
+    u8 ucCheckSumLocation;
+    u8 ucloop;
+    ucCheckSumLocation = (0x05 + pucEDID_Data[0x02]);
+    for (ucloop = 0x01; ucloop < ucCheckSumLocation; ucloop++)
+    {
+        ucCheckSum += pucEDID_Data[ucloop]; //checksum
+    }
+    pucEDID_Data[ucCheckSumLocation] = (256-ucCheckSum)%256;
+}
+
+void Mod_HdmiEdid_Init(void)
+{
+    memset(&g_stHdmiEdidInfo, 0, sizeof(EDID_S));
+}
+
+void Mod_HdmiEdid_Block0Analysis(u8 *pucEDID_Data)
+{
+    //pucEDID_Data = NULL;
+    g_stHdmiEdidInfo.b1EdidType = EDID_HDMITYPE;
+    if((pucEDID_Data[0x12] == 0x01)&&(pucEDID_Data[0x13] >= 0x04))
+    {
+        g_stHdmiEdidInfo.b1EdidType = EDID_DPTYPE;
+    }
+}
+
+void Mod_HdmiEdid_DisplayIdBlockAnalysis(u8 *pucEDID_Data)
+{
+    pucEDID_Data = NULL;
+}
+
+void Mod_VSDB_Handle(u8 *pucEDID_Data,u8 ucLoop_Offset)
+{
+    #if RX_PORT_SIGN == HDMI_PORT
+    u8 ucFrl_Rate;
+    #endif
+	g_stHdmiEdidInfo.b1HdmiMode    = 1;
+//	g_stHdmiEdidInfo.ucVsdb_offset = ucLoop_Offset; 
+	//HF 1-15
+	if(pucEDID_Data[ucLoop_Offset+5] >= g_stHdmiEdidInfo.ucHdmiTmdsClk)
+	{
+		g_stHdmiEdidInfo.ucHdmiTmdsClk = pucEDID_Data[ucLoop_Offset+5];
+	}
+	if(pucEDID_Data[ucLoop_Offset+5] > 0x44)
+	{
+		g_stHdmiEdidInfo.b1Hdmi20Edid = TRUE;
+	}
+	g_stHdmiEdidInfo.b1Scdc_Present = (pucEDID_Data[ucLoop_Offset+6]&BIT7_1)>>7; 
+    #if HDMITX_CTS_SUPPORT == ENABLED
+	g_stHdmiEdidInfo.b1RrEnable = (pucEDID_Data[ucLoop_Offset+6]&BIT6_1)>>6; 
+	#endif
+	if(g_stHdmiEdidInfo.ucBlockLen >= 7)
+	{
+		g_stHdmiEdidInfo.ucMaxFrlRate = (pucEDID_Data[ucLoop_Offset+7]&0xf0)>>4;
+		pucEDID_Data[ucLoop_Offset+7]    &= 0xfb;// remove dc420 16 bit
+		#if RX_PORT_SIGN == DP_PORT
+		if(g_stHdmiEdidInfo.ucMaxFrlRate > HDMITX_MAX_FRL_RATE)
+		{
+			pucEDID_Data[ucLoop_Offset+7] &= 0x0b;//remove frl
+			g_stHdmiEdidInfo.ucMaxFrlRate = HDMITX_MAX_FRL_RATE;
+			pucEDID_Data[ucLoop_Offset+7] |= g_stHdmiEdidInfo.ucMaxFrlRate<<4;
+		}		
+		#endif
+
+		#if RX_PORT_SIGN == HDMI_PORT
+		#if HDMIRX_MAX_FRL_RATE >= FRL_3G3LANE
+		if(g_stHdmiEdidInfo.ucMaxFrlRate > HDMIRX_MAX_FRL_RATE)
+		{
+			pucEDID_Data[ucLoop_Offset+7] &= 0x08;//remove 10bit 12bit
+			ucFrl_Rate                    = HDMIRX_MAX_FRL_RATE;
+			pucEDID_Data[ucLoop_Offset+7] |= ucFrl_Rate<<4;
+		}
+		#endif
+		#if HDMITX_MAX_FRL_RATE >= FRL_3G3LANE
+		if(g_stHdmiEdidInfo.ucMaxFrlRate > HDMITX_MAX_FRL_RATE)
+		{
+			g_stHdmiEdidInfo.ucMaxFrlRate = HDMITX_MAX_FRL_RATE;
+		}
+		#endif
+		#endif
+	}
+	#if HDMITX_VRR_SUPPORT == ENABLED
+	if(g_stHdmiEdidInfo.ucBlockLen >= 8)
+	{
+		if(pucEDID_Data[ucLoop_Offset+8]&0x38)
+		{
+			g_stHdmiEdidInfo.b1EdidWithVrr = TRUE;
+		}
+	}
+	#endif
+    #if RX_PORT_SIGN == HDMI_PORT
+	if(g_stHdmiEdidInfo.ucBlockLen >= 10)
+	{                        
+		#if HDMIRX_VRR_SUPPORT == DISABLED
+		pucEDID_Data[ucLoop_Offset+8]&= 0xe7;
+		pucEDID_Data[ucLoop_Offset+9] = 0x00;
+		pucEDID_Data[ucLoop_Offset+10]= 0x00;
+		#endif
+	}
+	if(g_stHdmiEdidInfo.ucBlockLen >= 11)
+	{	
+		#if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED)&&(HDMIRX_DSC_BYPASS_SUPPORT == DISABLED))
+		pucEDID_Data[ucLoop_Offset+11] &= 0xf9;//remove 12 16biy
+		#endif
+		
+	}
+    #endif
+	if(g_stHdmiEdidInfo.ucBlockLen >= 12)
+	{
+		#if RX_PORT_SIGN == DP_PORT
+		#if ((DPRX_DSC_DEC_SUPPORT == ENABLED)||(HDMITX_DSC_ENC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+		g_stHdmiEdidInfo.ucMaxFrlDscRate = (pucEDID_Data[ucLoop_Offset+12]>>4)&0x0f;
+		if(g_stHdmiEdidInfo.ucMaxFrlDscRate > HDMITX_MAX_FRL_RATE)
+		{
+			pucEDID_Data[ucLoop_Offset+12]      &= 0x0f;//
+			g_stHdmiEdidInfo.ucMaxFrlDscRate  = HDMITX_MAX_FRL_RATE;
+			pucEDID_Data[ucLoop_Offset+12]       |= g_stHdmiEdidInfo.ucMaxFrlDscRate<<4;
+		}
+		g_stHdmiEdidInfo.ucMaxDscSlice = (pucEDID_Data[ucLoop_Offset+12])&0x0f;
+		if(g_stHdmiEdidInfo.ucMaxDscSlice >= 4)
+		{
+			g_stHdmiEdidInfo.ucMaxDscSlice = 4;
+			#if ((DPRX_DSC_DEC_SUPPORT == ENABLED)&&(DPRX_DSC_BYPASS_SUPPORT == DISABLED))
+			g_stHdmiEdidInfo.ucMaxDscSlice = 3;
+			#endif
+		}
+		#endif
+		#endif
+		
+		#if RX_PORT_SIGN == HDMI_PORT
+		#if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED)||(HDMITX_DSC_ENC_SUPPORT == ENABLED)||(HDMIRX_DSC_BYPASS_SUPPORT == ENABLED))
+		g_stHdmiEdidInfo.ucMaxFrlDscRate = (pucEDID_Data[ucLoop_Offset+12]>>4)&0x0f;
+		if(g_stHdmiEdidInfo.ucMaxFrlDscRate > HDMIRX_MAX_FRL_RATE)
+		{
+			pucEDID_Data[ucLoop_Offset+12] &= 0x0f;//
+			ucFrl_Rate            = HDMIRX_MAX_FRL_RATE;
+			pucEDID_Data[ucLoop_Offset+12] |= ucFrl_Rate<<4;
+		}
+		if(g_stHdmiEdidInfo.ucMaxFrlDscRate > HDMITX_MAX_FRL_RATE)
+		{
+			g_stHdmiEdidInfo.ucMaxFrlDscRate = HDMITX_MAX_FRL_RATE;
+		}
+		g_stHdmiEdidInfo.ucMaxDscSlice = (pucEDID_Data[ucLoop_Offset+12])&0x0f;
+		if(g_stHdmiEdidInfo.ucMaxDscSlice >= 4)
+		{
+			g_stHdmiEdidInfo.ucMaxDscSlice = 4;
+			#if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED)&&(HDMIRX_DSC_BYPASS_SUPPORT == DISABLED))
+			g_stHdmiEdidInfo.ucMaxDscSlice = 3;
+			pucEDID_Data[ucLoop_Offset+12] &= 0xf0;
+			pucEDID_Data[ucLoop_Offset+12] |= g_stHdmiEdidInfo.ucMaxDscSlice;
+			#endif
+		}
+		#endif
+		#if ((HDMIRX_DSC_DEC_SUPPORT == DISABLED)&&(HDMIRX_DSC_BYPASS_SUPPORT == DISABLED))
+		if(g_stHdmiEdidInfo.ucBlockLen >= 11)
+		{
+			memset(&pucEDID_Data[ucLoop_Offset+11],0x00,(g_stHdmiEdidInfo.ucBlockLen-10));
+		}
+		#endif
+		#endif
+	}
+}
+
+void Mod_HdmiEdid_CtaBlockAnalysis(u8 *pucEDID_Data)
+{
+//    u8 ucLoop_edid;
+    u8 ucLoop_Offset,ucLoop_x;
+	u8 ucLoopCnt = 0;
+    g_stHdmiEdidInfo.ucColorDepth = DEEP_8BIT;
+    for (ucLoop_Offset = 4; ucLoop_Offset < pucEDID_Data[2];)
+    {
+        g_stHdmiEdidInfo.ucBlockTag = pucEDID_Data[ucLoop_Offset] >> 5;
+        g_stHdmiEdidInfo.ucBlockLen = pucEDID_Data[ucLoop_Offset] & 0x1F;
+        switch(g_stHdmiEdidInfo.ucBlockTag)
+        {   
+            case  0x01:     //audio 支持Dobly
+                for (ucLoop_x = ucLoop_Offset; ucLoop_x < (ucLoop_Offset+g_stHdmiEdidInfo.ucBlockLen); ucLoop_x += 3)
+                {
+                    if((pucEDID_Data[ucLoop_x+1]&0x78)== 0x08)
+                    {
+                        pucEDID_Data[ucLoop_x+1]   = 0x09;// 2channel
+                        if(pucEDID_Data[ucLoop_x+2]&0x07)
+                        {
+                            pucEDID_Data[ucLoop_x+2] &=0x07;
+                        }
+                    }
+					else
+					{
+						;
+					}
+                }
+                break;
+            case  0x02:
+                for(ucLoop_x = ucLoop_Offset; ucLoop_x< (ucLoop_Offset+g_stHdmiEdidInfo.ucBlockLen);ucLoop_x++)//remove > 8k60
+                {
+                    if((pucEDID_Data[ucLoop_x+1] >= 208)&&(pucEDID_Data[ucLoop_x+1] <= 217))
+                    {
+                        pucEDID_Data[ucLoop_x+1] = 0x01;
+                    }
+                }
+                break;
+            case  0x03:    //D8 5D C4
+				if((pucEDID_Data[ucLoop_Offset+1] == 0xD8)&&(pucEDID_Data[ucLoop_Offset+2] == 0x5D)&&(pucEDID_Data[ucLoop_Offset+3] == 0xC4))
+                {
+                    Mod_VSDB_Handle(pucEDID_Data,ucLoop_Offset);
+                }
+                else if((pucEDID_Data[ucLoop_Offset+1] == 0x03)&&(pucEDID_Data[ucLoop_Offset+2] == 0x0c)&&(pucEDID_Data[ucLoop_Offset+3] == 0x00))
+                {
+                    g_stHdmiEdidInfo.b1HdmiMode  = 1;
+					//HF 1-15						
+                    if(g_stHdmiEdidInfo.ucBlockLen >= 6)
+                    {
+                        pucEDID_Data[ucLoop_Offset+6] &= 0xbf;//remove 16bit
+                        #if RX_PORT_SIGN == HDMI_PORT
+                        #if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED) &&(HDMIRX_DSC_BYPASS_SUPPORT == DISABLED))
+                        pucEDID_Data[ucLoop_Offset+6] &= 0xdf;//remove 12bit
+                        #endif
+                        #endif
+                        #if RX_PORT_SIGN == DP_PORT
+                        #if DPRX_DFP_TYPE == BRANCH_DP
+                        if((pucEDID_Data[ucLoop_Offset+6]&0x10) == 0x10)
+                        {
+                            g_stHdmiEdidInfo.ucColorDepth = DEEP_10BIT;
+                        }
+                        if((pucEDID_Data[ucLoop_Offset+6]&0x20) == 0x20)
+                        {
+                            g_stHdmiEdidInfo.ucColorDepth = DEEP_12BIT;
+                        }
+                        #endif
+                        #endif
+						if(g_stHdmiEdidInfo.ucBlockLen >= 7)
+						{
+							if(pucEDID_Data[ucLoop_Offset+7] >= g_stHdmiEdidInfo.ucHdmiTmdsClk)
+							{
+								g_stHdmiEdidInfo.ucHdmiTmdsClk = pucEDID_Data[ucLoop_Offset+7];
+							}
+						}
+                    }
+                }
+                else
+                {
+//                    for(ucLoop_edid = ucLoop_Offset; ucLoop_edid < 0x7e ; ucLoop_edid++)
+//                    {
+//                        if(ucLoop_edid < ( 0x7e - g_stHdmiEdidInfo.ucBlockLen))
+//                        {
+//                            pucEDID_Data [ucLoop_edid] = pucEDID_Data [ucLoop_edid + g_stHdmiEdidInfo.ucBlockLen+1];
+//                        }
+//                        else
+//                        {
+//                            pucEDID_Data [ucLoop_edid] = 0;
+//                        }
+//                    }
+//                    pucEDID_Data[2]    -=  (g_stHdmiEdidInfo.ucBlockLen+1);
+//                    pucEDID_Data[0x7e] =0;
+//                    g_stHdmiEdidInfo.ucBlockLen = 0;
+//                    ucLoop_Offset--;
+                }
+                break;
+            case  0x07: //Extention block for YCbcr420
+                if((pucEDID_Data[ucLoop_Offset+1] == 0x0e)||(pucEDID_Data[ucLoop_Offset+1] == 0x0f))
+                {
+////                    if(g_stHdmiEdidInfo.b1Hdmi20Edid == 0)
+//                    {
+//                        for(ucLoop_x = 0; ucLoop_x <= g_stHdmiEdidInfo.ucBlockLen ; ucLoop_x++)
+//                        {
+//                            for(ucLoop_edid = ucLoop_Offset; ucLoop_edid <  0x7e; ucLoop_edid++)
+//                            {
+//                                pucEDID_Data [ucLoop_edid] = pucEDID_Data [ucLoop_edid+1];
+//                            }
+//                            pucEDID_Data[2]--;
+//                            pucEDID_Data[0x7e] = 0;
+//                        }
+//                        g_stHdmiEdidInfo.ucBlockLen = 0;
+//                        ucLoop_Offset --;
+						g_stHdmiEdidInfo.b1Yuv420Edid = 1 ;
+//                    }
+////                    else
+////                    {
+////                        g_stHdmiEdidInfo.b1Yuv420Edid = 1 ;
+////                    }
+                }
+////				else if(pucEDID_Data[ucLoop_Offset+1] == 0x01)
+////                {
+////                    memset(&pucEDID_Data[ucLoop_Offset],0x00,g_stHdmiEdidInfo.ucBlockLen);
+////                }
+                if((pucEDID_Data[ucLoop_Offset+1] == 0x79)&&(pucEDID_Data[ucLoop_Offset+2] == 0x00)&&(pucEDID_Data[ucLoop_Offset+3] == 0x00))
+                {
+                    pucEDID_Data[ucLoop_Offset]  &= 0x1f;
+                    pucEDID_Data[ucLoop_Offset]  |= 0x60;
+                    pucEDID_Data[ucLoop_Offset+1] = 0xd8;
+                    pucEDID_Data[ucLoop_Offset+2] = 0x5d;
+                    pucEDID_Data[ucLoop_Offset+3] = 0xc4;
+					Mod_VSDB_Handle(pucEDID_Data,ucLoop_Offset);
+                }
+                else if(pucEDID_Data[ucLoop_Offset+1] == 0x22)//DisplayID Type VII Video Timing Data Block
+                {
+                    if((pucEDID_Data[ucLoop_Offset+5] > 0)||((pucEDID_Data[ucLoop_Offset+4] >= 0x75)&&(pucEDID_Data[ucLoop_Offset+5] == 0)))
+                    {
+                        g_stHdmiEdidInfo.b1Hdmi20Edid = TRUE;
+                    }
+                }
+				else if(((pucEDID_Data[ucLoop_Offset] & 0x1F)>= 0x02)&&(pucEDID_Data[ucLoop_Offset+1] == 0x78))//HF-EEODB
+				{
+					g_stHdmiEdidInfo.ucHF_EEODBLength = pucEDID_Data[ucLoop_Offset+2];
+				}
+                break;
+            default:
+                break;
+        }
+        ucLoop_Offset += g_stHdmiEdidInfo.ucBlockLen + 1;
+    }
+    #if HDMITX_CTS_SUPPORT == ENABLED
+	if(g_stHdmiEdidInfo.b1RrEnable == TRUE)
+	{
+		Drv_HdmiTx_ReadI2CByte(0xa810);
+		Drv_HdmiTx_ReadI2CByteN(0x00,0xA850,&g_stHdmiTx.szErrChk[0],7);
+		Drv_HdmiTx_WriteI2CByte(0xa830,0x01);
+	}
+    #endif
+	if((g_stHdmiEdidInfo.ucMaxFrlRate == TRUE)||(g_stHdmiEdidInfo.ucMaxFrlDscRate))
+	{		
+		Drv_HdmiTx_WriteI2CByte(0xa831,0x00);//a831[7:4]ffe lvl, [3:0]frl rate
+	}
+}
+
+void Mod_HdmiEdid_Analysis(u8 *pucEDID_Data)
+{
+    u8 ucLoop_edid;
+    u16 usEdid_Offset;
+	#if RX_PORT_SIGN == HDMI_PORT
+    u8 ucNoCta_Flag;
+	#endif
+	u8 ucTempSwap, ucLoop_cnt;
+    g_stHdmiEdidInfo.ucHdmiTmdsClk = 0x1E;
+	#if RX_PORT_SIGN == HDMI_PORT
+    for(ucLoop_edid = 0; ucLoop_edid< 4;ucLoop_edid++) //sumsang 4block edid
+    {
+        usEdid_Offset = (u16)ucLoop_edid * 0x80;;
+        if((pucEDID_Data[usEdid_Offset] == 0xf0)&&(pucEDID_Data[0x7e] >= 1))
+        {
+            if(pucEDID_Data[0x7e] >= 2)
+            {
+                for(ucLoop_cnt = 0;ucLoop_cnt< 128;ucLoop_cnt++)
+                {
+                    pucEDID_Data[usEdid_Offset|ucLoop_cnt] = pucEDID_Data[(usEdid_Offset+0x80)|ucLoop_cnt];
+                }
+            }
+            if(pucEDID_Data[0x7e] >= 3)
+            {
+                for(ucLoop_cnt = 0;ucLoop_cnt< 128;ucLoop_cnt++)
+                {
+                    pucEDID_Data[(usEdid_Offset+0x80)|ucLoop_cnt] = pucEDID_Data[(usEdid_Offset+0x100)|ucLoop_cnt];
+                }
+            }
+            pucEDID_Data[0x7e] -= 1;
+            break;
+        }
+    }
+	#endif
+    for(ucLoop_edid = 0; ucLoop_edid< 4;ucLoop_edid++)
+    {
+		#if RX_PORT_SIGN == HDMI_PORT
+        ucNoCta_Flag = 1;
+		#endif
+        usEdid_Offset = (u16)ucLoop_edid * 0x80;
+        if((pucEDID_Data[usEdid_Offset] == 0x02)&&(pucEDID_Data[usEdid_Offset+1] >= 0x02))
+        {
+			#if RX_PORT_SIGN == HDMI_PORT
+            ucNoCta_Flag = 0;
+			#endif
+            if((ucLoop_edid == 2)||(ucLoop_edid == 3))
+            {
+                for(ucLoop_cnt = 0;ucLoop_cnt< 128;ucLoop_cnt++)
+                {
+                    ucTempSwap = pucEDID_Data[usEdid_Offset|ucLoop_cnt];
+                    pucEDID_Data[usEdid_Offset|ucLoop_cnt] = pucEDID_Data[0x80|ucLoop_cnt];
+                    pucEDID_Data[0x80|ucLoop_cnt]  = ucTempSwap;
+                }
+            }
+            break;
+        }
+        if(ucLoop_edid >= pucEDID_Data[0x7e])
+        {
+            break;
+        }
+    }
+    #if RX_PORT_SIGN == HDMI_PORT
+    if(ucNoCta_Flag == 1)
+    {
+        for(ucLoop_cnt = 0;ucLoop_cnt< 128;ucLoop_cnt++)
+        {
+            pucEDID_Data[0x180|ucLoop_cnt] = pucEDID_Data[0x100|ucLoop_cnt];
+            pucEDID_Data[0x100|ucLoop_cnt] = pucEDID_Data[0x80|ucLoop_cnt];
+            pucEDID_Data[0x80|ucLoop_cnt]  = szEdidDefault[0x80|ucLoop_cnt];
+        }
+        if(pucEDID_Data[0x7e] <= 2)
+        {
+            pucEDID_Data[0x7e] += 1;
+        }
+    }
+    #endif
+    for(ucLoop_edid = 0; ucLoop_edid < 4; ucLoop_edid++)
+    {
+        usEdid_Offset = (u16)ucLoop_edid * 0x80;
+        if((pucEDID_Data[usEdid_Offset] == 0x00) && (pucEDID_Data[usEdid_Offset+1] == 0xff))
+        {
+            Mod_HdmiEdid_Block0Analysis(&pucEDID_Data[usEdid_Offset]);
+        }
+        else if((pucEDID_Data[usEdid_Offset] == 0x02) && (pucEDID_Data[usEdid_Offset+1] >= 0x02))
+        {
+            Mod_HdmiEdid_CtaBlockAnalysis(&pucEDID_Data[usEdid_Offset]);
+        }
+        else if(pucEDID_Data[usEdid_Offset] == 0x70)
+        {
+            Mod_HdmiEdid_DisplayIdBlockAnalysis(&pucEDID_Data[usEdid_Offset]);
+        }
+        if(ucLoop_edid >= pucEDID_Data[0x7e])
+        {
+            break;
+        }        
+    }
+	//HFR-1-69
+	if((g_stHdmiEdidInfo.ucHF_EEODBLength != 0)&&(pucEDID_Data[0x7e] == 0x01))
+	{
+        if(g_stHdmiEdidInfo.ucHF_EEODBLength >= 2)
+        {
+            Drv_HdmiTx_ReadI2CByteN(0x01,0xA000,&pucEDID_Data[0x100],128);
+        }
+		if(g_stHdmiEdidInfo.ucHF_EEODBLength >= 3)
+		{
+			Drv_HdmiTx_ReadI2CByteN(0x01,0xA080,&pucEDID_Data[0x180],128);
+		}
+		if(g_stHdmiEdidInfo.ucHF_EEODBLength >= 4)
+		{
+			Drv_HdmiTx_ReadI2CByteN(0x02,0xA000,&pucEDID_Data[0x200],128);
+		}
+        #if HDMITX_CTS_SUPPORT == ENABLED
+		if(g_stHdmiEdidInfo.ucHF_EEODBLength >= 5)
+		{
+			Drv_HdmiTx_ReadI2CByteN(0x02,0xA080,&pucEDID_Data[0x280],128);
+		}
+		if(g_stHdmiEdidInfo.ucHF_EEODBLength >= 6)
+		{
+			Drv_HdmiTx_ReadI2CByteN(0x03,0xA000,&pucEDID_Data[0x300],128);
+		}
+		if(g_stHdmiEdidInfo.ucHF_EEODBLength >= 7)
+		{
+			Drv_HdmiTx_ReadI2CByteN(0x03,0xA080,&pucEDID_Data[0x380],128);
+		}
+		if(g_stHdmiEdidInfo.ucHF_EEODBLength <= 7)
+		{
+			pucEDID_Data[0x7e] = g_stHdmiEdidInfo.ucHF_EEODBLength;
+		}
+		else
+		{
+			pucEDID_Data[0x7e] = 7;
+		}
+        #else
+        if(g_stHdmiEdidInfo.ucHF_EEODBLength >= 4)
+		{
+			pucEDID_Data[0x7e] = 4;
+		}
+		else
+		{
+			;
+		}
+        #endif
+	}
+}
+#if RX_PORT_SIGN == DP_PORT
+#if DPRX_DFP_TYPE == BRANCH_DP
+void Mod_Block0_Update(u8 *pucEDID_Data)
+{
+    
+	#if DPRX_ADAPTIVE_SYNC == ENABLED
+    u8 ucLoop_edid = 0;
+	#endif
+    if(pucEDID_Data[0x13] == 0x03)
+    {
+        pucEDID_Data[0x13] = 0x04;
+        switch(g_stHdmiEdidInfo.ucColorDepth)
+        {
+            case DEEP_12BIT:
+                pucEDID_Data[0x14] = 0xc5;//0xc5
+                break;
+            case DEEP_10BIT:
+                pucEDID_Data[0x14] = 0xb5;
+                break;
+            default:
+                pucEDID_Data[0x14] = 0xa5;
+                break;
+        }
+    }
+    pucEDID_Data[0x18] = 0x3b;
+    #if DPRX_ADAPTIVE_SYNC == ENABLED
+	if(g_stHdmiEdidInfo.b1EdidWithVrr == TRUE)
+	{
+		for(ucLoop_edid = 0x36; ucLoop_edid < 0x7e ; ucLoop_edid++)
+		{
+			if((pucEDID_Data[ucLoop_edid] ==0)&&(pucEDID_Data[ucLoop_edid+1] ==0)&&(pucEDID_Data[ucLoop_edid+2] == 0)&&(pucEDID_Data[ucLoop_edid+3] == 0xfd))//horizontal rate min = max
+			{
+				pucEDID_Data[ucLoop_edid+7]  =  pucEDID_Data[ucLoop_edid+8];//AMD重要
+				pucEDID_Data[ucLoop_edid+10] = 0x01;
+			}
+		}
+	}
+    #endif
+    
+//    
+//    if((pucEDID_Data[0x08]==0x41)&&(pucEDID_Data[0x09]==0x0c)&&(pucEDID_Data[0x0a]==0x49)&&(pucEDID_Data[0x0b]==0xc2))
+//    {
+//        if((pucEDID_Data[0x36]==0x4d)&&(pucEDID_Data[0x37]==0xd0)&&(pucEDID_Data[0x39]==0xa0)&&(pucEDID_Data[0x3a]==0xf0))
+//        {
+//            memcpy(&pucEDID_Data[0x36],&szEdidDefault[0x36],17);//philips not support 4k60 533 in HDMI2.1
+//        }
+//    }
+}
+#endif
+#endif
+//================================
+/*
+197 205 8k48
+213 10K48
+198 206 8k50
+214 10k50
+199 207 8k60
+215 10k60
+200 208 8k100
+216 10k100
+201 209 8k120
+217 10k120                                          
+*/                       
+//================================
+void Mod_CtaBlock_Update(u8 *pucEDID_Data)
+{
+    u8 ucLoop_Offset;
+//    u8 ucLoop_edid;
+    #if RX_PORT_SIGN == DP_PORT
+    //#if ((DPRX_DSC_DEC_SUPPORT == ENABLED)&&(DPRX_DSC_BYPASS_SUPPORT == DISABLED))
+    u8 ucLoop_x;
+    //#endif
+    #endif
+
+    for (ucLoop_Offset = 4; ucLoop_Offset < pucEDID_Data[2];)
+    {
+        g_stHdmiEdidInfo.ucBlockTag = pucEDID_Data[ucLoop_Offset] >> 5;
+        g_stHdmiEdidInfo.ucBlockLen = pucEDID_Data[ucLoop_Offset] & 0x1F;
+        switch(g_stHdmiEdidInfo.ucBlockTag)
+        {
+            case  0x02:
+                #if RX_PORT_SIGN == DP_PORT
+                #if ((DPRX_DSC_DEC_SUPPORT == ENABLED)&&(DPRX_DSC_BYPASS_SUPPORT == DISABLED))
+                for(ucLoop_x = ucLoop_Offset; ucLoop_x< (ucLoop_Offset+g_stHdmiEdidInfo.ucBlockLen);ucLoop_x++)//
+                {
+                    if(/*((pucEDID_Data[ucLoop_x+1] == 193))
+                     ||*/((pucEDID_Data[ucLoop_x+1] >= 197)&&(pucEDID_Data[ucLoop_x+1] <= 207)))
+                    {
+                         pucEDID_Data[ucLoop_x+1] = 0x01;//remvove 5k120  8k60    
+                    }
+                }
+                #elif (DPRX_DSC_BYPASS_SUPPORT == ENABLED)
+                if(g_stHdmiEdidInfo.ucMaxFrlDscRate <= FRL_6G4LANE)
+                {
+                    for(ucLoop_x = ucLoop_Offset; ucLoop_x< (ucLoop_Offset+g_stHdmiEdidInfo.ucBlockLen);ucLoop_x++)//
+                    {
+                        if(((pucEDID_Data[ucLoop_x+1] >= 197)&&(pucEDID_Data[ucLoop_x+1] <= 201))
+                            ||((pucEDID_Data[ucLoop_x+1] >=205)&&(pucEDID_Data[ucLoop_x+1] <= 209))
+                        ||((pucEDID_Data[ucLoop_x+1] >= 213)&&(pucEDID_Data[ucLoop_x+1] <= 217)))
+                        {
+                             pucEDID_Data[ucLoop_x+1] = 0x01;//remvove 8k60Hz 10K  
+                        }
+                    }
+                }
+                #else
+                if(g_stHdmiEdidInfo.ucMaxFrlDscRate <= FRL_6G4LANE)
+                {
+                    for(ucLoop_x = ucLoop_Offset; ucLoop_x< (ucLoop_Offset+g_stHdmiEdidInfo.ucBlockLen);ucLoop_x++)//
+                    {
+                        if(((pucEDID_Data[ucLoop_x+1] >= 197)&&(pucEDID_Data[ucLoop_x+1] <= 201))
+                            ||((pucEDID_Data[ucLoop_x+1] >=205)&&(pucEDID_Data[ucLoop_x+1] <= 209))
+                        ||((pucEDID_Data[ucLoop_x+1] >= 213)&&(pucEDID_Data[ucLoop_x+1] <= 217)))
+                        {
+                             pucEDID_Data[ucLoop_x+1] = 0x01;//remvove 8k60Hz 10K  
+                        }
+                    }
+                }               
+                #endif
+                #endif
+                break;
+            case  0x03:     //D8 5D C4
+//                if(((pucEDID_Data[ucLoop_Offset+1] == 0xD8)&&(pucEDID_Data[ucLoop_Offset+2] == 0x5D)&&(pucEDID_Data[ucLoop_Offset+3] == 0xC4))
+//                 ||((pucEDID_Data[ucLoop_Offset+1] == 0x03)&&(pucEDID_Data[ucLoop_Offset+2] == 0x0c)&&(pucEDID_Data[ucLoop_Offset+3] == 0x00)))
+//                {
+//                    for(ucLoop_edid = ucLoop_Offset; ucLoop_edid < 0x7e ; ucLoop_edid++)
+//                    {
+//                        if(ucLoop_edid < (0x7e - g_stHdmiEdidInfo.ucBlockLen))
+//                        {
+//                            pucEDID_Data [ucLoop_edid] = pucEDID_Data [ucLoop_edid + g_stHdmiEdidInfo.ucBlockLen+1];
+//                        }
+//                        else
+//                        {
+//                            pucEDID_Data [ucLoop_edid] = 0;
+//                        }
+//                    }
+//                    pucEDID_Data[2]-= (g_stHdmiEdidInfo.ucBlockLen+1);
+//                    pucEDID_Data[0x7e] = 0;
+//                    g_stHdmiEdidInfo.ucBlockLen =   0;
+//                    ucLoop_Offset--;
+//                }
+                break;
+            default:
+                break;
+        }
+        ucLoop_Offset += g_stHdmiEdidInfo.ucBlockLen + 1;
+    }
+}
+void Mod_DisPlayIDBlock_Update(u8 *pucEDID_Data)
+{
+    u8 ucLoop_Offset,ucLoop_x;
+    u8 ucloopCnt0,ucloopCnt1;
+    #if RX_PORT_SIGN == HDMI_PORT
+    #if (HDMIRX_DSC_BYPASS_SUPPORT == ENABLED)
+    if(g_stHdmiEdidInfo.ucMaxFrlDscRate > 0)
+    {
+        return;
+    }
+    #endif
+    #endif
+    #if RX_PORT_SIGN == DP_PORT
+    #if (DPRX_DSC_BYPASS_SUPPORT == ENABLED)
+    if(g_stHdmiEdidInfo.ucMaxFrlDscRate > 0)
+    {
+        return;
+    }
+    #endif
+    #endif
+	ucloopCnt0 = 0x05 + pucEDID_Data[0x02];//in case of biger than 0xff;
+    for(ucLoop_Offset = 0x05; ucLoop_Offset< ucloopCnt0;)
+    {
+        g_stHdmiEdidInfo.ucBlockTag = pucEDID_Data[ucLoop_Offset];
+        g_stHdmiEdidInfo.ucBlockLen = pucEDID_Data[ucLoop_Offset+2];
+        if((g_stHdmiEdidInfo.ucBlockTag == 0x00)&&(g_stHdmiEdidInfo.ucBlockLen == 0x00)) 
+        {
+            break;
+        }
+        switch(g_stHdmiEdidInfo.ucBlockTag)
+        {
+            case 0x03:   
+				ucloopCnt1 = ucLoop_Offset +g_stHdmiEdidInfo.ucBlockLen+3;
+                for(ucLoop_x = (ucLoop_Offset+3);ucLoop_x < ucloopCnt1;ucLoop_x += 20)
+                {
+                    if(((pucEDID_Data[ucLoop_x+1]> 0x32)&&(pucEDID_Data[ucLoop_x+2]== 2))||(pucEDID_Data[ucLoop_x+2]> 2))// Over 1440Mhz
+                    {
+                        memset(&pucEDID_Data[ucLoop_x],0x00,20);
+                    }
+                } 
+                break;
+            default :
+            break;
+        }
+        ucLoop_Offset += g_stHdmiEdidInfo.ucBlockLen +3;
+    }
+}
+
+void Mod_HdmiEdid_Update(u8 *pucEDID_Data)
+{
+    u8 ucLoop_edid;
+    u16 usEdid_Offset;
+    for(ucLoop_edid = 0; ucLoop_edid < 4; ucLoop_edid++)
+    {
+        usEdid_Offset = (u16)ucLoop_edid * 0x80;
+        if((pucEDID_Data[usEdid_Offset] == 0x00) && (pucEDID_Data[usEdid_Offset+1] == 0xff))
+        {
+            #if RX_PORT_SIGN == DP_PORT
+			#if DPRX_DFP_TYPE == BRANCH_DP
+            Mod_Block0_Update(&pucEDID_Data[usEdid_Offset]);
+			#endif
+            #endif
+            Mod_Check_Sum(&pucEDID_Data[usEdid_Offset]);
+        }
+        else if((pucEDID_Data[usEdid_Offset] == 0x02) && (pucEDID_Data[usEdid_Offset+1] >= 0x02))
+        {
+            Mod_CtaBlock_Update(&pucEDID_Data[usEdid_Offset]);
+            Mod_Check_Sum(&pucEDID_Data[usEdid_Offset]);
+        }
+        else if(pucEDID_Data[usEdid_Offset] == 0x70)
+        {
+            Mod_DisPlayIDBlock_Update(&pucEDID_Data[usEdid_Offset]);
+            Mod_Check_DisplayIdSum(&pucEDID_Data[usEdid_Offset]);
+            Mod_Check_Sum(&pucEDID_Data[usEdid_Offset]);
+        }
+        if(ucLoop_edid >= pucEDID_Data[0x7e])
+        {
+            break;
+        }        
+    }
+}
+
+#if RX_PORT_SIGN == DP_PORT
+#if ((DEBUG_DPRX_EDID_PRINT_EN == ENABLED))
+void Mod_Edid_DpModePrint(u8 *pucEDID_Data)
+{
+    u16 usLoop_Cnt;
+	
+    printLT(PRINT_PRIO_TEST, "\nDp EDID");
+	if(pucEDID_Data[0x7e] >= 9)
+	{
+		printLT(PRINT_PRIO_TEST, "\nEDID ERR");
+		return;
+	}
+    for(usLoop_Cnt = 0; usLoop_Cnt < ((pucEDID_Data[0x7e]+1)<<7); usLoop_Cnt++)
+    {
+        if((usLoop_Cnt &0x0f) == 0)
+        {
+            printLT(PRINT_PRIO_TEST, "\n");
+        }
+        printLT(PRINT_PRIO_TEST, "0x%02bx,", pucEDID_Data[usLoop_Cnt]);
+    } 
+    
+}
+#endif 
+#endif
+
+#if RX_PORT_SIGN == HDMI_PORT
+#if ((DEBUG_HDMIRX_EDID_PRINT_EN == ENABLED))
+void Mod_Edid_HdmiModePrint(u8 *pucEDID_Data)
+{
+    u16 usLoop_Cnt;
+    printLT(PRINT_PRIO_TEST, "\nHdmi EDID");
+	if(pucEDID_Data[0x7e] >= 9)
+	{
+		printLT(PRINT_PRIO_TEST, "\nEDID ERR");
+		return;
+	}
+    for(usLoop_Cnt = 0; usLoop_Cnt < ((pucEDID_Data[0x7e]+1)<<7); usLoop_Cnt++)
+    {
+        if((usLoop_Cnt &0x0f) == 0)
+        {
+            printLT(PRINT_PRIO_TEST, "\n");
+        }
+        printLT(PRINT_PRIO_TEST, "0x%02bx,", pucEDID_Data[usLoop_Cnt]);
+    } 
+    
+}
+#endif
+#endif
+
+u8 Mod_Edid_ModeDet(void)
+{
+    if(g_stHdmiEdidInfo.b1EdidType == EDID_DPTYPE)
+    {
+        return TRUE;
+    }
+    return g_stHdmiEdidInfo.b1HdmiMode;
+}
+
+u8 Mod_EdidHdmi20_Get(void)
+{
+    if(g_stHdmiEdidInfo.b1EdidType == EDID_DPTYPE)
+    {
+        return TRUE;
+    }
+    return g_stHdmiEdidInfo.b1Hdmi20Edid;
+}
+
+void Mod_Edid_Update(u8 *pEdidData)
+{
+    Mod_HdmiEdid_Init();
+    Mod_HdmiEdid_Analysis(pEdidData);
+	
+    Mod_HdmiEdid_Update(pEdidData);
+    #if RX_PORT_SIGN == DP_PORT
+    #if ((DEBUG_DPRX_EDID_PRINT_EN == ENABLED))
+    Mod_Edid_DpModePrint(pEdidData);
+    #endif
+    #if DPRX_ADAPTIVE_SYNC == ENABLED
+	g_stDpRx.ucAdaptiveSync_En = g_stHdmiEdidInfo.b1EdidWithVrr;
+	#endif
+    #endif
+    
+    #if RX_PORT_SIGN == HDMI_PORT
+    #if ((DEBUG_HDMIRX_EDID_PRINT_EN == ENABLED))
+    Mod_Edid_HdmiModePrint(pEdidData);
+    #endif
+    #endif
+	
+	g_stHdmiTx.b1HdmiMode = Mod_Edid_ModeDet();
+}
+#endif

@@ -1,0 +1,464 @@
+#include "Include.h"
+
+#if TYPECRX_EN == ENABLED
+void Mod_CC1RequestToCC2(void)
+{
+    UCCStatus.b1PrDone = TRUE;
+    if(DCCStatus.b1AdapterWithPD)
+    {
+        DCCMSG.pDataOrder = UCCMSG.szRequestTmp; ////PR SWAP 5 UFP_SINK 6
+        Mod_CC2Msg_Send();
+        UCCStatus.b1PsRdy_Send  = FALSE;
+    }
+    else
+    {
+        Ocm_Delay1ms(30);
+        UCCStatus.b1PsRdy_Send  = TRUE;
+        Ocm_Timer2ForPsRdy_Set();
+    }
+}
+void Mod_CC1MsgAfterAccept(void)
+{
+    #if TYPEC_DRSWAP_EN == ENABLED
+    UCCMSG.ucLastMsgType  = 0xff;
+    #if PDCTS_USE == ENABLED
+    if(UCCStatus.b1SwapToVconnSource == FALSE)
+    {              
+        if((UCCStatus.ucPRSwaping)&&(UCCStatus.ucPRSwaped == 4))
+        {
+            UCCStatus.ucPRSwaped = 5;
+            UCCStatus.b1PsRdy_Send  = TRUE;
+            Ocm_Timer2_Set();
+            Ocm_Delay1ms(2);
+            SOURCE_GPIO_CTRL(LOW);
+        }
+        else
+        {
+            if(!UCCStatus.b1DataRole) //UFP
+            {
+                if((!UCCStatus.ucPRSwaping)&&(UCCStatus.ucPRSwaped))
+                {
+                    Mod_CC1RequestToCC2();
+                }
+            }
+            else if(UCCStatus.b1DataRole)
+            {
+               Mod_CC1RequestToCC2();
+            }
+        }
+    }
+    else if(UCCStatus.b1SwapToVconnSource == TRUE)     
+    {
+        Ocm_Timer2_Set();
+        UCCStatus.b1SwapToVconnSource = FALSE;  
+        UCCStatus.b1PsRdy_Send  = TRUE;
+    }
+    #else
+    if((UCCStatus.ucPRSwaping)&&(UCCStatus.ucPRSwaped == 4))
+    {
+        UCCStatus.ucPRSwaped = 5;
+        UCCStatus.b1PsRdy_Send  = TRUE;
+        Ocm_Timer2_Set();
+        Ocm_Delay1ms(2);
+        SOURCE_GPIO_CTRL(LOW);
+    }
+    else
+    {
+        if(!UCCStatus.b1DataRole) //UFP
+        {
+            if((!UCCStatus.ucPRSwaping)&&(UCCStatus.ucPRSwaped))
+            {
+                Mod_CC1RequestToCC2();
+            }
+        }
+        else if(UCCStatus.b1DataRole)
+        {
+           Mod_CC1RequestToCC2();
+        }
+    }
+    #endif
+    #endif
+}
+void Mod_CC1MsgAfterPsRdy(void)
+{		
+    if(UCCStatus.ucPRSwaped != 6)
+    {
+        #if TYPEC_PRSWAP_EN == ENABLED
+        if((UCCStatus.ucPRSwaping)&&(UCCStatus.ucPRSwaped == 3))//SwapSourceStartTimer
+        {
+            UCCStatus.b2SwapSourceStart = 0x01; 
+        }
+        else if((!UCCStatus.ucPRSwaping)&&(UCCStatus.ucPRSwaped == 3))	// //UFP_SINK 8 
+        {
+            if(UCCStatus.b1IsCc_done == FALSE)
+            {
+                UCCStatus.b1IsCc_done = TRUE; // Hdmi_Edid = 0x02;
+            }
+        }
+        #endif
+        #if TYPEC_DRSWAP_EN == ENABLED
+		#if VCONNSWAP_SUPPORT == ENABLED 
+        if(UCCStatus.b1DataRole) 
+        {
+            if(((UCCStatus.ucSwap_Sent&Vconn_Sent) == 0)&&(UCCStatus.b1IsVconnSource == TRUE))
+            {
+                UCCStatus.b1VconnSwap_En = TRUE;
+            }
+        }
+        else if(UCCStatus.ucPRSwaped != 6)
+        {
+            UCCStatus.b1VconnSwap_En = FALSE;
+        }
+		#else
+        if((UCCStatus.ucSwap_Sent & DR_Sent) == 0)
+        {
+            Mod_Cc1DrSwap_Set();
+        }
+        else
+        {
+            UCCStatus.ucDrSwap_En = 0;
+        }
+        #endif
+        #endif
+    }
+    else
+    {
+        UCCMSG.ucLastMsgType = 0xff;
+    }
+    if(UCCStatus.b1CcDataRoleSet == DFP)
+    {
+        if((UCCStatus.b1DataRole == TRUE)&&(UCCStatus.b2DisIdSend_En == INITIATE_NONE)) 
+        {
+            UCCStatus.b2DisIdSend_En = INITIATE_READY;
+        }
+    }
+    else if(UCCStatus.b1CcDataRoleSet == UFP)
+    {
+        UCCStatus.b2DisIdSend_En = INITIATE_NONE;
+    }
+}
+void Mod_CC1Pd_Interrupt(void)
+{
+    static u8 ucUccMsgLength;
+    static u8 ucUccExtMsg;
+    static u8 ucUccMsgType;
+    static u8 ucUccTypecInt;
+    static u8 ucUccKeyCode;
+    static u8 ucUccRXCount;
+    ucUccTypecInt = BKFC_36_REG;
+	BKFC_36_REG = 0xEB;	
+	BKFC_1B_REG = 0xFF;
+    if(ucUccTypecInt & BIT6_1) //RCV_KEYCODE_RDY
+	{
+		ucUccRXCount = 0;
+		ucUccKeyCode =(BKFC_1C_REG & 0x07);
+		BKFC_1C_REG = 0xF8;
+		#if UCC_EMARK_SUPPORT == ENABLED
+        BKFC_17_REG = 0x40;
+		BKFC_18_REG = 0x00;
+        BKFC_19_REG = 0x01;
+        if(ucUccKeyCode == SOP)	 // check sop
+		{          
+            UCCStatus.ucSop1MsgStep = SOP1END;
+			BKFC_17_REG &= BIT4_0;           // return goodcrc
+		}
+		else
+		{
+            if(UCCStatus.ucSop1MsgStep != SOP1END)
+            {
+                BKFC_19_REG = 0x02;
+                BKFC_17_REG = 0x42;         //return goodcrc and set the PDR to DFP
+                BKFC_18_REG = 0x40;         //set the PDR to DFP
+            }
+            else
+            {
+                BKFC_17_REG = 0x50;         //Not return goodcrc
+                BKFC_18_REG = 0x00;         //set the PDR to DFP
+            }         
+        }
+		#else
+		if(ucUccKeyCode == SOP)     // check sop
+        {
+            BKFC_17_REG &= BIT4_0;           // return goodcrc
+        }
+        else
+        {
+			BKFC_17_REG |= BIT4_1;	         // disable return goodcrc
+		}
+		#endif
+        if(ucUccKeyCode == HardRst)
+		{
+            UCCStatus.b2Hardreset_Hdl = HardRst_Rec;//Hardreset rec     
+		}
+    }
+    if(ucUccTypecInt & BIT0_1) // RCV_HEADER
+    {
+        UCCMSG.szHeader[1] = BKFC_3B_REG;
+        UCCMSG.szHeader[0] = BKFC_3A_REG;
+		#if UCC_EMARK_SUPPORT == DISABLED
+        if(ucUccKeyCode == SOP)		
+        #endif
+        {
+            UCCMSG.ucMessageID_New = UCCMSG.szHeader[1]&0x0e;    
+            ucUccMsgType   = UCCMSG.szHeader[0] & 0x1f;        
+            ucUccMsgLength = (UCCMSG.szHeader[1] & 0x70)>>2;
+            ucUccExtMsg = (UCCMSG.szHeader[1] & BIT7_1)?(1):(0);
+        }    
+        if((BKFC_36_REG & BIT5_1) == 0x00)
+        {
+            ucUccTypecInt &= BIT5_0;
+        }
+    }
+    if((ucUccTypecInt&BIT5_1) == 0x00)//RX_FIFO_EMPTY
+    {
+		do 
+		{
+            if(ucUccExtMsg)
+            {
+                if(ucUccRXCount < 2)
+				{
+					UCCMSG.szHeader[ucUccRXCount+2]= BKFC_23_REG;
+				}
+				else
+				{
+					UCCMSG.szRcvDate[ucUccRXCount-2]= BKFC_23_REG;
+				}
+			}
+			else
+			{
+				UCCMSG.szHeader[2] = 0x00;
+                UCCMSG.szHeader[3] = 0x00;
+				UCCMSG.szRcvDate[ucUccRXCount] = BKFC_23_REG;
+			}
+			ucUccRXCount++;
+			ucUccTypecInt |= BKFC_36_REG;
+		} 
+		while((ucUccTypecInt & BIT5_1)==0x00);
+		ucUccTypecInt |= BKFC_36_REG;
+    }
+    if(ucUccTypecInt&BIT4_1) //EOP level
+    {
+        BKFC_36_REG |= BIT4_1;
+        ucUccTypecInt = BKFC_36_REG;
+        ucUccRXCount = 0;
+        UCCStatus.ucRetryCounter = 0;
+        //PD Received,resend shut
+        UCCMSG.b1Vdm_Msg = FALSE;
+        UCCStatus.b1Multi_Function = 0;
+        if(UCCStatus.b1PsRdy_Send)
+        {
+            ;
+        }
+        else
+        {
+            TR2 = 0;
+        }
+        if(ucUccKeyCode == SOP)
+        {
+            //此处有一个风险点，如果对端重发了dr swap，逻辑会出错
+            if(UCCStatus.ucDrSwap_En == 2)//代表当前接收角色转化，并收到了对端回复的goodcrc
+            {
+                if(UCCStatus.b1DataRole == TRUE)//DFP to UFP 
+                {
+                    UCCStatus.b2DisIdSend_En = INITIATE_NONE;
+                    UCCStatus.b1DataRole = FALSE;
+                    UCCStatus.b1CcDataRoleSet = UFP;
+                }
+                else//UFP to DFP
+                {
+                    if(UCCStatus.b2DisIdSend_En == INITIATE_NONE)
+                    {
+                        UCCStatus.b2DisIdSend_En = INITIATE_READY;
+                    }
+                    UCCStatus.b1DataRole = TRUE;
+                    UCCStatus.b1CcDataRoleSet = DFP;
+                }
+                //NOTE  
+                UCCStatus.ucDrSwap_En = 0;                
+            }	
+        }
+        UCCMSG.b1RcvGoodCRC = TRUE;
+        if((ucUccMsgLength)||(ucUccMsgType != GoodCRC))//message
+        {
+            UCCMSG.b1SendEN = TRUE;
+            if(ucUccKeyCode == SOP)
+            {
+                if((UCCMSG.ucMessageID_New == UCCMSG.ucMessageID_Tmp)&&(ucUccMsgType==UCCMSG.ucMsgType_Tmp))
+                {
+                    UCCStatus.b1Msg_ID_Change = FALSE;
+                }
+                else if(((UCCMSG.ucMessageID_New == UCCMSG.ucMessageID_Tmp)&&(ucUccMsgType !=UCCMSG.ucMsgType_Tmp))&&(UCCMSG.ucMessageID_New != 0x00))
+                {
+                    UCCMSG.b1SendEN = FALSE;
+                }
+                UCCMSG.ucMessageID_Tmp = UCCMSG.ucMessageID_New;
+                UCCMSG.ucMsgType_Tmp = ucUccMsgType;
+            }
+        }
+        else 
+        {
+            
+			#if UCC_EMARK_SUPPORT == ENABLED
+            if(UCCStatus.ucSop1MsgStep== SOP1SENDING)
+            {
+                UCCStatus.ucSop1MsgStep = SOP1CRCRECVING;
+            }
+			#endif
+            UCCMSG.b1SendEN = FALSE;
+            UCCStatus.b1CCDataMsg_Sent = FALSE;
+            if(UCCMSG.ucLastMsgType == Mod_CC1MsgType_Calc(Ctrl_Msg,Accept,StrVdm))
+            {
+               Mod_CC1MsgAfterAccept();
+            }
+            else if(UCCMSG.ucLastMsgType == Mod_CC1MsgType_Calc(Ctrl_Msg,PS_RDY,StrVdm))
+            {
+                Mod_CC1MsgAfterPsRdy();
+            }
+            else if(UCCMSG.ucLastMsgType == Mod_CC1MsgType_Calc(Data_Msg,Source_Capabilities,StrVdm))
+            {
+                UCCStatus.ucContract_Succeed = 2;
+            }
+            else if(UCCMSG.ucLastMsgType == Mod_CC1MsgType_Calc(Vdm_Msg,Discover_Identity,StrVdm))
+            {
+                UCCStatus.b2DisIdSend_En = INITIATE_DONE;
+            }
+            #if TYPEC_FRSWAP_EN  == ENABLED
+            else if(UCCMSG.ucLastMsgType==Mod_CC1MsgType_Calc(Ctrl_Msg,FR_Swap,StrVdm))
+            {
+                UCCStatus.b1PowerRole = FALSE;
+                UCCMSG.ucLastMsgType = 0xff;
+//                UCCStatus.b1PsRdy_Send  = TRUE;
+//                Ocm_Timer2ForPsRdy_Set();
+                if(UCCStatus.ucFRSwaping == FRSWAP_INITIATE)
+                {
+                    UCCStatus.ucFRSwaping = FRSWAP_RECEIVED;
+                }
+            }
+            #endif
+        }    
+    }
+    if(ucUccTypecInt& BIT2_1) // Send Over
+    {
+		BKFC_36_REG = BIT2_1;
+        if(UCCStatus.b1CCDataMsg_Sent == TRUE)//message sent already and wait for goodcrc
+        {
+            UCCStatus.b1CCDataMsg_Sent = FALSE;
+            if(UCCAmsType.ucBist_Ams)
+            {
+                TR2 = 0;          
+            }
+            else
+            {
+                TF2 = 0;
+                Ocm_TR2_ValueSet();
+                TR2 = 1;
+            }
+        }
+        if(UCCMSG.b1SendEN == TRUE)
+        {    
+            UCCMSG.b1Vdm_Msg = FALSE;
+            UCCStatus.b1Multi_Function = 0;
+            if(ucUccKeyCode == SOP)//needed,or SOP' will be sended
+            {
+                if(UCCAmsType.ucBist_Ams == 0)
+                {
+                    Mod_CC1PdMsg_Analysis(ucUccMsgType,ucUccMsgLength,ucUccExtMsg);
+                }
+            }
+			#if UCC_EMARK_SUPPORT == ENABLED
+            else if(UCCStatus.ucSop1MsgStep != SOP1END)
+			{
+				if((ucUccMsgLength >3)&&(ucUccMsgType==Vendor_Defined)&&((UCCMSG.szRcvDate[0]&0x1F)==Discover_Identity))
+				{
+					UCCStatus.ucSop1MsgStep = SOP1END;					
+					if((UCCMSG.szRcvDate[16]&0x60)==0x40)
+					{
+						UCCStatus.ucCable5A = 1;
+					}
+					else
+					{
+						UCCStatus.ucCable5A = 0;
+					}
+				}
+            }
+			#endif
+            UCCMSG.b1SendEN = FALSE;            
+        }
+    }
+}
+
+void Mod_CC1MsgSend_Retry(void)
+{
+    static u8 ucSoft_Reset_Cnt = 0x00;
+    if(UCCMSG.b1RcvGoodCRC == FALSE)
+    {
+        UCCStatus.b1Msg_ID_Change = 0;
+        if(UCCStatus.ucRetryCounter < UCCStatus.ucnRetryCount)//
+        {		
+            ucSoft_Reset_Cnt = 0;
+            UCCMSG.pDataOrder = UCCMSG.pBuffer_Order;
+            if(UCCMSG.pDataOrder == szCC_CtrlMsg[7])
+            {
+                ucSoft_Reset_Cnt = 1;
+            }
+            else
+            {
+                ;
+            }
+            Mod_CC1Msg_Send();
+            Ocm_TR2_ValueSet();			
+        }
+        else
+        {
+            TR2 = 0;
+            //此处有一个风险点，如果对端重发了dr swap，逻辑会出错
+            if(UCCStatus.ucDrSwap_En == 2)//代表当前接收角色转化，并收到了对端回复的goodcrc
+            {
+                if(UCCStatus.b1DataRole == TRUE)//DFP to UFP 
+                {
+                    UCCStatus.b2DisIdSend_En = INITIATE_NONE;
+                    UCCStatus.b1DataRole = FALSE;
+                    UCCStatus.b1CcDataRoleSet = UFP;
+                }
+                else//UFP to DFP
+                {
+                    if(UCCStatus.b2DisIdSend_En == INITIATE_NONE)
+                    {
+                        UCCStatus.b2DisIdSend_En = INITIATE_READY;
+                    }
+                    UCCStatus.b1DataRole = TRUE;
+                    UCCStatus.b1CcDataRoleSet = DFP;
+                }
+                //NOTE  
+                UCCStatus.ucDrSwap_En = 0;                
+            }	
+            UCCStatus.b1Msg_ID_Change = 1;
+            UCCMSG.b1RcvGoodCRC = TRUE;
+            UCCStatus.ucRetryCounter = 0;
+            if(ucSoft_Reset_Cnt == 1)
+            {
+                ucSoft_Reset_Cnt = 0;
+                Ocm_Delay1us(500);       
+                if(Mod_CC1DetOff_Judge() == FALSE)
+                {
+//                    DRV_CcOrder_Set(UCC,HARDRESET);
+                    Mod_CC1Vari_Init();
+                    UCCMSG.ucLastMsgType = 0xff;
+                    //Mod_CC1DetOff_Action();
+                    UCCStatus.b2Hardreset_Hdl = HardRst_Initate;//Hardreset Send
+                }                  
+                
+            }
+            else
+            {
+                Ocm_Delay1us(200);
+                UCCMSG.ucMessageID = 0x00;
+                UCCMSG.pDataOrder = szCC_CtrlMsg[7];			
+                Mod_CC1Msg_Send();
+                UCCMSG.ucLastMsgType = 0xff;
+            }												
+        }
+    }
+}
+
+#endif

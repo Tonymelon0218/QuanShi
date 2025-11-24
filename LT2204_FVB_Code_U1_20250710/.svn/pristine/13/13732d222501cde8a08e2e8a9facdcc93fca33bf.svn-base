@@ -1,0 +1,1658 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  AuxMsg.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+
+#include "include.h"
+
+#if RX_PORT_SIGN == DP_PORT
+
+#if DPRX_AUX_MODE == MIXEDMODE
+#define  REG_AUX_REPLY_DATA			BKF4_11_REG
+#define  REG_AUX_REPLY_ENABLE		BKF4_12_REG
+
+#define	 REG_AUX_REC_DATA			BKF4_10_REG
+#define	 REG_AUX_BUF_CNT			BKF4_20_REG
+#define	 REG_AUX_CMDTYPE			BKF4_26_REG
+
+#elif DPRX_AUX_MODE == SOFTMODE
+#define  REG_AUX_REPLY_DATA			BKF4_33_REG  //BKF4_11_REG
+#define  REG_AUX_REPLY_ENABLE		BKF4_34_REG  //BKF4_12_REG
+
+#define	 REG_AUX_REC_DATA			BKF4_32_REG
+#define	 REG_AUX_BUF_CNT			BKF4_36_REG
+#define	 REG_AUX_CMDTYPE			BKF4_26_REG
+#endif
+#define  REG_CR_EQ_STATUS			BKF1_C9_REG
+
+#define  REG_LANE0_EQVALID_H8		BKF1_F3_REG
+#define  REG_LANE0_EQVALID_L8		BKF1_F4_REG
+#define  REG_LANE1_EQVALID_H8		BKF1_F5_REG
+#define  REG_LANE1_EQVALID_L8		BKF1_F6_REG
+#define  REG_LANE2_EQVALID_H8		BKF1_F7_REG
+#define  REG_LANE2_EQVALID_L8		BKF1_F8_REG
+#define  REG_LANE3_EQVALID_H8		BKF1_F9_REG
+#define  REG_LANE3_EQVALID_L8		BKF1_FA_REG
+
+#define  DEBUG_FORCE_TRAINDONE			0//1/0
+IDATA AuxStatus_S g_stAuxStatus;
+#if (DPRX_DFP_TYPE == BRANCH_HDMI)
+u8 code g_szpHDMIg[6] = {0x70, 0x48, 0x44, 0x4d, 0x49, 0x67};
+//u8 code g_szpHDMIg_DP[14] = {0x90,0xcc,0x24,0x53,0x59,0x4e,0x41,0x71,0x00,0x10,0x07,0x01,0x7c,0x04};
+#endif
+static u8 ucAuxDeferEn = 0;
+static u8 ucAuxDeferCnt = 0;
+//#define  DEBUG_FORCEDONE			TRUE
+//===========================================
+//func  :send aux nack
+//input :N/A
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_AuxReply_En(void)
+{
+	Drv_DpRx_AcAuxTermCtrl(ENABLED);
+	REG_AUX_REPLY_ENABLE = 0x00;
+}
+void Mod_AuxMsg_Reply(u8 ucReplyType)
+{
+    REG_AUX_REPLY_DATA = ucReplyType;
+}
+
+
+//===========================================
+//func  :aux send reply data for dpcd read
+//input :AUX data length
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Aux_SendData(u8 ucLenth)
+{
+    IDATA u8 ucLoopAux;
+    if(ucAuxDeferEn)
+    {
+        ucAuxDeferEn = 0;
+        Mod_AuxMsg_Reply(AUXDEFER);
+    }
+    else
+    {
+        Mod_AuxMsg_Reply(AUXACK);
+        for (ucLoopAux = 0; ucLoopAux < ucLenth; ucLoopAux++)
+        {
+            REG_AUX_REPLY_DATA = g_stAuxStatus.szRxSendData[ucLoopAux];
+        }
+    }
+}
+
+//============================================
+//func  :aux send data for edid read  one block from 1-7 16bytes
+//input :AUX data length
+//output:N/A
+//return:void
+//Info  :N/A
+//============================================
+void Mod_Aux_EdidRead(u8 ucLenth)
+{ 
+    IDATA u8 ucLoopAux;
+
+    Mod_AuxMsg_Reply(AUXACK);
+    for (ucLoopAux = 0; ucLoopAux < ucLenth; ucLoopAux++)
+    {
+        REG_AUX_REPLY_DATA = szEdidData[ucLoopAux + g_stAuxStatus.usEdid_Offset];
+    }
+    g_stAuxStatus.usEdid_Offset = g_stAuxStatus.usEdid_Offset + ucLenth;
+}
+
+//===========================================
+//func  :IIC Over Aux reply
+//input :AUX data ucLength
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Aux_SendZeroData(u8 ucLenth)
+{
+    IDATA u8 ucLoopAux;
+
+    Mod_AuxMsg_Reply(AUXACK);
+    for (ucLoopAux = 0; ucLoopAux < ucLenth; ucLoopAux++) //i2c last read
+    {
+        REG_AUX_REPLY_DATA = 0x00;
+    }
+}
+//HDMI MODE时，如果没有传送Branch IEEE，NO HDR
+#if (DPRX_DFP_TYPE == BRANCH_HDMI)
+void Mod_Read_DealDpcd30X(u8 ucLenth, u8 ucLowAddr)
+{
+    memcpy(&(g_stAuxStatus.szDpcd30XH[DPCD300_IEEE_OUI_LEN]), g_szpHDMIg, DPCD300_DEV_ID_LEN);
+    if ((ucLowAddr + ucLenth) <= DPCD300_ALL_LEN)
+    {
+        memcpy(g_stAuxStatus.szRxSendData, &g_stAuxStatus.szDpcd30XH[ucLowAddr], ucLenth);
+    }
+    else
+    {
+        memcpy(g_stAuxStatus.szRxSendData, &g_stAuxStatus.szDpcd30XH[ucLowAddr], DPCD300_ALL_LEN-ucLowAddr);
+    } 
+}
+void Mod_Write_DealDpcd30X(u8 ucLenth, u8 ucLowAddr)
+{
+    if ((ucLowAddr + ucLenth) <= DPCD300_ALL_LEN)
+    {
+        memcpy(&g_stAuxStatus.szDpcd30XH[ucLowAddr], g_stAuxStatus.szRxData, ucLenth);
+    }
+    else
+    {
+        memcpy(&g_stAuxStatus.szDpcd30XH[ucLowAddr], g_stAuxStatus.szRxData, DPCD300_ALL_LEN-ucLowAddr);
+    }
+    //memcpy(&(g_stAuxStatus.szDpcd30XH[DPCD300_IEEE_OUI_LEN]), g_szpHDMIg, DPCD300_DEV_ID_LEN);
+}
+
+//for hdr, apple and nvidia
+void Mod_Read_Dpcd510(u8 ucLenth)
+{
+    IDATA u8 ucIncrease;
+    ucIncrease = 0;
+    switch (g_stAuxStatus.szRxAddress[2])
+    {
+        case 0x10  ://dpcd00510
+            g_stAuxStatus.szRxSendData[ucIncrease] = 0xbe;//28 OK
+            if (++ucIncrease == ucLenth)
+            {
+                break;
+            }
+        case 0x11 ://dpcd00511
+            g_stAuxStatus.szRxSendData[ucIncrease] = 0x05;
+            if (++ucIncrease == ucLenth)
+            {
+                break;
+            }
+        default:
+            break;
+    }
+}
+#endif
+
+#if DPRX_LINK_CTS == ENABLED
+//===========================================
+//func  :read dpcd 00207
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+
+void Mod_Link_QualPatternSet(IN u8 ucI)
+{
+    if (g_stAuxStatus.szRxData[ucI] != 0x00)
+    {
+        BKF1_B9_REG = 0x00;//hardware mode
+    }
+    Drv_DpRx_Cp2520KeyCodeSet(g_stAuxStatus.szRxData[ucI]);
+}
+
+void Mod_Aux_DealLossLock(void)
+{
+    g_stAuxStatus.b1Train_Done = FALSE;
+    g_stAuxStatus.ucTps_Pattern = 0x00;
+    g_stAuxStatus.ucDpcd202 = 0x00;
+    g_stAuxStatus.ucDpcd203 = 0x00;
+    g_stAuxStatus.b1IsLossSymbol = TRUE; //DPRX CTS 5.3.2.1
+}
+
+#endif
+
+
+u8 Mod_Aux_DoneGet(void)
+{
+    u8 b1Status = FALSE; 
+    switch(g_stAuxStatus.ucLink_Count)
+    {
+        case ONE_LANE:
+            if((REG_CR_EQ_STATUS&0x11)== 0x11)
+            {
+                b1Status = TRUE;
+            }
+            break;
+        case TWO_LANE:
+            if((REG_CR_EQ_STATUS&0x33)== 0x33)
+            {
+                b1Status = TRUE;
+            }
+            break;
+        case FOUR_LANE:
+            if((REG_CR_EQ_STATUS&0xff)== 0xff)
+            {
+                b1Status = TRUE;
+            }
+            break;
+        default:
+            break; 
+    }
+    return b1Status;
+}
+
+
+void Mod_Aux_RequestCalLane01(IN u8 ucI)
+{
+    if (g_stAuxStatus.ucTps_Pattern == TPS1) //cr lock stage.
+    {
+		#if DEBUG_FORCE_TRAINDONE == 1
+		g_stAuxStatus.ucDpcd202 = g_stAuxStatus.szRxSendData[ucI]; //record value from dpcd.
+		g_stAuxStatus.ucDpcd202 |= 0x11;
+		g_stAuxStatus.szRxSendData[ucI] = g_stAuxStatus.ucDpcd202;
+		#else
+        g_stAuxStatus.ucDpcd202 = g_stAuxStatus.szRxSendData[ucI]; //record value from dpcd.
+		#endif
+    }
+    else if ((g_stAuxStatus.ucTps_Pattern >= TPS2)) //eq done and symbol lock stage.
+    {
+        #if DEBUG_FORCE_TRAINDONE == 1
+        g_stAuxStatus.ucDpcd202  |= 0x07;
+        #else
+        g_stAuxStatus.ucDpcd202 = 0x01;
+        if (/*((BKF1_F1_REG&BIT0_1) == 0x00) && */((REG_LANE0_EQVALID_H8 != 0x00) || (REG_LANE0_EQVALID_L8 != 0x00))) //lane0 eq valid flag is not 0, then EQ_DONE and SYMBOL_LOCK = 1;
+        {
+            g_stAuxStatus.ucDpcd202  |= 0x07;
+            #if DPRX_CDR_MODE == ANACDR
+            Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+            #endif
+            
+            if((BKF1_F1_REG&BIT0_1) == 0x00)
+            {
+                if((ucAuxDeferCnt == 0)&&(g_stAuxStatus.b1IsSwingLvl == FALSE))
+                {
+                    Drv_DpRx_Dpcd_HighAddrWrite(0x01);
+                    Drv_DpRx_Dpcd_ValueWrite(0x03,DPRX_SWING_MIN_LEVEL);
+                }
+                if(ucAuxDeferCnt < 6)
+                {
+                    ucAuxDeferCnt++;
+                    ucAuxDeferEn = 1; 
+                }                
+            }
+            else
+            {
+                ucAuxDeferCnt = 0;
+            }
+        }
+        else
+        {
+            ucAuxDeferCnt = 0;
+            g_stAuxStatus.ucDpcd202 = g_stAuxStatus.szRxSendData[ucI];
+        }
+        #endif
+
+        if (g_stAuxStatus.ucLink_Count >= TWO_LANE) //lane1
+        {
+			#if DEBUG_FORCE_TRAINDONE == 1
+			g_stAuxStatus.ucDpcd202 |= 0x70;
+			#else
+            g_stAuxStatus.ucDpcd202 |= 0x10;
+			if (/*((BKF1_F1_REG&BIT1_1) == 0x00) && */((REG_LANE1_EQVALID_H8 != 0x00) || (REG_LANE1_EQVALID_L8 != 0x00))) //eq valid flag is not 0, then.
+            {
+                g_stAuxStatus.ucDpcd202 |= 0x70;
+                #if DPRX_CDR_MODE == ANACDR
+                Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+                #endif
+            }
+            else
+            {
+                g_stAuxStatus.ucDpcd202 = g_stAuxStatus.szRxSendData[ucI];
+            }
+			#endif
+        }
+        g_stAuxStatus.szRxSendData[ucI] = g_stAuxStatus.ucDpcd202; //the value is calculated by software.
+    }
+    else//video ptn
+    {
+        g_stAuxStatus.szRxSendData[ucI] = g_stAuxStatus.ucDpcd202;
+        //solution for DPRX link CTS-5.4.1.1
+        #if DPRX_LINK_CTS == ENABLED
+        if((g_stAuxStatus.b1AuxDone == FALSE) && (g_stAuxStatus.b1Train_Done == FALSE))
+        {
+            g_stAuxStatus.szRxSendData[ucI] = 0x00;
+        }
+        #endif
+    }
+}
+
+void Mod_Aux_RequestCalLane23(IN u8 ucI)
+{
+    if (g_stAuxStatus.ucTps_Pattern == TPS1) //cr lock stage.
+    {
+		#if DEBUG_FORCE_TRAINDONE == 1
+		g_stAuxStatus.ucDpcd203 = g_stAuxStatus.szRxSendData[ucI]; //record value from dpcd.
+		g_stAuxStatus.ucDpcd203 |= 0x11;
+		g_stAuxStatus.szRxSendData[ucI] = g_stAuxStatus.ucDpcd203;
+		#else
+        g_stAuxStatus.ucDpcd203 = g_stAuxStatus.szRxSendData[ucI]; //record value from dpcd.
+//		g_stAuxStatus.ucDpcd203 |= 0x11;
+//		g_stAuxStatus.szRxSendData[ucI] = g_stAuxStatus.ucDpcd203;
+		#endif
+    }
+    else if ((g_stAuxStatus.ucTps_Pattern >= TPS2)) //&& (g_stAuxStatus.b1Cr_Lock == TRUE))   //eq done and symbol lock stage.
+    {
+        if (g_stAuxStatus.ucLink_Count == FOUR_LANE)
+        {
+			#if DEBUG_FORCE_TRAINDONE == 1
+			g_stAuxStatus.ucDpcd203 |= 0x77;
+			#else
+            g_stAuxStatus.ucDpcd203 = 0x11;
+
+            if (/*((BKF1_F1_REG&BIT2_1) == 0x00) && */((REG_LANE2_EQVALID_H8 != 0x00) || (REG_LANE2_EQVALID_L8 != 0x00))) //lane2 eq valid flag is not 0, then EQ_DONE and SYMBOL_LOCK = 1;
+            {
+                g_stAuxStatus.ucDpcd203  |= 0x07;
+                #if DPRX_CDR_MODE == ANACDR
+                Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+                #endif
+            }
+            else
+            {
+                g_stAuxStatus.ucDpcd203 = g_stAuxStatus.szRxSendData[ucI];
+            }
+
+            if (/*((BKF1_F1_REG&BIT3_1) == 0x00) && */((REG_LANE3_EQVALID_H8 != 0x00) || (REG_LANE3_EQVALID_L8 != 0x00)))   //lane3 eq valid flag is not 0, then.
+            {
+                g_stAuxStatus.ucDpcd203 |= 0x70;
+                #if DPRX_CDR_MODE == ANACDR
+                Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+                #endif
+            }
+            else
+            {
+                g_stAuxStatus.ucDpcd203 = g_stAuxStatus.szRxSendData[ucI];
+            }
+			#endif
+        }
+        else
+        {
+            g_stAuxStatus.ucDpcd203 = 0x00;
+        }
+        g_stAuxStatus.szRxSendData[ucI] = g_stAuxStatus.ucDpcd203;
+    }
+    else//video ptn
+    {
+        g_stAuxStatus.szRxSendData[ucI] = g_stAuxStatus.ucDpcd203;
+        //solution for DPRX link CTS-5.4.1.1
+        #if DPRX_LINK_CTS == ENABLED
+        if((g_stAuxStatus.b1AuxDone == FALSE) && (g_stAuxStatus.b1Train_Done == FALSE))
+        {
+            g_stAuxStatus.szRxSendData[ucI] = 0x00;
+        }
+        #endif
+    }
+}
+
+//===========================================================================================================================
+//the following function get the aux training status, maybe used in other function
+//===========================================
+//func  :judge the cr_lock and eq done status
+//input :N/A
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Aux_TrainingDone(void)
+{
+    switch (g_stAuxStatus.ucLink_Count)
+    {
+        case ONE_LANE:
+            if((g_stAuxStatus.ucTps_Pattern == TPS1) && ((g_stAuxStatus.ucDpcd202 & 0x01) == 0x01))
+            {
+                g_stAuxStatus.b1Cr_Lock  = TRUE;
+            }
+            else if ((g_stAuxStatus.ucTps_Pattern >= TPS2) && ((g_stAuxStatus.ucDpcd202 & 0x0f) == 0x07))
+            {
+                g_stAuxStatus.b1Train_Done = TRUE;
+            }
+            break;
+
+        case TWO_LANE:
+            if((g_stAuxStatus.ucTps_Pattern == TPS1) && ((g_stAuxStatus.ucDpcd202 & 0x11) == 0x11))
+            {
+                g_stAuxStatus.b1Cr_Lock  = TRUE;
+            }
+            else if ((g_stAuxStatus.ucTps_Pattern >= TPS2) && (g_stAuxStatus.ucDpcd202 == 0x77))
+            {
+                g_stAuxStatus.b1Train_Done = TRUE;
+            }
+            break;
+
+        case FOUR_LANE:
+            if((g_stAuxStatus.ucTps_Pattern == TPS1) && ((g_stAuxStatus.ucDpcd202&0x11) == 0x11)&&((g_stAuxStatus.ucDpcd203&0x11) == 0x11))
+            {
+                g_stAuxStatus.b1Cr_Lock  = TRUE;
+            }
+            else if ((g_stAuxStatus.ucTps_Pattern >= TPS2) && (g_stAuxStatus.ucDpcd202 == 0x77) && (g_stAuxStatus.ucDpcd203 == 0x77))
+            {
+                g_stAuxStatus.b1Train_Done = TRUE;
+            }
+            break;
+
+        default:
+            break; 
+    }
+    #if DPRX_CDR_MODE != ANACDR
+    if((g_stAuxStatus.b1Dpcd107_WrFlag == FALSE)&&(g_stAuxStatus.ucTps_Pattern == TPS1))
+    {
+        g_stAuxStatus.b1Ssc_Dpcd107 = Drv_DpRx_SscJudgeByRxFm(g_stAuxStatus.ucLink_Rate);
+        Drv_DpRx_CdrSet(g_stAuxStatus.b1Ssc_Dpcd107, g_stAuxStatus.ucLink_Rate);
+    }   
+    #endif
+}
+
+//===========================================
+//func  :read dpcd 00200
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Read_Dpcd200(IN u8 ucI)
+{
+    #if DPRX_HDCP_DEC_MODE == NO_HDCP
+    #if DPRX_MST_MODE_EN ==ENABLED
+    g_stAuxStatus.szRxSendData[ucI] = g_stMstRxStatus.sink_cnt;
+    #else
+    g_stAuxStatus.szRxSendData[ucI] = 0x01;
+    #endif
+    #else   
+    #if DPRX_MST_MODE_EN ==ENABLED
+    g_stAuxStatus.szRxSendData[ucI] = g_stMstRxStatus.sink_cnt | BIT6_1;
+    #else
+    g_stAuxStatus.szRxSendData[ucI] = 0x41;
+    #endif
+    #endif
+    //need add the hdcp irq case
+}
+
+//===========================================
+//func  :read dpcd 00201
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+#if DPRX_MST_MODE_EN == ENABLED
+void Mod_Read_Dpcd201(IN u8 ucI)
+{
+    g_stMstRxStatus.block_reply_done  = 0;
+    g_stMstRxStatus.reply_block_lenth = 0;
+    if(g_stMstRxStatus.reply_rdy == 1)
+    {
+        g_stAuxStatus.szRxSendData[ucI] |= 0x10;
+    }
+    ucI = 0;
+    //need add the hdcp irq case
+}
+#endif
+//===========================================
+//func  :read dpcd 00202
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Read_Dpcd202(IN u8 ucI)//on going
+{
+    Mod_Aux_RequestCalLane01(ucI);
+    Mod_Aux_TrainingDone();
+}
+
+//===========================================
+//func  :read dpcd 00203
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Read_Dpcd203(IN u8 ucI)
+{
+    Mod_Aux_RequestCalLane23(ucI);
+    Mod_Aux_TrainingDone();
+}
+
+//===========================================
+//func  :read dpcd 00204
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Read_Dpcd204(IN u8 ucI)//TBD TBD
+{
+    static u8 ucRead204_Cnt = 0;
+    if(g_stAuxStatus.ucTps_Pattern == TPS1)
+    {
+         ucRead204_Cnt = 0;
+    }
+    else if(g_stAuxStatus.ucTps_Pattern >= TPS2)
+    {
+        if((g_stAuxStatus.b1Train_Done == TRUE)||(Mod_Aux_DoneGet()== TRUE))
+        {
+            ucRead204_Cnt++;
+            g_stAuxStatus.b1Train_Done = TRUE; 
+            if(ucRead204_Cnt == 1)
+            {
+                g_stAuxStatus.szRxSendData[ucI] |= BIT0_1; //bit0 set 1 ,bit7 not care
+            }
+            else
+            {
+                 g_stAuxStatus.szRxSendData[ucI] = 0x01; //bit 0 set 1, bit8 set 0
+            }
+
+        }
+        else
+        {
+            g_stAuxStatus.szRxSendData[ucI] &= BIT0_0;
+        }
+    }
+    else if(g_stAuxStatus.ucTps_Pattern == VID_PTN)
+    {
+        if(g_stAuxStatus.ucTps_Save_Pattern >= TPS2)
+        {
+            g_stAuxStatus.szRxSendData[ucI] = (g_stAuxStatus.b1Train_Done == TRUE)?(0x01):(0x80);
+        }
+        //solution for DPRX link CTS-5.4.1.1
+        #if DPRX_LINK_CTS == ENABLED
+        if((g_stAuxStatus.b1AuxDone == FALSE) && (g_stAuxStatus.b1Train_Done == FALSE))
+        {
+            g_stAuxStatus.szRxSendData[ucI] = 0x00;
+        }
+        #endif
+    }
+}
+
+#if DPRX_LINK_CTS == ENABLED
+//===========================================
+//func  :read dpcd 00205
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :solution for DPRX link cts 5.2.2.3-sink status
+//===========================================
+void Mod_Read_Dpcd205(IN u8 ucI)
+{
+    if(FALSE == Mod_DpRx_UpStreamVidReadyGet())
+    {
+        g_stAuxStatus.szRxSendData[ucI] &= BIT0_0;
+    }
+}
+
+//===========================================
+//func  :read dpcd 0020f
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :solution for DPRX link CTS_5.6.2.12-5.6.2.14
+//DSC interrupt test for Chunk Length error/RC buffer under-run error/RC buffer overflow error
+//===========================================
+void Mod_Read_Dpcd20F(IN u8 ucI)
+{
+    g_stAuxStatus.szRxSendData[ucI] &= 0xf8;
+    
+    if(g_stDpRx.ucDscChunkSizeErr == DSC_CHUNKSIZE_ERR)
+        g_stAuxStatus.szRxSendData[ucI] |= BIT2_1;
+        
+    if(g_stDpRx.ucDscRcBufUnderRun == DSC_RCBUF_UNDERRUN)
+        g_stAuxStatus.szRxSendData[ucI] |= BIT0_1;
+        
+    if(g_stDpRx.ucDscRcBufOverFlow == DSC_RCBUF_OVERFLOW)
+        g_stAuxStatus.szRxSendData[ucI] |= BIT1_1;
+}
+
+#endif
+//===========================================
+//func  :read dpcd 00206
+//input :aux read order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Read_Dpcd206(void)
+{
+    if(g_stAuxStatus.ucTps_Pattern == TPS1)
+    {
+        if ((g_stAuxStatus.b1IsSwingLvl == FALSE) && (g_stAuxStatus.b1Cr_Lock == FALSE))
+        {
+            #if DPRX_CDR_MODE == ANACDR
+            Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+            #endif
+            #if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR)||(DPRX_CDR_MODE == HALF_SPEED_DIGCDR))
+            Drv_DpRx_DigCdrRst(g_stAuxStatus.b1Ssc_Dpcd107);
+            #endif
+        }
+    }
+}
+
+//=============================================================================================================================
+// this function get the dpcd write status
+//===========================================
+//func  :write dpcd 00100
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Write_Dpcd100(IN u8 ucI)
+{
+    g_stAuxStatus.ucLink_Rate = g_stAuxStatus.szRxData[ucI];
+    Drv_DpRx_PiSet(g_stAuxStatus.ucLink_Rate);
+    Drv_DpRx_RxPllBand(g_stAuxStatus.ucLink_Rate);
+    Drv_DpRx_CdrLoopDivSet(g_stAuxStatus.ucLink_Rate);
+    Drv_DpRx_CtleSet(g_stAuxStatus.ucLink_Rate);
+    #if DPRX_CDR_MODE == ANACDR
+    Drv_DpRx_CdrSet(g_stAuxStatus.ucLink_Rate);
+    #else
+    Drv_DpRx_CdrSet(g_stAuxStatus.b1Ssc_Dpcd107, g_stAuxStatus.ucLink_Rate);
+    #endif
+    g_stAuxStatus.ucTps_Save_Pattern = 0;
+}
+//===========================================
+//func  :write dpcd 00101
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Write_Dpcd101(IN u8 ucI)
+{
+    g_stAuxStatus.ucLink_Count = g_stAuxStatus.szRxData[ucI] & 0x1f;
+}
+//===========================================
+//func  :write dpcd 00102
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Write_Dpcd102(IN u8 ucI)
+{
+    g_stAuxStatus.ucTps_Pattern = g_stAuxStatus.szRxData[ucI]&0x0f;
+    if(g_stAuxStatus.ucTps_Pattern == TPS1)//TPS1
+    {		
+		if(g_stAuxStatus.ucTps_Save_Pattern != g_stAuxStatus.ucTps_Pattern)
+		{
+		//FEC switch to NO FEC Issue
+			Drv_DpRx_Reset(DP_FEC_DEC_RST);
+    		Drv_DpRx_Reset(DP_MLC_DAT_RST);  //solve mst dpcd200c not clr issue 
+			//解决华为手机写了DCPD102后，先读DPCD206，再写DPCD103，导致Swing莫名的增加
+			Drv_DpRx_Dpcd_ValueWrite(0x03,0x00);
+			Drv_DpRx_Dpcd_ValueWrite(0x04,0x00);
+			Drv_DpRx_Dpcd_ValueWrite(0x05,0x00);
+			Drv_DpRx_Dpcd_ValueWrite(0x06,0x00);
+            #if DPRX_CDR_MODE == ANACDR
+            Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+            #endif
+		}
+		#if DPRX_SWING_MIN_LEVEL > LEVEL_0
+        Drv_DpRx_CrLockThresholdSet(TRUE);
+        g_stAuxStatus.b1IsSwingLvl = TRUE;
+        #else
+        g_stAuxStatus.b1IsSwingLvl = FALSE;
+        #endif		  
+
+        g_stAuxStatus.b1Cr_Lock      = FALSE;
+        g_stAuxStatus.b1Train_Done   = FALSE;
+        g_stAuxStatus.b1AuxDone      = FALSE;
+        
+		
+        Drv_DpRx_EqModeSet(HW_MODE);
+		#if ((DPRX_FEC_SUPPORT == ENABLED)||(DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+		Drv_DpRx_FecSoftModeSet(FALSE);//hardmode
+		#endif
+        Drv_DpRx_SkewLock(FALSE);
+        #if ((DPRX_FEC_SUPPORT == ENABLED)||(DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+        Drv_DpRx_FecDataPathSet(DISABLED);
+        #endif
+        		
+        #if ((DPRX_CDR_MODE == FULL_SPEED_DIGCDR)||(DPRX_CDR_MODE == HALF_SPEED_DIGCDR))
+        Drv_DpRx_DigCdrRst(g_stAuxStatus.b1Ssc_Dpcd107);
+		//use hardware reset ,no need to monitor CDR
+//		g_stAuxStatus.usDelayCnt     = 0x00;
+//        DRV_Timer2Cnt_Start();
+        #endif
+		g_stAuxStatus.ucTps_Save_Pattern =  g_stAuxStatus.ucTps_Pattern;
+		
+    }
+    else if(g_stAuxStatus.ucTps_Pattern >= TPS2)//TPS2 TPS3 TPS4
+    {
+        g_stAuxStatus.ucTps_Save_Pattern =  g_stAuxStatus.ucTps_Pattern;
+        
+    }
+}
+//===========================================
+//func  :write dpcd 00103
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Write_Dpcd103(IN u8 ucI)
+{
+	if(g_stAuxStatus.szRxData[ucI] >= DPRX_SWING_MIN_LEVEL)
+	{
+		Drv_DpRx_CrLockThresholdSet(FALSE);
+		g_stAuxStatus.b1IsSwingLvl = FALSE;		
+	}
+    if(g_stAuxStatus.szRxData[ucI] > DPRX_SWING_MIN_LEVEL)
+    {
+        #if DPRX_CDR_MODE == ANACDR
+        Drv_DpRx_AnaCdrRst(g_stAuxStatus.ucLink_Rate);
+        #endif
+    }
+}
+
+//===========================================
+//func  :write dpcd 00104
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+//void Mod_Write_Dpcd104(IN u8 ucI)
+//{
+//    ucI = 0;
+//}
+//===========================================
+//func  :write dpcd 00105
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+//void Mod_Write_Dpcd105(IN u8 ucI)
+//{
+//    ucI = 0;
+//}
+//===========================================
+//func  :write dpcd 00106
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+//void Mod_Write_Dpcd106(IN u8 ucI)
+//{
+//    ucI = 0;
+//}
+//===========================================
+//func  :write dpcd 00107
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Write_Dpcd107(IN u8 ucI)
+{
+    #if DPRX_CDR_MODE != ANACDR
+    g_stAuxStatus.b1Ssc_Dpcd107    = (g_stAuxStatus.szRxData[ucI]&BIT4_1)>>4;
+    g_stAuxStatus.b1Dpcd107_WrFlag = TRUE;
+    Drv_DpRx_CdrSet(g_stAuxStatus.b1Ssc_Dpcd107, g_stAuxStatus.ucLink_Rate);
+    #endif
+	#if DPRX_ADAPTIVE_SYNC == ENABLED
+	g_stAuxStatus.ucMsaIgnoreEn = BIT7_1|((g_stAuxStatus.szRxData[ucI]&BIT7_1)>>7);
+	#endif
+}
+
+//===========================================
+//func  :write dpcd 00201
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+#if DPRX_MST_MODE_EN == ENABLED
+void Mod_Write_Dpcd201(IN u8 ucI)//wrie1 clr
+{ 
+    if(g_stAuxStatus.szRxData[ucI] & 0x10)
+    {
+        g_stAuxStatus.szRxData[ucI] &= 0xef;
+    }
+    BKF1_53_REG = g_stAuxStatus.szRxData[ucI];
+}
+#endif
+#if DPRX_LINK_CTS == ENABLED
+// this function get the dpcd write status
+//===========================================
+//func  :Write dpcd 0020f
+//input :aux Write order
+//output:N/A
+//return:void
+//Info  :solution for DPRX link CTS_5.6.2.12-5.6.2.14
+//DSC interrupt test for Chunk Length error/RC buffer under-run error/RC buffer overflow error
+//===========================================
+void Mod_Write_Dpcd20F(IN u8 ucI)
+{
+    if((g_stAuxStatus.szRxData[ucI] & BIT2_1) && (g_stDpRx.ucDscChunkSizeErr == DSC_CHUNKSIZE_ERR))
+    {
+        g_stDpRx.ucDscChunkSizeErr = FALSE;
+    }
+    if((g_stAuxStatus.szRxData[ucI] & BIT1_1) && (g_stDpRx.ucDscRcBufOverFlow == DSC_RCBUF_OVERFLOW))
+    {
+        g_stDpRx.ucDscRcBufOverFlow = FALSE;
+    }
+    if((g_stAuxStatus.szRxData[ucI] & BIT0_1) && (g_stDpRx.ucDscRcBufUnderRun == DSC_RCBUF_UNDERRUN))
+    {
+        g_stDpRx.ucDscRcBufUnderRun = FALSE;
+    }
+}
+#endif
+
+//===========================================
+//func  :write dpcd 00600
+//input :aux write order
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Write_Dpcd600(IN u8 ucI)
+{
+    if (ucI == 0x02) //write 600 =2 can't clear all aux status
+    {
+//        g_stAuxStatus.b1Cr_Lock          = 0;
+//        g_stAuxStatus.b1Train_Done       = 0;
+//        g_stAuxStatus.b1AuxDone        = 0;
+//        g_stAuxStatus.ucLink_Rate        = 0;
+//        g_stAuxStatus.ucLink_Count       = 0;
+//        g_stAuxStatus.ucTps_Pattern      = 0;
+//        g_stAuxStatus.ucTps_Save_Pattern = 0;
+        #if DPRX_CDR_MODE != ANACDR
+        g_stAuxStatus.b1Ssc_Dpcd107      = 0;   
+        g_stAuxStatus.b1Dpcd107_WrFlag   = 0;
+        #endif
+//        //mainlink reset
+//        Drv_DpRx_Reset(DP_MLC_DAT_RST);
+//        //fec dec rst
+        Drv_DpRx_Reset(DP_FEC_DEC_RST);
+        #if DPRX_LINK_CTS == ENABLED
+        Drv_DpRx_FecCtsSet(FALSE);
+        Drv_DpRx_FecDataPathSet(FALSE);
+        #endif
+    }
+}
+
+//===========================================
+//func  :dpcd read action for command 0x90,
+//input : aux data lenth,equal byte_3+1;
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Read_Dpcd(u8 ucLenth)
+{
+    IDATA u8 ucIncrease;
+    IDATA u8 ucLoopAux;
+    if(g_stAuxStatus.szRxAddress[0] == 0x0f)
+    {
+        memset(g_stAuxStatus.szRxSendData,0x00,ucLenth);
+        return;
+    } 
+    #if DPRX_MST_MODE_EN == ENABLED
+    else if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x14)) //DPCD 02002
+    {
+        g_stMstRxStatus.reply_rdy = 0;
+        g_stMstRxStatus.wr_lenth = 0;
+        g_stMstRxStatus.total_wr_lenth = 0;
+        g_stMstRxStatus.reply_addr = g_stAuxStatus.szRxAddress[2];
+        g_stMstRxStatus.reply_lenth = ucLenth;
+        if(g_stMstRxStatus.reply_block_lenth <= (g_stMstRxStatus.reply_addr + g_stMstRxStatus.reply_lenth))//not read 201?
+        {
+            g_stMstRxStatus.reply_block_lenth = g_stMstRxStatus.reply_addr + g_stMstRxStatus.reply_lenth;
+        }
+        if(g_stMstRxStatus.block_reply_done == 0)
+        {
+            memcpy(&g_stAuxStatus.szRxSendData[0],&g_stMstRxStatus.reply_buf[g_stMstRxStatus.reply_addr],g_stMstRxStatus.reply_lenth);
+        }
+        else
+        {
+            memcpy(&g_stAuxStatus.szRxSendData[0],&g_stMstRxStatus.reply_buf_last[g_stMstRxStatus.reply_addr],g_stMstRxStatus.reply_lenth);
+        }
+        if((g_stMstRxStatus.block_reply_done == 0)&&(g_stMstRxStatus.reply_block_lenth >= (g_stMstRxStatus.reply_body_lenth+2)))//block read
+        {
+            g_stMstRxStatus.reply_data_lenth += g_stMstRxStatus.reply_body_lenth;
+            g_stMstRxStatus.count1400++; 
+            if(g_stMstRxStatus.reply_data_lenth < g_stMstRxStatus.reply_total_lenth)//read the last data
+            {
+                g_stMstRxStatus.calc_flag = 1;
+            }    
+            g_stMstRxStatus.block_reply_done = 1;
+        }
+        return;
+    }
+    else if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x02)&& (g_stAuxStatus.szRxAddress[2] == 0xc0)) //DPCD 02002
+    {
+        if((g_stMstRxStatus.payload_table[0] == 0x00) && (g_stMstRxStatus.payload_table[1] == 0x00) && (g_stMstRxStatus.payload_table[2] == 0x3f))
+        {
+            g_stAuxStatus.szRxSendData[0] = 0x01;
+            g_stMstRxStatus.count2c0 = 0x01;
+            g_stMstRxStatus.payload_table[0] = 0x00; //clear flag
+            g_stMstRxStatus.payload_table[1] = 0x00; //clear flag
+            g_stMstRxStatus.payload_table[2] = 0x00; //clear flag
+        }
+        else
+        {
+            if(g_stMstRxStatus.payload_update == 1)
+            {
+                g_stAuxStatus.szRxSendData[0]= (g_stMstRxStatus.count2c0 > 40)?(0x03):(0x00); //if calculated done reply 03
+                g_stMstRxStatus.count2c0++;
+            }
+            else
+            {
+                if(g_stMstRxStatus.count2c0 < 5)// second reply 01
+                {
+                    g_stAuxStatus.szRxSendData[0]= (g_stMstRxStatus.count2c0 ==0)?(0x00):(0x01);
+                    g_stMstRxStatus.count2c0++;
+                }
+                else
+                {
+                    g_stAuxStatus.szRxSendData[0] = 0x03;
+                }
+            }
+        }
+        return;
+    }
+    #endif
+
+    BKF1_03_REG =  g_stAuxStatus.szRxAddress[0];
+    BKF1_04_REG =  g_stAuxStatus.szRxAddress[1];
+    BKF1_05_REG =  g_stAuxStatus.szRxAddress[2];//-wangtt- DB bank
+    for (ucLoopAux = 0; ucLoopAux < ucLenth; ucLoopAux++)
+    {
+        if (ucLoopAux) //
+        {
+            if (BKF1_05_REG == 0xff)
+            {
+                BKF1_04_REG++;
+            }
+            BKF1_05_REG ++;
+        }
+        g_stAuxStatus.szRxSendData[ucLoopAux] = BKF1_54_REG;//read data from DPCD
+    } 
+	
+    if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x02))
+    {
+        ucIncrease = 0;
+        switch (g_stAuxStatus.szRxAddress[2])
+        {
+            case 0x00://dpcd00200
+                Mod_Read_Dpcd200(ucIncrease);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x01://dpcd00201
+                #if DPRX_MST_MODE_EN == ENABLED
+                Mod_Read_Dpcd201(ucIncrease);
+                #endif
+                if(++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x02://dpcd00202
+                Mod_Read_Dpcd202(ucIncrease);
+                if(++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x03://dpcd00203
+                Mod_Read_Dpcd203(ucIncrease);
+                if(++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x04://dpcd00204
+                Mod_Read_Dpcd204(ucIncrease);
+                if(++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x05://dpcd00205
+                #if DPRX_LINK_CTS == ENABLED
+                Mod_Read_Dpcd205(ucIncrease);
+                #endif
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x06://dpcd00206
+                Mod_Read_Dpcd206();
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x07://dpcd00207
+                break;
+
+            #if DPRX_LINK_CTS == ENABLED
+            case 0x0f://dpcd0020f
+                Mod_Read_Dpcd20F(ucIncrease);
+                if(++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+                break;
+            case 0x10://dpcd00210
+                Drv_DpcdError_Clear(BIT0_1);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x11://dpcd00211
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x12://dpcd00212
+                Drv_DpcdError_Clear(BIT1_1);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x13: //dpcd00213
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x14://dpcd00214
+                Drv_DpcdError_Clear(BIT2_1);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x15://dpcd00215
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x16://dpcd00216
+                Drv_DpcdError_Clear(BIT3_1);
+                break;
+            #endif
+            default:
+                break;
+        }
+    }
+	#if (DPRX_DFP_TYPE == BRANCH_HDMI)
+    else if ((g_stAuxStatus.szRxAddress[0] == 0x00)&&(g_stAuxStatus.szRxAddress[1] == 0x03)) //&&
+    {
+        if (g_stAuxStatus.szRxAddress[2] <= 0x0f)
+        {
+            Mod_Read_DealDpcd30X(ucLenth, g_stAuxStatus.szRxAddress[2]);
+        }       
+    }    
+	else if((g_stAuxStatus.szRxAddress[0] == 0x00)&&(g_stAuxStatus.szRxAddress[1]==0x05))
+	{
+		Mod_Read_Dpcd510(ucLenth);
+	}
+    #endif
+    else if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x20)) //DPCD 02002
+    {
+        ucIncrease = 0;
+        switch(g_stAuxStatus.szRxAddress[2])
+        { 
+            case 0x00  :///dpcd02000
+                        ucIncrease++;
+            case 0x01  :
+                        ucIncrease++;
+            case 0x02  :///dpcd02002
+						if(ucIncrease > ucLenth)
+						{
+							break;
+						}
+						Mod_Read_Dpcd200(ucIncrease);
+						ucIncrease++;
+            case 0x03:///dpcd02003
+                        #if DPRX_MST_MODE_EN == ENABLED
+						if(ucIncrease > ucLenth)
+						{
+							break;
+						}
+						Mod_Read_Dpcd201(ucIncrease);
+                        #endif
+						ucIncrease++;
+            case 0x04: //dpcd 02004~0200B, for 02002~0200F
+						ucIncrease++;
+			case 0x05 :///dpcd02005
+						ucIncrease++;				 
+			case 0x06 :///dpcd02006
+						ucIncrease++;				 
+			case 0x07 :///dpcd02007
+						ucIncrease++;			 
+			case 0x08 :///dpcd02008
+						ucIncrease++;			 
+			case 0x09 :///dpcd02009
+						ucIncrease++;						 
+			case 0x0A :///dpcd0200A
+						ucIncrease++;						 
+			case 0x0B :///dpcd0200B
+						ucIncrease++;	            
+            case 0x0c:///dpcd0200C
+						if(ucIncrease > ucLenth)
+						{
+							break;
+						}
+						Mod_Read_Dpcd202(ucIncrease);
+						ucIncrease++;
+            case 0x0d:///dpcd0200D
+						if(ucIncrease > ucLenth)
+						{
+							break;
+						}
+						Mod_Read_Dpcd203(ucIncrease);
+						ucIncrease++;
+            case 0x0e://dpcd0200E
+						if(ucIncrease > ucLenth)
+						{
+							break;
+						}
+						Mod_Read_Dpcd204(ucIncrease);
+						ucIncrease++;
+						break;
+            #if DPRX_LINK_CTS == ENABLED
+			case 0x11://dpcd02011
+			            if(ucIncrease > ucLenth)
+						{
+							break;
+						}
+			            Mod_Read_Dpcd20F(ucIncrease);
+			            ucIncrease++;
+						break;
+            #endif
+            default:
+                break;
+        }
+    }
+}
+//===========================================
+//func  :dpcd write action for command 0x80
+//input :aux write data lenth
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_Write_Dpcd(u8 ucLenth)
+{
+    IDATA u8 ucIncrease;
+    IDATA u8 ucLoopAux;
+//    BKA3_82_REG |= BIT4_1;
+    if(g_stAuxStatus.szRxAddress[0] == 0x0f)
+    {
+        return;
+    } 
+    BKF1_03_REG =  g_stAuxStatus.szRxAddress[0];
+    BKF1_04_REG =  g_stAuxStatus.szRxAddress[1];
+    BKF1_05_REG =  g_stAuxStatus.szRxAddress[2];
+	
+    for (ucLoopAux = 0; ucLoopAux < ucLenth; ucLoopAux++)
+    {
+        if (ucLoopAux) //
+        {
+            if (BKF1_05_REG == 0xff)
+            {
+                BKF1_04_REG++;
+            }
+            BKF1_05_REG ++;
+        }
+        BKF1_53_REG = g_stAuxStatus.szRxData[ucLoopAux] ;//write from DPCD
+    }
+//	BKA3_82_REG &= BIT4_0;
+    //dpcd-001xx
+    if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x01))
+    {
+        ucIncrease = 0;
+        switch (g_stAuxStatus.szRxAddress[2])
+        {
+            case 0x00://dpcd-0100
+                Mod_Write_Dpcd100(ucIncrease);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x01://dpcd00101
+                Mod_Write_Dpcd101(ucIncrease);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x02 ://dpcd00102
+                Mod_Write_Dpcd102(ucIncrease);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x03 ://dpcd00103
+                Mod_Write_Dpcd103(ucIncrease);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x04 ://dpcd00104
+                //Mod_Write_Dpcd104(ucIncrease);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x05 ://dpcd00105
+                //Mod_Write_Dpcd105(ucIncrease);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x06 ://dpcd00106
+                //Mod_Write_Dpcd106(ucIncrease);
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0x07 ://dpcd00107
+                Mod_Write_Dpcd107(ucIncrease);
+                break;
+            #if DPRX_LINK_CTS == ENABLED
+            case 0x0b : //dpcd0010b    
+            case 0x0c : //dpcd0010c    
+            case 0x0d : //dpcd0010d    
+            case 0x0e : //dpcd0010e
+                if(((g_stAuxStatus.ucDpcd270&0x80)==0x80)&&((g_stAuxStatus.ucDpcd270&0x30) == ((g_stAuxStatus.szRxAddress[2]-0x0b)<<4)))
+                {
+                    Mod_Link_QualPatternSet(0);
+                }
+                break;
+            #endif
+//				#if CHIP_VERSION_SEL == ECO_NONE
+            #if ((DPRX_FEC_SUPPORT == ENABLED)||(DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED)) 
+             case 0x20 : //dpcd00120
+                g_stAuxStatus.FecFlag = (g_stAuxStatus.szRxData[0]&0x01)?(1):(0);
+                #if DPRX_LINK_CTS == ENABLED
+                Drv_DpRx_FecCtsSet(g_stAuxStatus.szRxData[0]);
+             	#endif
+                break; 
+//             #endif
+			 #endif
+             #if ((DPRX_DSC_DEC_SUPPORT == ENABLED) || (DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+             case 0x60 : //dpcd00160
+                g_stAuxStatus.DscFlag = (g_stAuxStatus.szRxData[0]&0x01)?(1):(0);
+                break;
+            #endif                    
+            #if DPRX_MST_MODE_EN == ENABLED
+            case 0x11:
+                g_stAuxStatus.b1MstFlag = ((g_stAuxStatus.szRxData[ucIncrease]&0x01)==0x01)?(1):(0);
+                break;
+            case 0xc0:
+                g_stMstRxStatus.payload_table[0] = g_stAuxStatus.szRxData[ucIncrease];
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0xc1:
+                g_stMstRxStatus.payload_table[1] = g_stAuxStatus.szRxData[ucIncrease];
+                if (++ucIncrease == ucLenth)
+                {
+                    break;
+                }
+            case 0xc2:
+                g_stMstRxStatus.payload_table[2] = g_stAuxStatus.szRxData[ucIncrease];
+                g_stMstRxStatus.payload_update = 1;
+                g_stMstRxStatus.count2c0 = 0x00;
+                break;
+            #endif
+            default:
+                break;
+        }
+    }
+    //dpcd-002xx
+    else if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x02))//dpcd200
+    {
+        ucIncrease = 0;
+        switch (g_stAuxStatus.szRxAddress[2])
+        {
+            #if DPRX_MST_MODE_EN == ENABLED
+			case 0x00:
+                if(++ucIncrease == ucLenth)
+                {
+                    break;
+                } 
+            case 0x01:               
+                Mod_Write_Dpcd201(ucIncrease);
+                break;
+            #endif
+            #if DPRX_LINK_CTS == ENABLED
+            case 0x0f:
+                Mod_Write_Dpcd20F(ucIncrease);
+                break;
+            case 0x70 ://dpcd00270
+                g_stAuxStatus.ucDpcd270 = g_stAuxStatus.szRxData[0];
+                if (g_stAuxStatus.ucDpcd270 & BIT7_1)
+                {
+                    Drv_Dpcd270_PhyLaneSel(g_stAuxStatus.ucDpcd270);
+                }
+                break;
+            #endif
+            #if ((DPRX_FEC_SUPPORT == ENABLED)||(DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED)) 
+            case 0x80:
+                if(g_stAuxStatus.szRxData[ucIncrease] & BIT1_1)
+                {
+                    Drv_DpRx_FecDisclr();
+                }
+				if(g_stAuxStatus.szRxData[0] == 0x00)
+				{
+                	Drv_DpRx_FecDataPathSet(ENABLED);
+				}
+                Drv_DpRx_Reset(DP_FEC_DEC_RST);
+                break;
+            #endif  
+            #if DPRX_MST_MODE_EN == ENABLED
+            case 0xc0:
+                if(g_stAuxStatus.szRxData[0]&0x01)
+                {
+                    g_stMstRxStatus.count2c0 = 0x00;
+                    g_stMstRxStatus.payload_table[0] = 0x00; //clear flag
+                    g_stMstRxStatus.payload_table[1] = 0x00; //clear flag
+                    g_stMstRxStatus.payload_table[2] = 0x00; //clear flag
+                }
+                break;
+            #endif
+            default:
+                break;
+        }
+    }
+	else if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x20))//dpcd2003
+    {
+        ucIncrease = 0;
+        switch (g_stAuxStatus.szRxAddress[2])
+        {
+            #if DPRX_MST_MODE_EN == ENABLED
+			case 0x00:
+                ucIncrease++;
+			case 0x01:
+                ucIncrease++; 
+            case 0x02:
+                ucIncrease++; 
+            case 0x03:
+				if(ucIncrease > ucLenth)
+				{
+					break;
+				}
+                Mod_Write_Dpcd201(ucIncrease);
+				ucIncrease++; 
+                break;
+            #endif
+			#if DPRX_LINK_CTS == ENABLED    
+            case 0x11:
+                Mod_Write_Dpcd20F(ucIncrease);
+                break;
+            #endif
+            default:
+                break;
+        }
+    }
+	#if (DPRX_DFP_TYPE == BRANCH_HDMI)
+    else if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x03)) //dpcd300
+    {
+        if (g_stAuxStatus.szRxAddress[2] <= 0x0f)
+        {
+            Mod_Write_DealDpcd30X(ucLenth, g_stAuxStatus.szRxAddress[2]);
+        }
+    }
+	#endif
+    
+    else if ((g_stAuxStatus.szRxAddress[0] == 0x00)&&(g_stAuxStatus.szRxAddress[1] == 0x06)&&(g_stAuxStatus.szRxAddress[2] == 0x00)) //dpcd600
+    {
+        Mod_Write_Dpcd600(g_stAuxStatus.szRxData[0]);
+    }
+    #if DPRX_MST_MODE_EN == ENABLED
+    //01000 - source send request
+    else if ((g_stAuxStatus.szRxAddress[0] == 0x00) && (g_stAuxStatus.szRxAddress[1] == 0x10))
+    {
+        switch(g_stAuxStatus.szRxAddress[2])
+        {
+            case 0x00://dpcd 1000
+                g_stMstRxStatus.count1400 = 0x00;//initial the mst 1400 cnt
+                g_stMstRxStatus.wr_lenth = ucLenth;//stand for actual wr data lenth
+                g_stMstRxStatus.total_wr_lenth = ucLenth;//stands total wr data lenth
+                memcpy(&g_stMstRxStatus.MsgRxData[0],&g_stAuxStatus.szRxData[0],ucLenth);
+                if(ucLenth > 1)
+                {
+                    g_stMstRxStatus.request_lenth = (g_stMstRxStatus.MsgRxData[1]&0x3f)+3;//head+body
+                }
+                else
+                {
+                    g_stMstRxStatus.request_lenth = 0xff;
+                }
+                break;
+
+            default:
+                if((g_stAuxStatus.szRxAddress[2] + ucLenth) >= g_stMstRxStatus.wr_lenth)
+                {
+                    g_stMstRxStatus.wr_lenth = g_stAuxStatus.szRxAddress[2] + ucLenth;    
+                }
+                g_stMstRxStatus.total_wr_lenth += ucLenth;
+                memcpy(&g_stMstRxStatus.MsgRxData[g_stAuxStatus.szRxAddress[2]],&g_stAuxStatus.szRxData[0],ucLenth);
+                if(g_stAuxStatus.szRxAddress[2] == 0x01)
+                {
+                    g_stMstRxStatus.request_lenth = (g_stMstRxStatus.MsgRxData[0]&0x3f)+3;//head+body
+                }
+                break;
+        }
+        if((g_stMstRxStatus.wr_lenth >= g_stMstRxStatus.request_lenth)&&(g_stMstRxStatus.total_wr_lenth >= g_stMstRxStatus.request_lenth))
+        {
+            g_stMstRxStatus.reply_rdy = 0;
+            g_stMstRxStatus.calc_flag = 1;
+        }
+        g_stMstRxStatus.reply_block_lenth       = 0;
+        g_stMstRxStatus.reply_data_lenth        = 0;    
+        g_stMstRxStatus.block_reply_done        = 0;
+    }
+    #endif
+}
+
+//===========================================
+//func  :this function deal with the auxrx interrupt
+//input :N/A
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Mod_DpRx_AuxTask(void)
+{
+    IDATA u8 ucRxLength;
+    IDATA u8 ucLoopAux;
+    IDATA u8 ucRxCmd;
+    IDATA u8 ucRxCounter;
+    ucRxLength = 0;
+	ucRxCounter = REG_AUX_BUF_CNT & 0x1f;//[4:0]The number of auxrx data to read. This is used in software mode of aux reply.
+    ucRxCmd     = REG_AUX_CMDTYPE;
+    g_stAuxStatus.szRxAddress[0] = REG_AUX_REC_DATA & 0x0f;
+    g_stAuxStatus.szRxAddress[1] = REG_AUX_REC_DATA;
+    g_stAuxStatus.szRxAddress[2] = REG_AUX_REC_DATA;
+    ucRxLength = REG_AUX_REC_DATA + 1;  //REG_AUX_REC_DATA
+    if (ucRxCounter >= 0x04) //
+    {
+        if (ucRxLength > 0x10)
+        {
+            return;
+        }
+        for (ucLoopAux = 0; ucLoopAux < ucRxLength; ucLoopAux++)
+        {
+            g_stAuxStatus.szRxData[ucLoopAux] = REG_AUX_REC_DATA;  //REG_AUX_REC_DATA
+        }
+    }
+    else
+    {
+        ucRxLength = 0;
+    }
+    Drv_DpRx_AcAuxTermCtrl(DISABLED);
+
+    switch (ucRxCmd)
+    {
+        case CMD_DPCDW://0x80; Native WR
+            Mod_Write_Dpcd(ucRxLength);
+            if(g_stAuxStatus.szRxAddress[0] == 0x0f)
+            {
+                Mod_AuxMsg_Reply(AUXNACK);
+            }
+            else
+            {
+                Mod_AuxMsg_Reply(AUXACK);
+            }
+            break;
+
+        case CMD_DPCDR://0x90; Native Read		
+            Mod_Read_Dpcd(ucRxLength);	
+            Mod_Aux_SendData(ucRxLength);
+            break;
+        case CMD_I2CW://0x40;
+            if (g_stAuxStatus.szRxAddress[2] == 0x50)//EDID address
+            {
+                if ((ucRxLength == 1) && (ucRxCounter == 0x05))//WR EDID original address
+                {
+                    g_stAuxStatus.usEdid_Offset = g_stAuxStatus.szRxData[0];
+                    if(g_stAuxStatus.ucEdid_Block_Offset != 0x00)
+                    {
+                        g_stAuxStatus.usEdid_Offset = ((u16)g_stAuxStatus.ucEdid_Block_Offset*0x100) | g_stAuxStatus.usEdid_Offset;
+                        g_stAuxStatus.ucEdid_Block_Offset = 0x00;
+                    }
+                }
+            }
+            else if(g_stAuxStatus.szRxAddress[2] == 0x30)//>256 EDID block
+            {
+                if((ucRxLength == 1)&&(g_stAuxStatus.szRxData[0]!= 0x00))
+                {
+                     g_stAuxStatus.ucEdid_Block_Offset = g_stAuxStatus.szRxData[0];
+                }
+            }
+            Mod_AuxMsg_Reply(AUXACK);
+            break;
+
+        case CMD_I2CR://0x50; MOT=1,I2C-R //address only or address length????
+            if ((g_stAuxStatus.szRxAddress[2] == 0x50) && (ucRxCounter == 0x04)) //read EDID datas
+            {
+                Mod_Aux_EdidRead(ucRxLength);
+            }
+            else if ((g_stAuxStatus.szRxAddress[2] == 0x52) && (ucRxCounter == 0x04)) //read EDID datas
+            {
+                Mod_AuxMsg_Reply(AUXNACK);
+            }
+            else
+            {
+                Mod_Aux_SendZeroData(ucRxLength);
+            }
+
+            break;
+
+        case CMD_I2CS://0x10;
+            if ((g_stAuxStatus.szRxAddress[2] == 0x50) && (ucRxCounter == 0x04))//EDID address
+            {
+                Mod_Aux_EdidRead(ucRxLength);
+                g_stAuxStatus.usEdid_Offset = 0;
+            }
+            else if ((g_stAuxStatus.szRxAddress[2] == 0x50) && (ucRxCounter == 0x03))//address only(read stop)
+            {
+                Mod_AuxMsg_Reply(AUXACK);
+                g_stAuxStatus.usEdid_Offset = 0;
+            }
+            else
+            {
+                Mod_Aux_SendZeroData(ucRxLength);
+            }
+            break;
+
+        case CMD_I2CLW://0x00;MOT=0,I2C-over-aux,write done;address only(stop)
+//            #if DDCCI_EN == 1
+//            if(g_stAuxStatus.szRxAddress[2]==0x37)//DDCCI address
+//            {
+//				if(ucRxLength >= 1)
+//				{
+//					Chip_DdcciMsg_Buffer(g_stDdcciStatus.ucFS_Data_Remove,ucRxLength);
+//					g_stDdcciStatus.ucFS_Data_Remove += ucRxLength;
+//					g_stDdcciStatus.ucLenth_Of_Data += ucRxLength;	
+//					g_stDdcciStatus.ucLenth_DDCCI = g_stDdcciStatus.szDDCCI_To_HDMI_BF[1];
+//					//the received data length is equal to the actual data length
+//					if((g_stDdcciStatus.ucLenth_DDCCI + 3) == (g_stDdcciStatus.ucLenth_Of_Data+0x80))
+//					{
+//						g_stDdcciStatus.ucFS_Data_Remove = 0;
+//						g_stDdcciStatus.ucAuxDDCCI = 0;
+//						g_stDdcciStatus.b1Send_Differ_En = 1;
+//					}		
+//				}
+//                else if(g_stDdcciStatus.ucFS_Data_Remove)
+
+//                {
+//                    g_stDdcciStatus.ucFS_Data_Remove = 0;
+//                    g_stDdcciStatus.ucAuxDDCCI = 0;
+//                    g_stDdcciStatus.b1Send_Differ_En = 1;
+//                }
+//            } 
+//            #endif
+            //龙源有一款RTD的主控，会通过MOT为0的WR，来操作EDID
+			if (g_stAuxStatus.szRxAddress[2] == 0x50) //EDID address
+            {
+                if ((ucRxLength == 1) && (ucRxCounter == 0x05)) //WR EDID original address
+                {
+                    g_stAuxStatus.usEdid_Offset = g_stAuxStatus.szRxData[0];
+                    if(g_stAuxStatus.ucEdid_Block_Offset != 0x00)
+                    {
+                        g_stAuxStatus.usEdid_Offset = ((u16)g_stAuxStatus.ucEdid_Block_Offset*0x100) | g_stAuxStatus.usEdid_Offset;
+                        g_stAuxStatus.ucEdid_Block_Offset = 0x00;
+                    }
+                }
+            }		
+            Mod_AuxMsg_Reply(AUXACK);
+            break;
+        case CMD_I2CLD://0x20;MOT=0,Write-status-update
+        default:
+            Mod_AuxMsg_Reply(AUXACK);
+            break;
+    }
+    Mod_AuxReply_En();
+	//如果AUX TERM关掉，软件模式会产生一个STOP中断，需要清掉
+    #if DPRX_AUX_MODE == SOFTMODE
+    Drv_System_IntClr(IRQ_DPRX_AUX_INT);
+    #endif
+}
+
+//========================================================================
+// Func Name   : Mod_Aux_GetTrainDoneStatus
+// Description : get link training status.
+// Input       : void  
+// Output      : None
+// Return      : TRUE-> training success.
+//             : FALSE->training is on going or fail.
+//========================================================================
+u8 Mod_Aux_GetTrainDoneStatus(void)
+{
+    if (g_stAuxStatus.b1Train_Done == TRUE) 
+    {
+        g_stAuxStatus.b1AuxDone = TRUE;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+//========================================================================
+// Func Name   : Mod_Aux_GetRetrainStatus
+// Description : Get link training stauts
+// Input       : void  
+// Output      : None
+// Return      : TRUE-> Source re-link training.
+//             : FALSE-> No re-link training.
+//========================================================================
+u8 Mod_Aux_GetRetrainStatus(void)
+{
+    if(g_stAuxStatus.b1AuxDone == TRUE)
+    {
+        return FALSE;
+    }
+    return TRUE ;
+}
+
+u8 Mod_Aux_LinkCntGet(void)
+{
+    return g_stAuxStatus.ucLink_Count;
+}
+#endif
+

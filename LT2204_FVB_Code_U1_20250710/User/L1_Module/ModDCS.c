@@ -1,0 +1,147 @@
+/******************************************************************************
+*  Copyright (C), 2006-2022, Lontium Tech.
+*  Project       : LT2102
+*  File Name     : DrvDCS.c
+*  Version       : V1.0
+*  Author        : AndyWang
+*  Created       : 2022/10/22
+*  Description   : MIPI DSI LP Command
+*  
+*  History:
+*  2022/10/22     AndyWang      Created File
+******************************************************************************/
+
+#include "Include.h"
+
+#if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD) || (CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP))
+
+#define LPK_DI  0x29
+#define SPK_DI  0x15
+#define LPT_DI  0x39
+#define SPT_DI  0x15
+
+code u8 Sleep_Out[] = {0x05,0x11,0x00};
+code u8 Display_On[] = {0x05,0x29,0x00};
+code u8	Sleep_In[] = {0x05,0x10,0x00};
+code u8 Display_Off[] = {0x05,0x28,0x00};
+code u8 Set_address_mode[] = {0x15,0x36,0xC6};
+
+code u8 DCS_S1[]= {0x23,0xFF,0x20};
+code u8 DCS_S2[]= {0x23,0xE0,0x10};
+code u8 DCS_S3[]= {0x23,0x7A,0x07};
+code u8 DCS_S4[]= {0x23,0x7D,0x0C};
+code u8 DCS_S5[]= {0x23,0x7E,0x0C};
+code u8 DCS_S6[]= {0x23,0xFB,0x01};
+code u8 DCS_S7[]= {0x23,0xFF,0xE0};
+code u8 DCS_S8[]= {0x23,0x66,0x00};
+code u8 DCS_S9[]= {0x23,0x23,0x07};
+code u8 DCS_S10[]= {0x23,0xFB,0x01};
+code u8 DCS_S11[]= {0x23,0xFF,0x25};
+code u8 DCS_S12[]= {0x23,0x2F,0x00};
+code u8 DCS_S13[]= {0x23,0x0D,0x07};
+code u8 DCS_S14[]= {0x23,0x0E,0x6B};
+code u8 DCS_S15[]= {0x23,0x11,0x11};
+code u8 DCS_S16[]= {0x23,0x13,0x00};
+code u8 DCS_S17[]= {0x23,0x14,0x01};
+code u8 DCS_S18[]= {0x23,0x25,0x20};
+code u8 DCS_S19[]= {0x23,0x0F,0x09};
+code u8 DCS_S20[]= {0x23,0x10,0xA5};
+code u8 DCS_S21[]= {0x23,0x12,0x17};
+code u8 DCS_S22[]= {0x23,0x15,0x01};
+code u8 DCS_S23[]= {0x23,0x0C,0x01};
+code u8 DCS_S24[]= {0x23,0x09,0x10};
+code u8 DCS_S25[]= {0x23,0x38,0x03};
+code u8 DCS_S26[]= {0x23,0x0A,0x00};
+code u8 DCS_S27[]= {0x23,0x07,0x02};
+code u8 DCS_S28[]= {0x23,0xBC,0xFF};
+code u8 DCS_S29[]= {0x23,0xBD,0xFF};
+code u8 DCS_S30[]= {0x23,0xBE,0xFF};
+code u8 DCS_S31[]= {0x23,0xBF,0xFF};
+code u8 DCS_S32[]= {0x23,0xC0,0xFF};
+code u8 DCS_S33[]= {0x23,0xC1,0xFF};
+code u8 DCS_S34[]= {0x23,0xC2,0xFF};
+code u8 DCS_S35[]= {0x23,0xC3,0xFF};
+code u8 DCS_S36[]= {0x23,0xFB,0x01};
+code u8 DCS_S37[]= {0x23,0xFF,0x10};
+code u8 DCS_S38[]= {0x39,0x2A,0x00,0x00,0x08,0xE7};
+code u8 DCS_S39[]= {0x39,0x2B,0x00,0x00,0x08,0xE7};
+code u8 DCS_S40[]= {0x23,0x03,0x01};
+code u8 DCS_S41[]= {0x23,0xBB,0x13};
+code u8 DCS_S42[]= {0x23,0xC0,0x03};
+code u8 DCS_S43[]= {0x39,0xC1,0x89,0x28,0x00,0x28,0xC2,0x00,0x03,0x3A,0x05,0x45,0x00,0x0F,0x02,0x77,0x01,0x35};
+code u8 DCS_S44[]= {0x39,0xC2,0x10,0xF0};
+code u8 DCS_S45[]= {0x23,0x35,0x00};
+code u8 DCS_S46[]= {0x39,0x44,0x00,0x00};
+code u8 DCS_S47[]= {0x23,0x51,0xFF};
+code u8 DCS_S48[]= {0x23,0x53,0x24};
+code u8 DCS_S49[]= {0x23,0xFB,0x01};
+
+
+void Mod_DCS_Init(void)
+{
+    Drv_MipiTx_Dsidcs_Init();
+    Ocm_Delay1ms(20);
+    Drv_MipiTx_DcsPktWrite(DCS_S1 [0],sizeof(DCS_S1 )-1,&DCS_S1 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S2 [0],sizeof(DCS_S2 )-1,&DCS_S2 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S3 [0],sizeof(DCS_S3 )-1,&DCS_S3 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S4 [0],sizeof(DCS_S4 )-1,&DCS_S4 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S5 [0],sizeof(DCS_S5 )-1,&DCS_S5 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S6 [0],sizeof(DCS_S6 )-1,&DCS_S6 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S7 [0],sizeof(DCS_S7 )-1,&DCS_S7 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S8 [0],sizeof(DCS_S8 )-1,&DCS_S8 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S9 [0],sizeof(DCS_S9 )-1,&DCS_S9 [1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S10[0],sizeof(DCS_S10)-1,&DCS_S10[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S11[0],sizeof(DCS_S11)-1,&DCS_S11[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S12[0],sizeof(DCS_S12)-1,&DCS_S12[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S13[0],sizeof(DCS_S13)-1,&DCS_S13[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S14[0],sizeof(DCS_S14)-1,&DCS_S14[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S15[0],sizeof(DCS_S15)-1,&DCS_S15[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S16[0],sizeof(DCS_S16)-1,&DCS_S16[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S17[0],sizeof(DCS_S17)-1,&DCS_S17[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S18[0],sizeof(DCS_S18)-1,&DCS_S18[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S19[0],sizeof(DCS_S19)-1,&DCS_S19[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S20[0],sizeof(DCS_S20)-1,&DCS_S20[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S21[0],sizeof(DCS_S21)-1,&DCS_S21[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S22[0],sizeof(DCS_S22)-1,&DCS_S22[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S23[0],sizeof(DCS_S23)-1,&DCS_S23[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S24[0],sizeof(DCS_S24)-1,&DCS_S24[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S25[0],sizeof(DCS_S25)-1,&DCS_S25[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S26[0],sizeof(DCS_S26)-1,&DCS_S26[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S27[0],sizeof(DCS_S27)-1,&DCS_S27[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S28[0],sizeof(DCS_S28)-1,&DCS_S28[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S29[0],sizeof(DCS_S29)-1,&DCS_S29[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S30[0],sizeof(DCS_S30)-1,&DCS_S30[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S31[0],sizeof(DCS_S31)-1,&DCS_S31[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S32[0],sizeof(DCS_S32)-1,&DCS_S32[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S33[0],sizeof(DCS_S33)-1,&DCS_S33[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S34[0],sizeof(DCS_S34)-1,&DCS_S34[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S35[0],sizeof(DCS_S35)-1,&DCS_S35[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S36[0],sizeof(DCS_S36)-1,&DCS_S36[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S37[0],sizeof(DCS_S37)-1,&DCS_S37[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S38[0],sizeof(DCS_S38)-1,&DCS_S38[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S39[0],sizeof(DCS_S39)-1,&DCS_S39[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S40[0],sizeof(DCS_S40)-1,&DCS_S40[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S41[0],sizeof(DCS_S41)-1,&DCS_S41[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S42[0],sizeof(DCS_S42)-1,&DCS_S42[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S43[0],sizeof(DCS_S43)-1,&DCS_S43[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S44[0],sizeof(DCS_S44)-1,&DCS_S44[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S45[0],sizeof(DCS_S45)-1,&DCS_S45[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S46[0],sizeof(DCS_S46)-1,&DCS_S46[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S47[0],sizeof(DCS_S47)-1,&DCS_S47[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S48[0],sizeof(DCS_S48)-1,&DCS_S48[1] );
+    Drv_MipiTx_DcsPktWrite(DCS_S49[0],sizeof(DCS_S49)-1,&DCS_S49[1] );
+		
+		
+		
+		Ocm_Delay1ms(150);
+		Drv_MipiTx_DcsPktWrite(Display_On[0],(sizeof(Display_On)-1),&Display_On[1]);
+		Ocm_Delay1ms(150);	
+		Drv_MipiTx_DcsPktWrite(Sleep_Out[0],(sizeof(Sleep_Out )-1),&Sleep_Out[1]);
+		Ocm_Delay1ms(150);
+
+    Drv_MipiTx_Dsidcs_End();
+    LTLog(LOG_INFO, "Mipi DCS END");
+    
+}
+
+#endif

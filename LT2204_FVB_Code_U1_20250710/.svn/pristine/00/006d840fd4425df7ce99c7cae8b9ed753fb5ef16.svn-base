@@ -1,0 +1,1028 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: DrvDpTx.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.05.30
+/******************************************************************************/
+
+#include "include.h"
+
+#if TX_PORT_SIGN == DP_PORT
+
+u8 const Swing_Pre_Value[10][2] =
+{
+    {0x40, 0x00},//0000 swing =0 emphaiss =0
+    {0x60, 0x00},//0001 swing =1 emphaiss =0
+    {0x80, 0x00},//0010 swing =2 emphaiss =0
+    {0xc0, 0x00},//0011 swing =3 emphaiss =0
+    {0x50, 0x10},//0100 swing =0 emphaiss =1
+    {0x78, 0x18},//0101 swing =1 emphaiss =1
+    {0xa0, 0x20},//0110 swing =2 emphaiss =1
+    {0x60, 0x20},//1000 swing =0 emphaiss =2
+    {0x90, 0x30},//1001 swing =1 emphaiss =2
+    {0x80, 0x40},//1100 swing =0 emphaiss =3
+};
+
+void Drv_DpTx_PowerDown(void)
+{
+//====================Hdcp====================
+
+//====================Hdcp====================
+}
+
+void Drv_DpTx_AuxInit(void)
+{
+    //dp tx aux
+    #if SYSCLK == SYS_CLK_40M
+    BKF5_20_REG = 0x13;//rgd_8l_dptx_aux_clk_div_num
+    #endif
+
+    #if SYSCLK == SYS_CLK_48M
+    BKF5_20_REG = 0x17;//rgd_8l_dptx_aux_clk_div_num
+    #endif
+
+    BKF5_23_REG &= BIT3_0;//[3]rgd_8l_dptx_aux_i_swap: 0-dis
+    BKA3_6C_REG |= BIT3_1;//[3]rg_dhtx_aux_en: 1-en  bit7 aux swap
+    BKA3_76_REG &= 0x0f;// dissble ddc OD it will affect aux training
+    BKA3_76_REG |= BIT2_1;// dissble ddc OD it will affect aux training
+    BKF5_9B_REG |= BIT6_1;//[6]1'b1:release to dp tx control aux when hdcp disable
+
+    #if SYSCLK == SYS_CLK_40M
+    BKF5_55_REG = 0x5e;//aux read wait time
+    BKF5_57_REG = 0x2e;
+    #endif
+
+    #if SYSCLK == SYS_CLK_48M
+    BKF5_55_REG = 0x5e;//aux read wait time
+    BKF5_57_REG = 0x2e;//dpcd interval
+    #endif
+}
+
+void Drv_DpTx_SwingAdjust(u8 ucStd, u8 ucLane)
+{
+    if (ucLane == 0)
+    {
+        BKA1_71_REG= Swing_Pre_Value[ucStd][0];//[7:0]rgd_sw_en_dhtx_tx0_tap_main_iset
+        BKA1_72_REG= Swing_Pre_Value[ucStd][1];//[6:0]rgd_sw_en_dhtx_tx0_tap_post_iset
+        BKA1_70_REG |= BIT0_1;//[0]rgd_sw_en_dhtx_tx0_tap_main_iset: 1-sw en
+        BKA1_72_REG |= BIT7_1;//[7]rgd_sw_en_dhtx_tx0_tap_post_iset: 1-sw en
+    }
+    else if (ucLane == 1)
+    {
+        BKA1_75_REG = Swing_Pre_Value[ucStd][0];//[7:0]rgd_sw_en_dhtx_tx1_tap_main_iset
+        BKA1_76_REG = Swing_Pre_Value[ucStd][1];//[6:0]rgd_sw_en_dhtx_tx1_tap_post_iset
+        BKA1_74_REG |= BIT0_1;//[0]rgd_sw_en_dhtx_tx1_tap_main_iset: 1-sw en
+        BKA1_76_REG |= BIT7_1;//[7]rgd_sw_en_dhtx_tx1_tap_post_iset: 1-sw en
+    }
+    else if (ucLane == 2)
+    {
+        BKA1_79_REG = Swing_Pre_Value[ucStd][0];//[7:0]rgd_sw_en_dhtx_tx2_tap_main_iset
+        BKA1_7A_REG = Swing_Pre_Value[ucStd][1];//[6:0]rgd_sw_en_dhtx_tx2_tap_post_iset
+        BKA1_78_REG |= BIT0_1;//[0]rgd_sw_en_dhtx_tx2_tap_main_iset: 1-sw en
+        BKA1_7A_REG |= BIT7_1;//[7]rgd_sw_en_dhtx_tx2_tap_post_iset: 1-sw en
+    }
+    else if (ucLane == 3)
+    {
+        BKA1_7D_REG = Swing_Pre_Value[ucStd][0];//[7:0]rgd_sw_en_dhtx_tx3_tap_main_iset
+        BKA1_7E_REG = Swing_Pre_Value[ucStd][1];//[6:0]rgd_sw_en_dhtx_tx3_tap_post_iset
+        BKA1_7C_REG |= BIT0_1;//[0]rgd_sw_en_dhtx_tx3_tap_main_iset: 1-sw en
+        BKA1_7E_REG |= BIT7_1;//[7]rgd_sw_en_dhtx_tx3_tap_post_iset: 1-sw en
+    }
+}
+
+void Drv_DpTx_RtermCali(void)
+{
+    u8 ucIndex;
+    u8 ucResult = FAIL;
+
+    ucIndex = 10;
+    while(ucIndex--)
+    {
+        BKE2_09_REG &= BIT0_0;//[0]rgd_dhrx_rterm_cali_en, 0-dis
+        Ocm_Delay1ms(1);
+        BKE2_09_REG |= BIT0_1;//[0]rgd_dhrx_rterm_cali_en, 1-en
+        Ocm_Delay1ms(2);
+        if(0x02 == (BKE2_10_REG & 0x03))//[1]rgod_dhrx_rterm_cali_done: 1-done; [0]rgod_dhrx_rterm_cali_fail: 1-fail
+        {
+            ucResult = SUCCESS;
+            break;
+        }
+    }
+    printLT(PRINT_PRIO_HIG, "\nDp tx rterm cali value is 0x%02bx", BKE2_11_REG);
+    if(ucResult == SUCCESS)//Rterm calibration done
+    {
+        printLT(PRINT_PRIO_HIG, "\ncali success");
+    }
+    else
+    {
+        printLT(PRINT_PRIO_HIG, "\ncali failed");
+    }
+}
+
+
+void Drv_DpTx_PhyInit(void)
+{
+    BKA1_58_REG |= 0xc0;//[7]rg_dht_en: 1-en; [6]rg_dhtx_div_rst_n: 1-normal work
+    BKA1_5A_REG = 0xff;//[7:4]rg_dhtx_tx0(0~3)_en: 1-en;
+                       //[3:0]rg_dhtx_tx0(0~3)_rterm_en: 1-en;
+    BKA1_5B_REG = 0x33;//[6]rg_dhtx_tx0_tap_pre_en; [5]main_en; [4]post_en;
+                       //[2]rg_dhtx_tx1_tap_pre_en; [1]main_en; [0]post_en;
+    BKA1_5C_REG = 0x33;//[6]rg_dhtx_tx2_tap_pre_en; [5]main_en; [4]post_en;
+                       //[2]rg_dhtx_tx3_tap_pre_en; [1]main_en; [0]post_en;
+}
+
+void Drv_DpTx_MainLinkInit(u8 ucOutputSel)
+{
+    switch(ucOutputSel)
+    {
+        case DP_IN:
+            BKED_21_REG &= 0x0f;//[7:4]rgd_dhtx_d0(~d3)_pn_swap_en: 0-dis
+            BKED_22_REG = 0x01;//[6:4]rgd_dhtx_d0_src_sel; //[2:0]rgd_dhtx_d1_src_sel
+            BKED_23_REG = 0x23;//[6:4]rgd_dhtx_d2_src_sel; //[2:0]rgd_dhtx_d3_src_sel
+            break;
+                        
+        case TYPEC_FEMALE_NOFLIP:
+            BKED_21_REG &= 0x0f;//[7:4]rgd_dhtx_d0(~d3)_pn_swap_en: 0-dis
+            BKED_21_REG |= 0x30;
+            BKED_22_REG = 0x30;//[6:4]rgd_dhtx_d0_src_sel; //[2:0]rgd_dhtx_d1_src_sel
+            BKED_23_REG = 0x21;//[6:4]rgd_dhtx_d2_src_sel; //[2:0]rgd_dhtx_d3_src_sel
+            break;        
+        case TYPEC_FEMALE_FLIP:
+            BKED_21_REG &= 0x0f;//[7:4]rgd_dhtx_d0(~d3)_pn_swap_en: 0-dis
+            BKED_21_REG |= 0x30;
+            BKED_22_REG =  0x03;//[6:4]rgd_dhtx_d0_src_sel; //[2:0]rgd_dhtx_d1_src_sel
+            BKED_23_REG =  0x12;//[6:4]rgd_dhtx_d2_src_sel; //[2:0]rgd_dhtx_d3_src_sel
+            break;
+        default:
+        break;
+    }
+}
+
+void Drv_DpTx_DigitalInit(void)
+{
+    #if SYSCLK == SYS_CLK_40M
+    //irq 0.5-1ms time set
+    BKF5_4B_REG = 0x46;//(value+00)/Syspll
+    BKF5_4C_REG = 0xb0;
+
+    //hpd > 2ms time set
+    BKE6_EB_REG = 0x01;
+    BKE6_EC_REG = 0x38;//2MS*1000/SYSPLL
+    BKE6_ED_REG = 0x80;
+    #endif
+    #if SYSCLK == SYS_CLK_48M
+    //irq 0.5-1ms time set
+    BKF5_4B_REG = 0x50;//valueX1000/Syspll
+    BKF5_4C_REG = 0xd0;
+
+    //hpd > 2ms time set
+    BKE6_EB_REG = 0x01;
+    BKE6_EC_REG = 0x77;//2MS*1000/SYSPLL
+    BKE6_ED_REG = 0x00;
+    #endif
+
+    BKF5_4D_REG |= BIT5_1;//[5]dp tx hpd irq flag clr en
+    BKF5_4D_REG &= BIT5_0;//[5]dp tx hpd irq flag clr dis
+    BKF5_7D_REG |= 0x0d;//[3]rgd_enhanced_frame_en: 1-en
+                        //[1]rgd_scrambling_disable: 1-scramble dis
+                        //[0]DPTX 8B10B enable
+    BKF5_9B_REG &= BIT4_0;//rgd_dhtx_hdcp13_hpd_irq_en = 0
+
+    BKE6_E9_REG |= BIT3_1;//[3]debounce en
+    BKE6_EA_REG |= BIT6_1;//[6]ad_dhtx_hpd debounce en,dedounce source sel
+}
+
+void Drv_DpTx_IrqDet(bool b1IrqEn)
+{
+    BKF5_81_REG |= BIT0_1;
+    if(b1IrqEn == ENABLED)
+    {
+        BKE9_81_REG |= BIT7_1;// RGD_H2_HPD_IRQ_EN = 0;
+        BKF5_9B_REG |= BIT4_1;//rgd_dhtx_hdcp13_hpd_irq_en = 1
+        BKF5_9B_REG &= BIT6_0;
+        if (BKF5_F2_REG & BIT7_1)//[7]dp tx hpd irq flag
+        {
+            BKF5_02_REG |= 0x03; //irq enabled
+            BKF5_02_REG &= 0xfc; //irq disable
+        }
+    }
+    else
+    {
+        BKE9_81_REG &= BIT7_0;// RGD_H2_HPD_IRQ_EN = 0;
+        BKF5_9B_REG &= BIT4_0;//rgd_dhtx_hdcp13_hpd_irq_en = 0
+        BKF5_9B_REG |= BIT6_1;
+    }
+}
+
+void Drv_DpTx_PowerOnInit(void)
+{
+    Drv_DpTx_PowerDown();
+    Drv_DpTx_AuxInit();
+    Drv_DpTx_RtermCali();
+    Drv_DpTx_PhyInit();
+    Drv_DpTx_MainLinkInit(DP_IN);
+    Drv_DpTx_DigitalInit();
+    Drv_Audio_Init();
+    Drv_HdcpTx_HdcpInit();
+    Drv_DpTx_IrqDet(DISABLED);
+}
+
+void Drv_DpTx_Reset(void)
+{
+    //-wangtt- -wait review-
+    BKA1_5A_REG &= 0x0f;//[7:4]rg_dhtx_tx0(0~3)_en: 0-dis
+    BKA1_58_REG &= BIT6_0;//[6]rg_dhtx_div_rst_n: 0-reset
+    Ocm_Delay1ms(1);
+    BKA1_58_REG |= BIT6_1;//[6]rg_dhtx_div_rst_n: 1-normal
+    BKA1_5A_REG |= 0xf0;//[7:4]rg_dhtx_tx0(0~3)_en: 0-dis
+
+    BKF5_88_REG &= 0x03;//[7]rgd_dptx_vid_fifo_sw_rst_n
+                        //[6]rgd_dptx_vid_sw_rst_n
+                        //[5]rgd_dptx_aud_sw_rst_n
+                        //[4]rgd_dptx_sdp_sw_rst_n
+                        //[3]rgd_dptx_mlctrl_sw_rst_n
+                        //[2]rgd_dptx_aux_sw_rst_n
+                        //[1]rgd_dptx_all_sw_rst_n
+    BKF5_89_REG &= 0x01;//[7]rgd_dptx_aud_8ch_sw_rst_n
+                        //[6]rgd_dptx_dsc_pix_rst_n
+                        //[5]rgd_dptx_hdcp13_sw_rst_n
+                        //[4]rgd_dptx_train_fsm_sw_rst_n
+                        //[3]rgd_dptx_fec_enc_sw_rst_n
+                        //[2]rgd_dptx_fec_timing_sw_rst_n
+                        //[1]rgd_dptx_dsc_pix_sw_rst_n
+                        //[0]rgd_dptx_vid_chk_sw_rst_n
+    BKF5_8A_REG &= 0xfd;//[1]rgd_dptx_crc_sw_rst_n
+    Ocm_Delay1ms(1);
+    BKF5_88_REG |= 0xfc;//1-dis
+    BKF5_89_REG |= 0xfe;//1-dis
+    BKF5_8A_REG |= 0x02;//1-dis
+}
+
+void Drv_DpTx_SettingInit(void)
+{
+    //pkt en init
+    BKF6_0D_REG = 0x00;//pkt en set to default
+    BKF6_0E_REG = 0x00;//pkt en set to default
+    BKF6_F0_REG = 0X83;
+    BKF6_9E_REG  = 0x07;//sdp version sel sdp13
+    BKF6_EF_REG &= BIT5_0;//[5]dp tx pps update: 0-hdmi rx
+    BKF6_EF_REG |= BIT6_1;//[6]rg_pps_upd_dis: 1-dis pps update
+
+    BKF7_03_REG = 0x04;//important, must be 0x04, must msa first, msa start the number of line in vblanking 
+    BKF7_17_REG = 0x10; //pixel
+    BKF7_18_REG = 0x20; //misc0
+    BKF7_19_REG = 0x00; //misc1
+    BKF7_1A_REG |= BIT5_1;//rg_tu_sel = 1;
+    BKF7_1E_REG |= BIT7_1;
+
+    //soft msa init
+    BKF7_2A_REG &= BIT4_0;//[4]rgd_msa_soft_en: 0-from video check
+    BKF7_27_REG = 0x00;// disable 420 disable i
+    
+    BKE1_41_REG &= BIT0_0;//[0]rgd_dptx_rx_pix_clk_src_sel: 0-ad_cscrx_half_pix_clk
+}
+
+void Drv_DpTx_TxPllInit(void)
+{
+    BKA1_48_REG = 0x50;//[7]rg_dhtxpll_pd: 0-normal work
+                       //[6]rg_dhtxpll_rst_n: 1-normal work
+                       //[5]rg_dhtxpll_ptat_rst: 0-normal work
+                       //[4]rg_dhtxpll_ibias_en: 1-en
+    BKA1_49_REG = 0x01;//[4:0]rg_dhtxpll_cpcur_sel
+    BKA1_4B_REG = 0x60;//[6]rg_dhtxpll_pre_divsel: 1-control by rg_dhtxpll_pre_divset
+                       //[5:4]rg_dhtxpll_pre_divset: 10-/1
+    BKE3_30_REG = 0x02;//ks = 2
+}
+
+void Drv_DpTx_SscEn(u8 ucOpt)
+{
+    if (ucOpt == ENABLED)
+    {
+        BKE3_89_REG |= BIT1_1;//[1]rgd_dhtxpll_div_tuner_ssc_en: 0-ssc dis
+        BKE3_7F_REG |= 0x90;  //[7:6]rgd_dhtxpll_div_tuner_sdm_ord_sel:  10-2nd order
+                              //[5:4]rgd_dhtxpll_div_tuner_diff_ord_sel: 01-1st order
+        BKA1_54_REG &= BIT4_0;//[4]rgd_sw_en_dhtxpll_div_set: 0-da_dhtxpll_div_set(hardware mode)
+    }
+    else
+    {
+        BKA1_4D_REG = 0x13;//[5:4]rg_dhtxpll_lpf_czset: 01-2pF
+                           //[2:0]rg_dhtxpll_lpf_rzset: 011-60K
+        BKA1_4E_REG = 0x03;//[2:0]rg_dhtxpll_lpf_cinset: 001-1p
+        BKA1_4F_REG = 0x60;//[7:5]rg_dhtxpll_lpf_cpset: 100-700f
+        BKE3_89_REG &= BIT1_0;//[1]rgd_dhtxpll_div_tuner_ssc_en: 0-ssc dis
+        BKE3_7F_REG &= 0x0f;//[7:6]rgd_dhtxpll_div_tuner_sdm_ord_sel: 00-disable
+                            //[5:4]rgd_dhtxpll_div_tuner_diff_ord_sel: 00-disable
+    }
+}
+
+void Drv_DpTx_TxPllCali(u8 ucLinkRate)
+{
+    u8 ucCalCnt, ucLockCnt;
+
+    Drv_DpTx_TxPllInit();
+    #if DPTX_SSC_SUPPORT == ENABLED
+    Drv_DpTx_SscEn(DISABLED);
+    #endif
+    ucLockCnt = 0;
+    do
+    {
+        BKA1_48_REG &= 0xfc;//[1:0]rg_dhtxpll_ref_sel: 00-aa_syspll_25m_clk
+        BKA1_50_REG &= 0xf9;//[2:1]rg_dhtxpll_fb_divset: default
+        switch(ucLinkRate)
+        {
+            case RBR:
+                BKA1_48_REG |= 0x03;  //[1:0]rg_dhtxpll_ref_sel: 11-aa_syspll_30m_clk
+                BKA1_55_REG = 0x36;   //gd_sw_dhtxpll_div_set: 0x1b-54
+                BKA1_54_REG &= 0xfc;  //[1:0]rgd_sw_dhtxpll_freq_set: 00-/1
+                BKA1_54_REG |= 0x01;  //freq_set =1 div =2
+                BKA1_50_REG |= BIT2_1;//[2:1]rg_dhtxpll_fb_divset: 10-/1
+                BKA1_51_REG = 0x00;   //[1:0]rg_dhtxpll_loop_divset: 00-/1
+                break;
+
+            case HBR:
+                BKA1_55_REG = 0x36;   //gd_sw_dhtxpll_div_set: 0x36-54
+                BKA1_54_REG &= 0xfc;  //[1:0]rgd_sw_dhtxpll_freq_set: 00-/1
+                BKA1_50_REG |= BIT2_1;//[2:1]rg_dhtxpll_fb_divset: 10-/1
+                BKA1_51_REG = 0x00;   //[1:0]rg_dhtxpll_loop_divset: 00-/1
+                break;
+
+            case HBR2:
+                BKA1_55_REG = 0x36;   //gd_sw_dhtxpll_div_set: 0x36-54
+                BKA1_54_REG &= 0xfc;  //[1:0]rgd_sw_dhtxpll_freq_set: 00-/1
+                BKA1_50_REG |= BIT2_1;//[2:1]rg_dhtxpll_fb_divset: 10-/1
+                BKA1_51_REG = 0x01;   //[1:0]rg_dhtxpll_loop_divset: 01-/2
+                break;
+
+            case HBR3:
+                BKA1_55_REG = 0x51;   //gd_sw_dhtxpll_div_set: 0x51-81
+                BKA1_54_REG &= 0xfc;  //[1:0]rgd_sw_dhtxpll_freq_set: 00-/1
+                BKA1_50_REG |= BIT2_1;//[2:1]rg_dhtxpll_fb_divset: 10-/1
+                BKA1_51_REG = 0x01;   //[1:0]rg_dhtxpll_loop_divset: 01-/2
+                break;
+        }
+        BKA1_54_REG |= BIT4_1;//[4]rgd_sw_en_dhtxpll_div_set: 1-rgd_sw_dhtxpll_div_set
+        BKA1_52_REG |= BIT4_1;//[4]rgd_sw_en_dhtxpll_freq_set: 1-rgd_sw_dhtxpll_freq_set
+        BKA1_50_REG |= 0x11;//[4]rgd_sw_en_dhtxpll_fb_divsel: 1-rg_dhtxpll_fb_divset
+                            //[0]g_dhtxpll_loop_divsel: 1-rg_dhtxpll_loop_divset
+        ucCalCnt = 0;
+        do
+        {
+            BKE1_06_REG &= 0xf4;//[3]rgd_sw_dhtxpll_div_tuner_rst_n
+                                //[1]rgd_sw_dhtxpll_pll_lock_rst_n
+                                //[0]rgd_sw_dhtxpll_cal_rst_n
+            BKA1_48_REG &= BIT6_0;//[6]rg_dhtxpll_rst_n: 0-reset
+            BKE3_2F_REG &= BIT0_0;//[0]rgd_dhtxpll_cal_pll_cal_en: 0-dis
+            Ocm_Delay1ms(1);
+            BKE1_06_REG |= 0x0b;
+            BKA1_48_REG |= BIT6_1;//[6]rg_dhtxpll_rst_n: 1-normal
+            BKE3_2F_REG |= BIT0_1;//[0]rgd_dhtxpll_cal_pll_cal_en: 1-en
+            Ocm_Delay1ms(2);
+            ucCalCnt++;
+        }while((ucCalCnt < 3) && ((BKE3_4E_REG & 0x18) != 0x08));
+        ucLockCnt++;
+        Ocm_Delay1ms(1);
+        printLT(PRINT_PRIO_HIG, "\nTxpll band =  0x%02bx", BKE3_58_REG);
+    }while((ucLockCnt < 3) && ((BKE3_62_REG & 0x01) == 0x00));
+}
+
+u8 Drv_DpTx_PllStableCheck(void)
+{
+    if (BKE3_62_REG & BIT0_1)
+    {
+        printLT(PRINT_PRIO_HIG, "\nDp tx pll lock");
+        return STABLE;
+    }
+    else
+    {
+        printLT(PRINT_PRIO_HIG, "\nDp tx pll unlock");
+        return UNSTABLE;
+    } 
+}
+
+
+#if DPTX_SSC_SUPPORT == ENABLED
+void Drv_DpTx_SscSet(u8 ucLinkRate)
+{
+    BKA1_4E_REG &= 0xf8;//[2:0]rg_dhtxpll_lpf_cinset: default
+    BKA1_4F_REG &= 0x1f;//[7:5]rg_dhtxpll_lpf_cpset: default
+    switch(ucLinkRate)
+    {
+        case RBR:
+            BKA1_4D_REG = 0x13;//[5:4]rg_dhtxpll_lpf_czset: 01-2pF
+                               //[2:0]rg_dhtxpll_lpf_rzset: 011-60K
+            BKA1_4E_REG |= 0x01;//[2:0]rg_dhtxpll_lpf_cinset: 001-1p
+            BKA1_4F_REG |= 0x80;//[7:5]rg_dhtxpll_lpf_cpset: 100-700f
+            BKE3_84_REG = 0x21;//rgd_dhtxpll_div_tuner_ssc_delta1[15:8]
+            BKE3_85_REG = 0xf0;//rgd_dhtxpll_div_tuner_ssc_delta1[ 7:0]
+            BKE3_87_REG = 0x21;//rgd_dhtxpll_div_tuner_ssc_delta[15:8]
+            BKE3_88_REG = 0xf0;//rgd_dhtxpll_div_tuner_ssc_delta[ 7:0]
+            BKE3_8A_REG = 0x36;//rgd_dhtxpll_div_tuner_m
+            BKE3_81_REG = 0x03;//rgd_dhtxpll_div_tuner_ssc_prd[15:8]
+            BKE3_82_REG = 0x18;//rgd_dhtxpll_div_tuner_ssc_prd[ 7:0]
+            break;
+        case HBR:
+            BKA1_4D_REG = 0x37;//[5:4]rg_dhtxpll_lpf_czset: 11-6pF
+                               //[2:0]rg_dhtxpll_lpf_rzset: 111-20K
+            BKA1_4E_REG |= 0x04;//[2:0]rg_dhtxpll_lpf_cinset: 100-2.5p
+            BKA1_4F_REG |= 0xe0;//[7:5]rg_dhtxpll_lpf_cpset: 111-1000f
+            BKE3_84_REG = 0x21;//rgd_dhtxpll_div_tuner_ssc_delta1[15:8]
+            BKE3_85_REG = 0xf0;//rgd_dhtxpll_div_tuner_ssc_delta1[ 7:0]
+            BKE3_87_REG = 0x21;//rgd_dhtxpll_div_tuner_ssc_delta[15:8]
+            BKE3_88_REG = 0xf0;//rgd_dhtxpll_div_tuner_ssc_delta[ 7:0]
+            BKE3_8A_REG = 0x36;//rgd_dhtxpll_div_tuner_m
+            BKE3_81_REG = 0x03;//rgd_dhtxpll_div_tuner_ssc_prd[15:8]
+            BKE3_82_REG = 0x18;//rgd_dhtxpll_div_tuner_ssc_prd[ 7:0]
+            break;
+        case HBR2:
+            BKA1_4D_REG = 0x37;//[5:4]rg_dhtxpll_lpf_czset: 11-6pF
+                               //[2:0]rg_dhtxpll_lpf_rzset: 111-20K
+            BKA1_4E_REG |= 0x04;//[2:0]rg_dhtxpll_lpf_cinset: 100-2.5p
+            BKA1_4F_REG |= 0xc0;//[7:5]rg_dhtxpll_lpf_cpset: 110-900f
+            BKE3_84_REG = 0x20;//rgd_dhtxpll_div_tuner_ssc_delta1[15:8]
+            BKE3_85_REG = 0xa0;//rgd_dhtxpll_div_tuner_ssc_delta1[ 7:0]
+            BKE3_87_REG = 0x20;//rgd_dhtxpll_div_tuner_ssc_delta[15:8]
+            BKE3_88_REG = 0xa0;//rgd_dhtxpll_div_tuner_ssc_delta[ 7:0]
+            BKE3_8A_REG = 0x36;//rgd_dhtxpll_div_tuner_m
+            BKE3_81_REG = 0x03;//rgd_dhtxpll_div_tuner_ssc_prd[15:8]
+            BKE3_82_REG = 0x21;//rgd_dhtxpll_div_tuner_ssc_prd[ 7:0]
+            break;
+        case HBR3:
+            BKA1_4D_REG = 0x13;//[5:4]rg_dhtxpll_lpf_czset: 01-2pF
+                               //[2:0]rg_dhtxpll_lpf_rzset: 011-60K
+            BKA1_4E_REG |= 0x01;//[2:0]rg_dhtxpll_lpf_cinset: 001-1p
+            BKA1_4F_REG |= 0xc0;//[7:5]rg_dhtxpll_lpf_cpset: 111-1000f
+            BKE3_84_REG = 0x20;//rgd_dhtxpll_div_tuner_ssc_delta1[15:8]
+            BKE3_85_REG = 0xa0;//rgd_dhtxpll_div_tuner_ssc_delta1[ 7:0]
+            BKE3_87_REG = 0x20;//rgd_dhtxpll_div_tuner_ssc_delta[15:8]
+            BKE3_88_REG = 0xa0;//rgd_dhtxpll_div_tuner_ssc_delta[ 7:0]
+            BKE3_8A_REG = 0x51;//rgd_dhtxpll_div_tuner_m
+            BKE3_81_REG = 0x03;//rgd_dhtxpll_div_tuner_ssc_prd[15:8]
+            BKE3_82_REG = 0x21;//rgd_dhtxpll_div_tuner_ssc_prd[ 7:0]
+            break;
+    }
+    Drv_DpTx_SscEn(ENABLED);
+}
+#endif
+
+//disable before training
+void Drv_DpTx_FecEn(u8 ucOpt)//before training
+{
+    if (ucOpt == ENABLED)
+    {
+        BKF5_7F_REG &= BIT3_0;//[3]DP tx start FEC encoding dis
+        BKF5_7E_REG |= BIT3_1;//[3]rgd_fec_disable
+        BKF5_53_REG |= BIT6_1;//DPTX FEC encode data out to mainlink
+        BKF5_7E_REG &= BIT3_0;//[3]rgd_fec_en
+
+        BKF5_7E_REG |= BIT7_1;//[7]Scrambler lfsr stop shift in fec encode mode
+        BKF5_80_REG = 0x08;   //GD_FEC_DUMMY_DLY,solve encode+hdcp2.3 fail issue
+        BKF5_89_REG &= BIT2_0;//[2]:fec fifo soft reset: 0-en
+        BKF5_89_REG |= BIT2_1;//[2]:fec fifo soft reset: 1-dis
+        BKF5_7F_REG |= BIT3_1;//[3]DP tx start FEC encoding
+        
+        BKF6_ED_REG = 0x10;//Timer to gate BS period
+    }
+    else
+    {
+        BKF5_53_REG &= BIT6_0;//[6]rgd_fec_data_en: 0-dis
+        BKF5_7E_REG &= BIT7_0;//[7]scrambler lfsr stop shift in fec encode mode
+        BKF5_7E_REG |= BIT3_1;//[3]rgd_fec_disable: 1-dis
+        BKF5_7F_REG &= BIT3_0;//[3]DP tx start FEC encoding dis
+
+        BKF6_ED_REG = 0x04;//Timer to gate BS period
+        BKF5_89_REG &= 0xf5;//[3]rgd_dptx_fec_enc_sw_rst_n; [1]rgd_dptx_dsc_pix_sw_rst_n
+        Ocm_Delay1ms(1);
+        BKF5_89_REG |= 0x0a;
+    }
+}
+
+void Drv_DpTx_FecPllInit(void)
+{
+    BKA2_00_REG = 0x02;//[1:0]rg_lmtxpll_ref_sel: 10-aa_edptx_read_clk
+    BKA2_01_REG &=0xe0;
+    BKA2_02_REG = 0xa8;//[7:4]rg_lmtxpll_cpcur_sel
+    BKA2_03_REG = 0x00;
+    BKE2_63_REG = 0x30;// ks= 2;
+    BKE2_63_REG &= BIT3_0;//[3]rgd_lmtxpll_pll_cal_en: 0-dis
+}
+
+void Drv_DpTx_SdmSet(u8 IsSdmEn)
+{
+    if(IsSdmEn == ENABLED)
+    {
+        BKE2_C2_REG = 0x3e;//rgd_lmtxpll_div_tuner_m: m-62.5
+        BKE2_C3_REG = 0x80;//rgd_lmtxpll_div_tuner_k[23:16]
+        BKE2_C4_REG = 0x00;//rgd_lmtxpll_div_tuner_k[15: 8]
+        BKE2_C5_REG = 0x00;//rgd_lmtxpll_div_tuner_k[ 7: 0]
+        BKE2_B7_REG = 0x60;//[7:6]rgd_lmtxpll_div_tuner_diff_ord_sel
+                            //[5:4]rgd_lmtxpll_div_tuner_sdm_ord_sel 
+        BKA2_0A_REG &= BIT7_0;//[7]rgd_sw_en_lmtxpll_div_set: 0-da_lmtxpll_div_set(hardware mode)
+    }
+    else
+    {
+
+        BKE2_C2_REG = 0x00;//rgd_lmtxpll_div_tuner_m: m-62.5
+        BKE2_C3_REG = 0x00;//rgd_lmtxpll_div_tuner_k[23:16]
+        BKE2_C4_REG = 0x00;//rgd_lmtxpll_div_tuner_k[15: 8]
+        BKE2_C5_REG = 0x00;//rgd_lmtxpll_div_tuner_k[ 7: 0]
+        BKE2_B7_REG = 0x00;//[7:6]rgd_lmtxpll_div_tuner_diff_ord_sel
+                            //[5:4]rgd_lmtxpll_div_tuner_sdm_ord_sel    
+    }
+}
+
+//==============================================================================================================
+// Func Name   : Mod_FrlRx_ffeStateSet
+// Description : dhtx_rd_clk * rgd_lmtxpll_div_tuner_m(62.5) / (rg_lmtxpll_prediv_sel * rg_lmtxpll_tmds_freq_set)
+// Input       : void   
+// Output      : None
+// Return      : void
+//==============================================================================================================
+void Drv_DpTx_FecPllCal(void)
+{
+    u8 ucFecCalCnt;
+    u8 ucFecLockCnt;
+    u32 ulDhTxRdClk;
+    Drv_System_FmSet(TOP_FM, TOPFM_AD_DHTX_READ_CLK);//ad_dhtx_read_clk -wangtt- wait modify
+    Ocm_Delay1ms(10);
+    ulDhTxRdClk = Drv_System_FmGet(TOP_FM, HALF_PIX_CLK);//ad_dhtx_read_clk -wangtt- wait modify
+    printLT(PRINT_PRIO_TEST, "\nDptx_read_clk is 0x%lx", ulDhTxRdClk);
+
+    Drv_DpTx_SdmSet(DISABLED);
+    BKA2_01_REG &= 0xe0;//[4:0]rg_lmtxpll_prediv_sel: default
+    BKA2_06_REG &= 0x8f;//[6:4]rg_lmtxpll_tmds_freq_set: default
+    if (ulDhTxRdClk > 307200)//307.2M ~ 614.4M
+    {
+        BKA2_00_REG |= 0x04;//bit2 lmtxpll_post_div = 2;
+        BKA2_01_REG |= 0x1f;//[4:0]rg_lmtxpll_prediv_sel: 01111-/32
+        BKA2_06_REG |= 0x20;//[6:4]rg_lmtxpll_tmds_freq_set: 010-/4
+    }
+    else if(ulDhTxRdClk > 153600)//153.6M ~ 307.2M
+    {
+        BKA2_00_REG |= 0x04;//bit2 lmtxpll_post_div = 2;
+        BKA2_01_REG |= 0x0f;//[4:0]rg_lmtxpll_prediv_sel: 01111- /16
+        BKA2_06_REG |= 0x30;//[6:4]rg_lmtxpll_tmds_freq_set: 010-/8
+    }
+    else if(ulDhTxRdClk > 76800)//76.8M ~ 153.6M
+    {
+        BKA2_00_REG |= 0x04;//bit2 lmtxpll_post_div = 2;
+        BKA2_01_REG |= 0x07;//[4:0]rg_lmtxpll_prediv_sel: 01111-/8
+        BKA2_06_REG |= 0x40;//[6:4]rg_lmtxpll_tmds_freq_set: 010-/16
+    }
+    else// < 76.8M
+    {
+        BKA2_00_REG |= 0x04;//bit2 lmtxpll_post_div = 2;
+        BKA2_01_REG |= 0x03;//[4:0]rg_lmtxpll_prediv_sel: 01111-/4
+        BKA2_06_REG |= 0x50;//[6:4]rg_lmtxpll_tmds_freq_set: 010-/32
+    }
+    BKA2_03_REG |= 0x30;//[5:4]rg_lmtxpll_divlink_muxsel: 11-from aa_pll_fec_clk
+    BKA2_06_REG &= 0xf0;//[3:0]rg_lmtxpll_defec_divsel: 0000-/1
+    BKA2_0A_REG =  0xbe;//[7]rgd_sw_en_lmtxpll_div_set: div = 62.5  
+    ucFecCalCnt = 0;
+    do
+    { 
+        BKE1_07_REG &= 0xfc;//[3]rgd_sw_lmtxpll_div_tuner_rst_n
+                            //[1]rgd_sw_lmtxpll_pll_lock_rst_n
+                            //[0]rgd_sw_lmtxpll_cal_rst_n
+        BKE1_0F_REG &= BIT4_0;//[4]rg_sw_lmtxpll_rst_n: 0-en 
+        BKE2_63_REG &= BIT3_0;//[3]rgd_lmtxpll_pll_cal_en: 0-dis
+        Ocm_Delay1ms(1);
+        BKE1_07_REG |= 0x03;//[3]rgd_sw_lmtxpll_div_tuner_rst_n
+                            //[1]rgd_sw_lmtxpll_pll_lock_rst_n
+                            //[0]rgd_sw_lmtxpll_cal_rst_n
+        BKE1_0F_REG |= BIT4_1;//[4]rg_sw_lmtxpll_rst_n: 1-dis 
+        Ocm_Delay1ms(1);      //necessary for lmtxpll cal,lmtxpll rst will cause wrong band value
+        BKE2_63_REG |= BIT3_1;//[3]rgd_lmtxpll_pll_cal_en: 1-en
+        Ocm_Delay1ms(2);
+        ucFecCalCnt++;
+    }while((ucFecCalCnt < 3)&&((BKE2_6D_REG & 0x03) != 0x02));//
+    printLT(PRINT_PRIO_HIG, "\nfecpllband =  0x%02bx", BKE2_74_REG);
+    ucFecLockCnt = 0;
+    while((!(BKE2_28_REG & BIT2_1)) && (ucFecLockCnt < 6))  //PLL lock output lock status
+    {
+        ucFecLockCnt++;
+        Ocm_Delay1ms(1);
+    }
+    Drv_DpTx_SdmSet(ENABLED);
+}
+
+u8 Drv_DpTx_FecPllStableCheck(void)
+{
+    if (BKE2_28_REG & BIT2_1)
+    {
+        printLT(PRINT_PRIO_HIG, "\nDp tx fec pll lock");
+        return STABLE;
+    }
+    else
+    {
+        printLT(PRINT_PRIO_HIG, "\nDp tx fec pll unlock");
+        return UNSTABLE;
+    }
+}
+void Drv_DpTx_AuxSwapSet(u8 b1IsEnable)
+{
+    BKA3_86_REG |= BIT3_1;;
+    BKA3_6D_REG = 0XBF;
+    BKA3_6C_REG = 0XAC;
+    BKA3_6E_REG = 0X00;
+    BKA3_6B_REG |= BIT4_1;
+    (b1IsEnable == TRUE)?(BKA3_6C_REG |= BIT7_1):(BKA3_6C_REG &= BIT7_0);
+    (b1IsEnable == TRUE)?(BKA3_86_REG &= BIT2_0):(BKA3_86_REG |= BIT2_1);
+}
+#if TYPECTX_EN == ENABLED
+void Drv_DpTx_TypeCOutSet(void)
+{
+        if(UCCStatus.b1IsFlip == FALSE)
+        {
+            Drv_DpTx_AuxSwapSet(FALSE);
+            Drv_DpTx_MainLinkInit(TYPEC_FEMALE_NOFLIP);
+        }
+        else
+        {
+           Drv_DpTx_AuxSwapSet(TRUE); 
+           Drv_DpTx_MainLinkInit(TYPEC_FEMALE_FLIP); 
+        }
+}
+#endif
+
+
+void Drv_DpTx_LaneSwingSet(bool b1IsDpOrTypec, u8 ucStd, u8 ucLane)
+{
+    if(b1IsDpOrTypec == DP_INTF)
+    {
+        Drv_DpTx_SwingAdjust(ucStd, ucLane);
+    }
+    #if TYPECTX_EN == ENABLED
+    else
+    {
+        if(ucLane == 0)
+        {
+            (UCCStatus.b1IsFlip == FALSE)?(Drv_DpTx_SwingAdjust(ucStd, 1)):(Drv_DpTx_SwingAdjust(ucStd, 0)); 
+        }
+        else if(ucLane == 1)
+        {
+            (UCCStatus.b1IsFlip == FALSE)?(Drv_DpTx_SwingAdjust(ucStd, 3)):(Drv_DpTx_SwingAdjust(ucStd, 2)); 
+        }
+        else if(ucLane == 2)
+        {
+            (UCCStatus.b1IsFlip == FALSE)?(Drv_DpTx_SwingAdjust(ucStd, 2)):(Drv_DpTx_SwingAdjust(ucStd, 3)); 
+        }
+        else if(ucLane == 3)
+        {
+            (UCCStatus.b1IsFlip == FALSE)?(Drv_DpTx_SwingAdjust(ucStd, 0)):(Drv_DpTx_SwingAdjust(ucStd, 1)); 
+        }
+    }
+    #endif
+}
+
+void Drv_DpTx_EdpScrambleSet(u8 IsEdpScramble)
+{
+    if(IsEdpScramble == ENABLED)
+    {
+        BKF5_7F_REG |= BIT7_1;
+    }
+    else
+    {
+        BKF5_7F_REG &= BIT7_0;
+    }
+}
+
+void Drv_DpTx_ScrambleEn(u8 ucOpt)
+{
+    if (ucOpt == ENABLED)
+    {
+        BKF5_7D_REG &= BIT1_0;//[1]rgd_scrambling_disable: 0-scramble en
+    }
+    else
+    {
+        BKF5_7D_REG |= BIT1_1;//[1]rgd_scrambling_disable: 0-scramble dis
+    }
+}
+
+void Drv_DpTx_TrainFirstSet(void)
+{
+    BKF5_01_REG = 0x00;//[2]Link training TPS1 transmit enable
+    BKF5_01_REG = 0x04;//[2]Link training TPS1 transmit enable
+
+    BKF5_02_REG &= BIT5_0;
+    BKF5_02_REG |= BIT5_1;//[5]dp tx ansi 8b/10b encoder polarity software reset
+}
+
+void Drv_DpTx_TrainSecSetForTps4(void)
+{
+    BKF5_01_REG = 0x00;//[2]Link training TPS1 transmit enable
+    BKF5_01_REG = 0x90;//7:6 TPS4 PN [2]Link training TPS1 transmit enable
+}
+
+void Drv_DpTx_TrainSecSetForTps3(void)
+{
+    BKF5_01_REG = 0x00;//[2]Link training TPS1 transmit enable
+    BKF5_01_REG = 0x01;//[2]Link training TPS1 transmit enable
+}
+
+void Drv_DpTx_TrainSecSetForTps2(void)
+{
+    BKF5_01_REG = 0x00;//[2]Link training TPS1 transmit enable
+    BKF5_01_REG = 0x02;//[2]Link training TPS1 transmit enable
+}
+
+
+void Drv_DpTx_TrainPtnSet(void)
+{
+    #if CHIP_VERSION_SEL == U1_VERSION
+    BKF5_84_REG &= BIT6_0;
+    BKF5_84_REG |= BIT6_1; //fix 720p 5.4g4lane skew issue
+    #endif
+    BKF5_01_REG = 0x08;//[3]Main link video stream transmit enable
+}
+
+void Drv_DpTx_TrainFailSet(void)
+{
+    BKF5_01_REG = 0x00;//[1]link training tps2 transmit enable, [0]link training tps3 transmit enable
+}
+
+
+void Drv_DpTx_HpdClear(void)
+{
+    BKE5_35_REG |= BIT5_1;
+    BKE5_35_REG &= BIT5_0;
+}
+
+//========================================================================
+// Func Name   : Drv_DpTx_VdChkStableGet
+// Description : juage tx video stable or unstable
+// Input       : void  
+// Output      : None
+// Return      : STABLE/UNSTABLE/UNKNOWN
+//========================================================================
+u8 Drv_DpTx_VdChkStableJudge(void)
+{
+    u16 usDpTxHact,usHdmiRxHact;
+    u16 usDpTxVact,usHdmiRxVact;
+
+    #if DPTX_DSC_ENC_SUPPORT == ENABLED
+    if (Drv_DpTxDscEnc_SwitchGet() == ENABLED)
+    {
+        return STABLE;
+    }
+    #endif
+    #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+    if (g_stDpTx.b1SrcDscByEn == ENABLED)
+    {
+        return STABLE;
+    }
+    #endif
+    usHdmiRxHact = ((u16)BKC8_58_REG << 8) + BKC8_59_REG;
+    usHdmiRxVact = ((u16)BKC8_56_REG << 8) + BKC8_57_REG;
+    usDpTxHact   = ((u16)BKF7_FA_REG << 8) + BKF7_FB_REG;
+    usDpTxVact   = ((u16)BKF7_F8_REG << 8) + BKF7_F9_REG;
+    #if CSC_SUPPORT == ENABLED
+    if(BKC7_67_REG & BIT6_1) //YUV420 to YUV422 enable
+    {
+        usHdmiRxHact <<= 1;
+    }
+    else if(BKC7_66_REG & BIT1_1) //YUV422 to YUV420 enable
+    {
+        usHdmiRxHact >>= 1;
+    }
+    #endif
+
+    if ((usHdmiRxHact == usDpTxHact) && (usHdmiRxVact == usDpTxVact))
+    {
+        return STABLE;
+    }
+    else
+    {
+        return UNSTABLE;    
+    }
+}
+
+void Drv_DpTx_VbidNoVideoStreamFlag(u8 ucOpt)
+{
+    if (ucOpt == ENABLED)
+    {
+        BKF5_7C_REG |= BIT7_1;//[7]rgd_no_videostream_flag: 1-no video
+    }
+    else
+    {
+        BKF5_7C_REG &= BIT7_0;//[7]rgd_no_videostream_flag: 0-video out
+    }
+}
+
+void Drv_DpTx_VidOutEn(u8 b1VidOut)
+{
+    if(b1VidOut == TRUE)
+    {
+        BKF7_1E_REG |= BIT6_1;//[6]rgd_video_ready: 1-ready
+        #if CHIP_VERSION_SEL == U1_VERSION
+        if (!(BKF7_E7_REG & BIT7_1))
+        {
+            printf("\nDp tx idle ptn en");
+            BKF7_1E_REG &= BIT6_0;
+            BKF7_2A_REG |= BIT3_1;
+            BKF7_2A_REG &= BIT3_0;
+            BKF7_1E_REG |= BIT6_1;
+        }
+        #endif
+        #ifdef NVIDIA_FW_EN
+        if(g_stDpTx.ucMisc1&BIT6_1)
+        {
+            Ocm_Delay1ms(50);
+            BKF7_19_REG = g_stDpTx.ucMisc1;
+            BKF6_0E_REG |= BIT1_1;//solve CTS HF2-24 -> CTS HF2-71 issue
+        }
+        #endif
+    }
+    else
+    {
+        BKF6_0D_REG = 0x00;
+        BKF6_0E_REG = 0x00;
+        BKF7_1E_REG &= BIT6_0;//[6]rgd_video_ready: 0-not ready
+    }
+}
+
+void Drv_DpTx_PhyDis(u8 ucOpt)
+{
+    if (ucOpt == ENABLED)
+    {
+       BKA1_5A_REG &= 0X0F;//
+    }
+    else
+    { 
+       BKA1_5A_REG |= 0XFF;//        
+    }
+}
+
+void Drv_DpTx_DoblyHdrEnable(u8 TypecAppleFlag )
+{
+    #if HDR_SUPPORT == ENABLED
+
+    #if RX_PORT_SIGN == DP_PORT
+    BKF6_9C_REG  = 0x00;
+    #endif
+    #if RX_PORT_SIGN == HDMI_PORT
+    BKF6_9C_REG = 0x40;
+    BKF6_9D_REG = 0x21;
+    #endif
+    #if CHIP_VERSION_SEL < U3_VERSION
+    BKF6_16_REG = 0x81; //87
+    BKF6_17_REG = 0x1d; //01
+    
+    if(TypecAppleFlag==1)
+    {
+     BKF6_17_REG = 0x1b; //01
+    }
+    BKF6_18_REG = 0x4c; //1A
+    BKF6_19_REG = 0x01; //version
+    BKF6_1A_REG = BKCC_B3_REG;//lenth,  EXT PKT DATA BYTE1 =     ACP PKT Head
+    memcpy(&BKF6_1B_REG,&BKCC_B5_REG,BKF6_1A_REG);//length   
+    BKF6_0E_REG |= BIT2_1; //[6]dp tx ext pkt en
+    #else
+    Drv_System_SramPathSet(DPTX_HDR_PKT_PATH);
+    BKF6_93_REG = 0x81;//81
+    BKF6_94_REG = 0x1d;//00
+    BKF6_95_REG = 0x4c;//00
+    BKF6_0D_REG |= BIT5_1;//[5]dp tx dobly hdr pkt en
+    #endif
+    #endif
+}
+
+void Drv_DpTx_StaticHdrEnable(void)
+{
+    #if HDR_SUPPORT == ENABLED
+
+    #if RX_PORT_SIGN == DP_PORT
+    BKF6_9C_REG  = 0x00;
+    #endif
+    #if RX_PORT_SIGN == HDMI_PORT
+    BKF6_9C_REG  = 0x80;
+    BKF6_9D_REG  = 0x01;                   
+    #endif
+    #if CHIP_VERSION_SEL < U3_VERSION
+    BKF6_16_REG = 0x87; //87
+    BKF6_17_REG = 0x1d; //01
+    BKF6_18_REG = 0x4c; //1A
+    BKF6_19_REG = 0x01; //version
+    BKF6_1A_REG = BKCC_77_REG;//lenth,  EXT PKT DATA BYTE1 =     ACP PKT Head
+    memcpy(&BKF6_1B_REG,&BKCC_79_REG,BKF6_1A_REG);//length   
+    BKF6_0E_REG |= BIT2_1; //[6]dp tx ext pkt en
+    #else
+    Drv_System_SramPathSet(DPTX_HDR_PKT_PATH);
+    BKF6_90_REG  = 0x87;//87
+    BKF6_91_REG  = 0x1d;//01
+    BKF6_92_REG  = 0x4c;//1A
+    BKF6_0D_REG |= BIT6_1;//[6]dp tx hdr pkt en
+    #endif
+    #endif
+}
+
+void Drv_DpTx_StaticHdrDisable(void)
+{
+    u8 HDR_Null_data[26]=0;
+    #if HDR_SUPPORT == ENABLED
+
+    #if RX_PORT_SIGN == DP_PORT
+    BKF6_9C_REG  = 0x00;
+    #endif
+    #if RX_PORT_SIGN == HDMI_PORT
+    BKF6_9C_REG  = 0x80;
+    BKF6_9D_REG  = 0x01;                   
+    #endif
+    #if CHIP_VERSION_SEL < U3_VERSION
+    BKF6_16_REG = 0x87; //87
+    BKF6_17_REG = 0x1d; //01
+    BKF6_18_REG = 0x4c; //1A
+    BKF6_19_REG = 0x01; //version
+    BKF6_1A_REG = 0X1A;//lenth,  EXT PKT DATA BYTE1 =     ACP PKT Head
+    memcpy(&BKF6_1B_REG,&HDR_Null_data,BKF6_1A_REG);//length   
+    BKF6_0E_REG |= BIT2_1; //[6]dp tx ext pkt en
+    #else
+    Drv_System_SramPathSet(DPTX_HDR_PKT_PATH);
+    BKF6_90_REG  = 0x87;//87
+    BKF6_91_REG  = 0x1d;//01
+    BKF6_92_REG  = 0x4c;//1A
+    BKF6_0D_REG |= BIT6_1;//[6]dp tx hdr pkt en
+    #endif
+    #endif
+}
+void Drv_DpTx_DynamicHdrEnable(void)
+{
+   //printLT(PRINT_PRIO_HIG, "\n2222");
+    BKF6_93_REG  = 0x81;       
+    BKF6_94_REG  = 0x1d;//87
+    BKF6_95_REG  = 0x4c;//01
+    
+    BKF6_9C_REG  = 0x40;
+       
+    BKF6_9D_REG  = 0x24;//       
+    BKF6_9E_REG  = 0x07;
+    
+     
+    BKF6_0D_REG |= BIT5_1;//[6]dp tx hdr pkt en
+}
+
+void Drv_DpTx_DivLinkClkSet(void)
+{
+    //ad_dhtx_div_link_clk src set
+    BKA2_00_REG =  0x02;//[1:0]rg_lmtxpll_ref_sel: 10-aa_edptx_read_clk
+    BKA2_01_REG &= 0xe0;//[4:0]rg_lmtxpll_prediv_sel: default
+    BKA2_03_REG &= 0xcf;//[5:4]rg_lmtxpll_divlink_muxsel: 00-aa_pll_ref_clk
+}
+
+//#if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+#if 0
+void Drv_DpTx_MvidCal(void)
+{
+    u16 usBypassHtol;
+    u16 ucFl_Clk;
+    u32 Mvid,Nvid;
+    u32 ulDsc_Bypass_Pixclk;
+ 
+    if(g_stAuxDpTx.ucLinkRateCap == HBR3)
+    {
+        ucFl_Clk = 0x32a;//8.1g * 100 = 810
+    }
+    else if(g_stAuxDpTx.ucLinkRateCap == HBR2)
+    {
+        ucFl_Clk = 0x21c;//5.4g * 100 = 540
+    }
+    else if (g_stAuxDpTx.ucLinkRateCap == HBR)
+    {
+        ucFl_Clk = 0x10e;//2.7g * 100 = 270
+    }
+    else
+    {
+        ucFl_Clk = 0xa2;//1.62g * 100 =162
+    }
+
+    Nvid = 0xc0000;
+    BKF6_00_REG = Nvid>>16;//[23:16]NVID,08/1080p,0c/4K60
+    BKF6_01_REG = Nvid>>8; //[15:8]NVID,3d/1080p,54/4K60,
+    BKF6_02_REG = Nvid;    //[7:0]NVID,60/1080p,27/4K60
+
+    #if RX_PORT_SIGN == DP_PORT
+    usBypassHtol        = ((u16)BKF3_06_REG<<8)+ BKF3_07_REG;
+    ulDsc_Bypass_Pixclk = ((double)g_stDpTx.ulTxPixelClk *g_stDpRxDscByTiming.usHtol)/usBypassHtol;
+    #endif
+    #if RX_PORT_SIGN == HDMI_PORT
+    usBypassHtol        = ((u16)BKCB_44_REG<<8)+ BKCB_45_REG;
+    ulDsc_Bypass_Pixclk = ((double)g_stDpTx.ulTxPixelClk *g_stHdmiRxDscByTiming.usHtol)/usBypassHtol;
+    #endif
+    printLT(PRINT_PRIO_HIG, "\nDscBypass_Pixclk = %ld", ulDsc_Bypass_Pixclk);
+
+    ulDsc_Bypass_Pixclk = ceil((double)ulDsc_Bypass_Pixclk /1000); //
+    Mvid = (ulDsc_Bypass_Pixclk * Nvid)/ucFl_Clk;  //1080p/
+    
+    BKF6_07_REG = Mvid >> 16;//MVID, 0x09/4k60
+    BKF6_08_REG = Mvid >> 8; //MVID, 0x10/4k60
+    BKF6_09_REG = Mvid;     //MVID, 0x50/4k60
+    BKF6_06_REG |= BIT3_1;   //MVID from register
+}
+#endif
+
+void Drv_DpTx_IrqTrig(void)
+{
+    BKF5_02_REG |= 0x03; //irq enabled
+    BKF5_02_REG &= 0xfc; //irq disable 
+}
+#endif

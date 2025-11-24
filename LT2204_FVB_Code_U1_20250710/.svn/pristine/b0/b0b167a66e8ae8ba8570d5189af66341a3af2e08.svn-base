@@ -1,0 +1,69 @@
+#include "include.h"
+#if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD) || (CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP))
+
+u32 Drv_VideoCheckSingle_Get(u8 para)
+{ 
+    u32 rtn=0;
+    switch(para)
+    {
+        case HTOTAL_POS:
+            rtn = PACK_16_BIT(BKF7_F6_REG, BKF7_F7_REG) << 1 ;
+            break;
+        case HACTIVE_POS:
+            rtn = PACK_16_BIT(BKF7_FA_REG, BKF7_FB_REG) << 1 ;
+            break;
+        case HFP_POS:
+            rtn = PACK_16_BIT(BKF7_F2_REG, BKF7_F3_REG) << 1 ;
+            break;
+        case HSW_POS:
+            rtn = PACK_16_BIT(BKF7_EA_REG, BKF7_EB_REG) << 1 ;
+            break;    
+        case HBP_POS:
+            rtn = PACK_16_BIT(BKF7_F0_REG, BKF7_F1_REG) << 1 ;
+            break;
+        case VTOTAL_POS:
+            rtn = PACK_16_BIT(BKF7_F4_REG, BKF7_F5_REG);
+            break;
+        case VACTIVE_POS:
+            rtn = PACK_16_BIT(BKF7_F8_REG, BKF7_F9_REG);
+            break;
+        case VFP_POS:
+            rtn = PACK_16_BIT(BKF7_EE_REG, BKF7_EF_REG); 
+            break;
+        case VSW_POS:
+            rtn = PACK_16_BIT(BKF7_E8_REG, BKF7_E9_REG);
+            break;
+        case VBP_POS:
+            rtn = PACK_16_BIT(BKF7_EC_REG, BKF7_ED_REG);
+            break;
+        case HSPOL_POS:
+            rtn = GET_BIT(BKF7_E7_REG, BIT4);
+            break;
+        case VSPOL_POS:
+            rtn = GET_BIT(BKF7_E7_REG, BIT5);
+            break;
+        default:
+            break;
+    }
+    return rtn;
+}
+
+
+void Drv_VideoCheckAll_Get(OUT StructTiming *video_time)
+{
+    video_time->Htotal    =     Drv_VideoCheckSingle_Get(HTOTAL_POS);
+    video_time->Hactive   =     Drv_VideoCheckSingle_Get(HACTIVE_POS);
+    video_time->Hfp       =     Drv_VideoCheckSingle_Get(HFP_POS);
+    video_time->Hsw       =     Drv_VideoCheckSingle_Get(HSW_POS);
+    video_time->Hbp       =     Drv_VideoCheckSingle_Get(HBP_POS);
+    
+    video_time->Vtotal    =     Drv_VideoCheckSingle_Get(VTOTAL_POS);
+    video_time->Vactive   =     Drv_VideoCheckSingle_Get(VACTIVE_POS);
+    video_time->Vfp       =     Drv_VideoCheckSingle_Get(VFP_POS);
+    video_time->Vsw       =     Drv_VideoCheckSingle_Get(VSW_POS);
+    video_time->Vbp       =     Drv_VideoCheckSingle_Get(VBP_POS);
+    
+    video_time->Hspol     =     Drv_VideoCheckSingle_Get(HSPOL_POS);
+    video_time->Vspol     =     Drv_VideoCheckSingle_Get(VSPOL_POS);
+}
+#endif

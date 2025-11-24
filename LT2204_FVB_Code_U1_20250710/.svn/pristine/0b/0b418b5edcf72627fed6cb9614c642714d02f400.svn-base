@@ -1,0 +1,120 @@
+/******************************************************************************
+*  Copyright (C), 2006-2022, Lontium Tech.
+*  Project       : LT2102
+*  File Name     : DrvDCS.c
+*  Version       : V1.0
+*  Author        : AndyWang
+*  Created       : 2022/10/22
+*  Description   : MIPI DSI LP Command
+*  
+*  History:
+*  2022/10/22     AndyWang      Created File
+******************************************************************************/
+
+#include "Include.h"
+#if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD) || (CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP))
+
+#define LPK_DI  0x29
+#define SPK_DI  0x15
+#define LPT_DI  0x39
+#define SPT_DI  0x15
+
+
+
+void Drv_MipiTx_Dsidcs_Init(void)
+{
+    //BKF9_A2_REG = 0x0F;
+    //mipi Dcs Cmd Enable
+    BKF9_6D_REG = 0xFF;
+    BKF9_6E_REG = 0xFF;
+    BKF9_6F_REG |= 0x0F;
+
+    CLEAR_BIT(BKF9_AB_REG, BIT6);
+    BKF9_B6_REG = 0x10; //auto dcs cmd mode delay time
+    BKF9_A3_REG = 0x04; //SYS_CLK = 40M modify 210211023
+    BKF9_9A_REG = 0xc2; //bit7:ecc and crc from soft, bit6:lp sand pkt enable,0-dis, 1-en,bit3~0:BTA_CNT1
+    BKF9_9B_REG = 0x46; //bit7~4:BTA CNT2 , bit3~0:BTA CNT2
+    BKF9_9C_REG = 0x10; //BTA zero
+    BKF9_9D_REG = 0x50; //dcs_tx_rqst_level
+    BKF9_9E_REG = 0x10; //delay before bta request
+    BKF9_9F_REG = 0x50; //bta time out   
+}
+
+
+void Drv_MipiTx_DcsPktWrite(u8 DCS_DI, u8 Len, u8* Ptr )
+{
+    u8 i=0;
+    BKF9_A0_REG &= BIT4_0; //[4]dcs_WriteOrRead_mode, 0=write,1=read
+    if((DCS_DI == 0x29)||(DCS_DI == 0x39))//send long packet
+    {   
+        BKF9_9A_REG = 0xE0; //Hardware calculate ecc and crc&LP mode send pkt enable&Short pkt
+        BKF9_99_REG = ( Len + 6 );//LP mode send pkt data length, Max 127 byte; Inclued pkt head for long pkt, equal 4 for short pkt.
+        BKF9_98_REG = DCS_DI;
+        BKF9_98_REG = Len ;
+        BKF9_98_REG = 0x00;
+        for( i = 0; i < Len; i++ )
+        {
+            BKF9_98_REG = *Ptr;
+            Ptr++;
+        }
+    }
+    else//send short packet
+    {
+        BKF9_9A_REG = 0xC0; //Hardware calculate ecc and crc&LP mode send pkt enable&Short pkt
+        BKF9_99_REG = 0x04;//LP mode send pkt data length, Max 127 byte; Inclued pkt head for long pkt, equal 4 for short pkt.
+        BKF9_98_REG = DCS_DI;
+        BKF9_98_REG = *Ptr ;
+        BKF9_98_REG = *( Ptr + 1 );
+    }
+        //Ocm_Delay1us(15);//maybe less time is also ok 
+        Ocm_Delay1ms(1);
+        BKF9_9A_REG = 0x00;
+        CLEAR_BIT(BKF9_AB_REG, BIT6);
+}
+
+void Drv_MipiTx_DcsPktRead(u8 DCS_DI, u8 ucLen, u8* Ptr )
+{
+    u8 i = 0;
+
+    //BKF9_A0_REG = 0x10;
+    SET_BIT(BKF9_A0_REG, BIT4);
+
+    if(ucLen == 2)
+    {
+        BKF9_9A_REG = 0xc2;
+        BKF9_99_REG = 0x04;
+        BKF9_98_REG = DCS_DI;
+        BKF9_98_REG = *Ptr;
+        BKF9_98_REG = *(Ptr + 1);
+    }
+    else
+    {
+        BKF9_9A_REG = 0xe2;
+        BKF9_99_REG = ucLen + 6;
+        BKF9_98_REG = DCS_DI;
+        BKF9_98_REG = ucLen;
+        BKF9_98_REG = 0x00;
+
+    for(i = 0; i < ucLen; i++)
+    {
+        BKF9_98_REG = *Ptr;
+        Ptr++;
+    }
+    }
+    Ocm_Delay1ms(1);
+
+    CLEAR_BIT(BKF9_AB_REG, BIT6);
+
+}
+
+
+void Drv_MipiTx_Dsidcs_End(void)
+{
+    BKF9_9A_REG = 0x00;
+    CLEAR_BIT(BKF9_AB_REG, BIT6);
+    BKF9_6D_REG = 0x00; //mipi dcs cmd enable error:20210312-2
+    BKF9_6E_REG = 0x00; //mipi dcs cmd enable	   
+}
+
+
+#endif

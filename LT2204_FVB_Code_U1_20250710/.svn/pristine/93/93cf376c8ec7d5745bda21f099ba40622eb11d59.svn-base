@@ -1,0 +1,276 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: FrlRx.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.06.27
+/******************************************************************************/
+#include "include.h"
+
+#if RX_PORT_SIGN == HDMI_PORT
+
+#define EQ_ERR_UPLIMIT      0x8010
+#define EQ_GOOD_MAX         0x8001
+#define EQ_GOOD_MIN         0x8000
+
+#define CHK_EQ_ERR_UPLMT    0
+#define CHK_EQ_GOOD_MAX     1
+
+
+#if HDMIRX_EQ_STAGE == EQ_16_STAGE
+u8 code HDMI20_EQ[16] = {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f};
+u8 code HDMI21_EQ[16] = {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f};
+#elif HDMIRX_EQ_STAGE == EQ_8_STAGE
+u8 code HDMI20_EQ[8] = {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87};
+u8 code HDMI21_EQ[8] = {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87};
+#endif
+
+
+//-------------------------------------------------------------------soft eq end -------------------------------------------------------------
+#if HDMIRX_EQ_MODE == FIX_MODE
+#if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+void Mod_HdmiRxEq_Frl_FixedEqSet(void)
+{
+    u8 ucLoop_Eq;
+    u16 szErrCount_Lane[4] = {0};
+    ucLoop_Eq = 4;
+    for(ucLoop_Eq = 0;ucLoop_Eq < 16;ucLoop_Eq++)
+    {
+        BKA1_13_REG = HDMI21_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+        BKA1_15_REG = HDMI21_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+        BKA1_17_REG = HDMI21_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+        BKA1_19_REG = HDMI21_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+        Drv_HdmiRx_Frl_ErrClr();
+        Ocm_Delay1ms(10);
+        szErrCount_Lane[0] = PACK_16_BIT(BKCD_C6_REG, BKCD_C7_REG);
+        szErrCount_Lane[1] = PACK_16_BIT(BKCD_C8_REG, BKCD_C9_REG);
+        szErrCount_Lane[2] = PACK_16_BIT(BKCD_CA_REG, BKCD_CB_REG);
+        szErrCount_Lane[3] = PACK_16_BIT(BKCD_CC_REG, BKCD_CD_REG);
+        printLT(PRINT_PRIO_HIG, "\nEq = 0x%02bx,0x%04x,0x%04x,0x%04x,0x%04x", BKA1_13_REG,szErrCount_Lane[0],szErrCount_Lane[1],szErrCount_Lane[2],szErrCount_Lane[3]);
+    }
+}
+#endif
+
+void Mod_HdmiRxEq_Tmds_FixedEqSet(void)
+{
+    u8 ucLoop_Eq;
+    u16 szErrCount_Lane[3] = {0};
+    ucLoop_Eq = 7;
+    for(ucLoop_Eq = 0;ucLoop_Eq < 16;ucLoop_Eq++)
+    {
+        BKA1_13_REG = HDMI20_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+        BKA1_15_REG = HDMI20_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+        BKA1_17_REG = HDMI20_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+        BKA1_19_REG = HDMI20_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+        Drv_HdmiRx_Tmds_ErrClr();
+        Ocm_Delay1ms(100);
+        szErrCount_Lane[0] = PACK_16_BIT(BKCC_D8_REG, BKCC_D9_REG);
+        szErrCount_Lane[1] = PACK_16_BIT(BKCC_DA_REG, BKCC_DB_REG);
+        szErrCount_Lane[2] = PACK_16_BIT(BKCC_DC_REG, BKCC_DD_REG);
+
+        printLT(PRINT_PRIO_HIG, "\nEq = 0x%02bx,0x%04x,0x%04x,0x%04x", BKF1_7E_REG,szErrCount_Lane[0],szErrCount_Lane[1],szErrCount_Lane[2]);
+    }
+}
+#endif
+//-------------------------------------------------------------------fixed eq end -------------------------------------------------------------
+
+void Mod_HdmiRxEq_Init(void)
+{
+    #if HDMIRX_EQ_MODE == HW_MODE
+    #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+    Drv_HdmiRx_Frl_HwEqInit();
+    #endif
+    Drv_HdmiRx_Tmds_HwEqInit();
+    #endif
+}
+
+void Mod_HdmiRxEq_Tmds_Set(void)
+{
+    g_stHdmiRx.b1EqSucc = FALSE;
+    Drv_HdmiRx_Tmds_ErrClr();
+    
+    #if HDMIRX_EQ_MODE == SW_MODE
+    Mod_HdmiRxEq_Tmds_EqScan();
+    #endif
+    
+    #if HDMIRX_EQ_MODE == HW_MODE
+    Drv_HdmiRx_Tmds_HwEqEn();
+    #endif
+    
+    #if HDMIRX_EQ_MODE == FIX_MODE
+    Mod_HdmiRxEq_Tmds_FixedEqSet();
+    #endif
+}
+
+u8 Mod_HdmiRxEq_Tmds_StateGet(u8 ucLane)
+{
+    u8 ucRtn = UNKNOWN;
+
+    #if HDMIRX_EQ_MODE == SW_MODE
+    if (ucLane == LANE_ALL)
+    {
+        ucRtn = (g_stHdmiRx.b1EqSucc == 0x0f)? (SUCCESS) : (FAIL);
+    }
+    else
+    {
+        ucRtn = (g_stHdmiRx.b1EqSucc & (0x01 << ucLane))? (SUCCESS) : (FAIL);
+    }
+    #endif
+
+    #if HDMIRX_EQ_MODE == HW_MODE
+    if (ucLane == LANE_ALL)
+    {
+        if((BKCC_EF_REG & 0x77) == 0x07)
+        {
+            ucRtn = SUCCESS;
+        }
+        else if(BKCC_EF_REG & 0x70)
+        {
+            ucRtn = FAIL;
+        }
+    }
+    else
+    {
+        if(BKCC_EF_REG & (0x04 >> ucLane))
+        {
+            ucRtn = SUCCESS;
+        }
+        else if(BKCC_EF_REG & (0x40 >> ucLane))
+        {
+            ucRtn = FAIL;
+        }
+    }
+    #endif
+
+    #if HDMIRX_EQ_MODE == FIX_MODE
+    ucRtn = SUCCESS;
+    #endif
+
+    return ucRtn;
+}
+
+#if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+void Mod_HdmiRxEq_Frl_ValSet(u8 ucLane,u8 ucEqValue)
+{
+    switch(ucLane)
+    {
+        case LANE_0:
+            BKA1_13_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+            break;
+        case LANE_1:
+            BKA1_15_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+            break;
+        case LANE_2:
+            BKA1_17_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+            break;
+        case LANE_3:
+            BKA1_19_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+            break;
+        default:
+            BKA1_13_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+            BKA1_15_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+            BKA1_17_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+            BKA1_19_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+            break;
+    }
+}
+
+//========================================================================
+// Func Name   : eq check in pre detect
+// Description : 如果第一档eq比较差，会导致EqCheckIn中断无法启动，
+//               需要通过该函数辅助启动
+// Input       : void  
+// Output      : None
+// Return      : u8
+//========================================================================
+void Mod_HdmiRxEq_EqCheckInPreDet(void)
+{
+    u8 ucEqIdx;
+    for (ucEqIdx = 0; ucEqIdx < HDMIRX_EQ_STAGE; ucEqIdx++)
+    {
+        if((BKCD_E6_REG & BIT6_1)||(BKCD_E6_REG & BIT0_1))//eq check in int flag
+        {
+            break;
+        }
+        Mod_HdmiRxEq_Frl_ValSet(LANE_ALL, HDMI21_EQ[ucEqIdx]);
+        Ocm_Delay1ms(1);
+    }
+    if(ucEqIdx >= HDMIRX_EQ_STAGE) //pixe > 600M solve 980 change frl off，No video and eq checkin not valid
+    {
+        BKCD_16_REG |= 0x30;
+        BKCD_16_REG &= 0xcf; 
+    }
+    memset(&BKA1_13_REG,0x00,8);
+}
+
+void Mod_HdmiRxEq_Frl_Set(void)
+{
+    g_stHdmiRx.b1EqSucc = FALSE;
+    BKCD_16_REG &= BIT1_0;//[1]rgd_eq_pass_soft: 0-dis;
+
+    Drv_HdmiRx_Frl_ErrClr();
+
+    #if HDMIRX_EQ_MODE == SW_MODE
+    if (Mod_HdmiRxEq_Frl_EqScanLR() == FALSE)
+    {
+        Mod_HdmiRxEq_Frl_EqScanAll();
+    }
+    #endif
+
+    #if HDMIRX_EQ_MODE == HW_MODE
+    Drv_HdmiRx_Frl_HwEqEn();
+    #endif
+
+    #if HDMIRX_EQ_MODE == FIX_MODE
+    Mod_HdmiRxEq_Frl_FixedEqSet();
+    #endif
+}
+
+u8 Mod_HdmiRxEq_Frl_StateGet(u8 ucLane)
+{
+    u8 ucRtn = UNKNOWN;
+    u8 ucTemp;
+    u8 ucLaneCnt;
+    #if HDMIRX_EQ_MODE == SW_MODE
+    if (ucLane == LANE_ALL)
+    {
+        ucRtn = (g_stHdmiRx.b1EqSucc == 0x0f)? (SUCCESS) : (FAIL);
+    }
+    else
+    {
+        ucRtn = (g_stHdmiRx.b1EqSucc & (0x01 << ucLane))? (SUCCESS) : (FAIL);
+    }
+    #endif
+
+    #if HDMIRX_EQ_MODE == HW_MODE
+    if (ucLane == LANE_ALL)
+    {
+        ucLaneCnt = ((BKCD_B5_REG & 0x0f) >= FRL_6G4LANE)?(4):(3);
+        if(ucLaneCnt == 4)
+        {
+            ucRtn = ((BKCE_B8_REG & 0xaa) == 0xaa)? (SUCCESS) : (FAIL);
+        }
+        else if(ucLaneCnt == 3)
+        {
+            ucRtn = ((BKCE_B8_REG & 0x2a) == 0x2a)? (SUCCESS) : (FAIL);
+        }
+    }
+    else
+    {
+        ucTemp = ucLane << 1;
+        ucRtn = (BKCE_B8_REG & (0x02 << ucTemp))? (SUCCESS) : (FAIL);
+    }
+    #endif
+
+    #if HDMIRX_EQ_MODE == FIX_MODE
+    ucRtn = SUCCESS;
+    #endif
+    if (ucRtn == SUCCESS)
+    {
+        BKCD_16_REG |= BIT1_1;//[1]rgd_eq_pass_soft: 1-en;
+    }
+    return ucRtn;
+}
+#endif
+
+#endif

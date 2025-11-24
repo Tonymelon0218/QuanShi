@@ -1,0 +1,1789 @@
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVHDMIRX
+OBJECT MODULE PLACED IN .\Objects\DrvHdmiRx.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvHdmiRx.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE) 
+                    -REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRIN
+                    -T(.\Listings\DrvHdmiRx.lst) OBJECT(.\Objects\DrvHdmiRx.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: DrvHdmiRx.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.06.07
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          #if RX_PORT_SIGN == HDMI_PORT
+  11          
+  12          #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+  13          
+  14          u8 code szHdmiRxEqConfig[HDMIRX_MAX_FRL_RATE][6] = {
+  15          #if HDMIRX_MAX_FRL_RATE >= FRL_3G3LANE
+  16          {0x22, 0x22, 0x22, 0x22, 0x23, 0x80},
+  17          #endif
+  18          #if HDMIRX_MAX_FRL_RATE >= FRL_6G3LANE
+  19          {0x44, 0x44, 0x48, 0x48, 0x62, 0x80},
+  20          #endif
+  21          #if HDMIRX_MAX_FRL_RATE >= FRL_6G4LANE
+  22          {0x44, 0x44, 0x48, 0x48, 0x62, 0x80},
+  23          #endif
+  24          #if HDMIRX_MAX_FRL_RATE >= FRL_8G4LANE
+  25          {0x56, 0x56, 0x8c, 0x8c, 0xff, 0xcb},
+  26          #endif
+  27          #if HDMIRX_MAX_FRL_RATE >= FRL_10G4LANE
+  28          //{0x68, 0x68, 0xcc, 0xcf, 0xff, 0x8e},//old
+  29          //{0x68, 0x68, 0x8c, 0x8f, 0xff, 0x8e},//updata1
+  30          //{0x68, 0x68, 0x8a, 0x8c, 0xcc, 0x8e},//updata2-pass
+  31          //{0x68, 0x68, 0xcc, 0xcf, 0xff, 0x8e},//old
+  32          //{0x68, 0x68, 0x8c, 0x8f, 0xff, 0x8e},//updata1
+  33          //{0x68, 0x68, 0x8a, 0x8c, 0xcc, 0x8e},//updata2-pass
+  34          //{0x68, 0x68, 0x8c, 0xaf, 0xcc, 0xfe},//updata2-pass20231026
+  35          {0x58, 0x58, 0x8a, 0x8c, 0xcc, 0xfe},//20231018-phy-pass
+  36          //{0x68, 0x68, 0x8a, 0x8c, 0xff, 0x8e},//updata3
+  37          #endif
+  38          #if HDMIRX_MAX_FRL_RATE >= FRL_12G4LANE
+              {0x6f, 0x6f, 0xcf, 0xcf, 0xff, 0xfe},
+              #endif
+  41          };
+  42          
+  43          void Drv_HdmiRx_Frl_Init(void)
+  44          {
+  45   1          //state init
+  46   1          BKCD_48_REG &= 0x41;//[7]rgd_sw_frl_train_rst_n
+  47   1                              //[5]rgd_sw_frl_dec_rst_n
+  48   1                              //[4]rgd_sw_frl_start_rst_n
+  49   1                              //[3]rgd_sw_fec_dec_rst_n
+  50   1                              //[2]rgd_sw_frl_depkt_rst_n
+  51   1                              //[1]rgd_sw_glb_rst_n
+  52   1          BKCD_48_REG |= 0xbe;
+  53   1      
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 2   
+
+  54   1          BKCD_00_REG |= BIT0_1;//[0]hdmi sink version en
+  55   1      //    BKCD_02_REG |= BIT0_1;//[0]hdmi 21 rx flt_ready en
+  56   1          BKCD_02_REG |= BIT7_1;//[7]hdmi 21 rx frl rate triggle sel: 1-source write opreation, 0-frl rate chang
+             -e;
+  57   1          BKCD_03_REG = 0x00;//0x20;no time out   0x00 max 200ms
+  58   1          
+  59   1          BKCD_06_REG = 0x56;//[7:4]Ln(0)_LTP_req set, [3:0]Ln(1)_LTP_req set
+  60   1          BKCD_07_REG = 0x78;//[7:4]Ln(2)_LTP_req set, [3:0]Ln(3)_LTP_req set
+  61   1      
+  62   1          BKCD_08_REG |= BIT7_1;//[7]hdmi 21 rx fec hardware reset sel: 0-not support
+  63   1          BKCD_08_REG |= BIT6_1;//[7]HDMI 21 RX gap error enable during P
+  64   1          BKCD_08_REG &= BIT5_0;//[5]rgd_frl_start_trigel: 0:Meet protocol
+  65   1          BKCD_08_REG |= BIT0_1;//[0]hdmi 21 rx ffe level change sel, 1-user define
+  66   1      
+  67   1          BKCD_09_REG = 0x00;//[6:4][2:0]hdmi 21 rx lane0/lane1 ffe level set by software.
+  68   1          BKCD_0A_REG = 0x00;//[6:4][2:0]hdmi 21 rx lane2/lane3 ffe level set by software.
+  69   1      
+  70   1          #if SYSCLK == SYS_CLK_40M
+                  BKCD_0B_REG = 0x9c;
+                  BKCD_0C_REG = 0x40;
+                  #elif SYSCLK == SYS_CLK_48M
+  74   1          BKCD_0B_REG = 0xbb;
+  75   1          BKCD_0C_REG = 0x80;//rgd_time_1s_per: 1s timer cnt of a cycle
+  76   1          #endif
+  77   1          BKCD_0D_REG = 0x03;//[7:0]hdmi21 rx 1s timer cnt for fec err statistics[15:8]-1000
+  78   1          BKCD_0E_REG = 0xe8;//[7:0]hdmi21 rx 1s timer cnt for fec err statistics[07:0]
+  79   1      
+  80   1          BKCD_0F_REG = 0x1b;//[7:6]hdmi 21 rx lane0 input channel data select
+  81   1                             //[5:4]hdmi 21 rx lane1 input channel data select
+  82   1                             //[3:2]hdmi 21 rx lane2 input channel data select
+  83   1                             //[1:0]hdmi 21 rx lane3 input channel data select//1b-for FPGA TR5, 36-for FPGA vu9
+             -p
+  84   1      
+  85   1          BKCD_16_REG |= BIT0_1;//[0]rgd_eq_mod_sel: 1-sw en(16/18b err clr sw en, eq pass sw en)
+  86   1      
+  87   1          BKCD_52_REG |= BIT4_1;//[4]hdmi 21 rx lane deskew bypasss during LTS:3 period.
+  88   1          BKCD_5A_REG &= 0x3f;//[7:6]hdmi 21 rx key code stable mode sel: 0-
+  89   1      
+  90   1          BKCD_62_REG = 0xff;//[7:0]hdmi 21 rx tmds timing error singal width
+  91   1          BKCD_63_REG &= BIT3_0;//[3]hdmi 21 rx detect tmds vactive width enable: 0-dis
+  92   1          BKCD_F0_REG &= 0xf9;//[2]HDMI 21 RX tmds hactive check dis, [1]hdmi 21 rx tmds vactive check dis
+  93   1          BKCD_F8_REG = 0x40;//[6:0]hdmi 21 rx write setp byte of rc.
+  94   1      
+  95   1          //hdmi2.1 rx int en
+  96   1          BKCD_A6_REG |= 0x51;//[6]hdmi 21 rx eq check en int enable
+  97   1                              //[4]hdmi 21 rx source flt int enable
+  98   1                              //[0]hdmi 21 rx rate change int enable.
+  99   1          BKCD_57_REG |= 0x51;//interrupt clr en
+ 100   1          BKCD_57_REG &= 0xae;//interrupt clr dis
+ 101   1          BKCE_80_REG |= 0x44;//[6]hdmi21 rx src write frl start int en
+ 102   1                              //[2]rgd_eq_scan_done_int_en
+ 103   1          BKCE_80_REG |= 0x88;//interrupt clr en
+ 104   1          BKCE_80_REG &= 0x77;//interrupt clr dis
+ 105   1          BKCE_81_REG |= BIT6_1;//rgd_source_rd_ptn_int_en
+ 106   1          BKCE_81_REG |= BIT7_1;//[7]rgd_source_rd_ptn_int_clr: 1-rst en
+ 107   1          BKCE_81_REG &= BIT7_0;//[7]rgd_source_rd_ptn_int_clr: 0-rst dis
+ 108   1          BKCE_C5_REG |= BIT7_1;//ptn flag clr
+ 109   1          BKCE_C5_REG &= BIT7_0;//ptn flag clr
+ 110   1          BKCE_C5_REG |= BIT6_1;//start flag clr
+ 111   1          BKCE_C5_REG &= BIT6_0;//start flag clr
+ 112   1          //new design
+ 113   1          BKCC_00_REG |= BIT2_1;//[2]rgd_h21rx_frc_hdmi_mode: 1-hdmi21 force hdmi_mode=1,
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 3   
+
+ 114   1          BKCC_03_REG |= BIT7_1;//[7]frl ready
+ 115   1      
+ 116   1          BKCE_81_REG &= BIT2_0;//[2]0-new error cnt statistics mode, 1-LT1901 error cnt statistics mode
+ 117   1          BKCE_C8_REG |= BIT7_1;//[7]rgd_frl_rate_chg_sel: 1-real_time update
+ 118   1          BKCE_C8_REG |= BIT6_1;//[6]rgd_eq_check_en_clr: 1-en
+ 119   1      }
+ 120          
+ 121          void Drv_HdmiRx_Frl_PcrInit(void)
+ 122          {
+ 123   1          BKC7_D7_REG |= BIT0_1;//[0]rgd_rx_da_src_sel: 1-hdmi
+ 124   1      
+ 125   1          BKA3_20_REG &= BIT4_0;//[4]rg_pcrpll_pd: 0-normal work
+ 126   1          BKA3_20_REG &= 0xfc;//[1:0]rg_pcrpll_ref_sel: 00-Xtal_25m_clk
+ 127   1          BKE2_3D_REG = 0x20;// ks =2;
+ 128   1          
+ 129   1          BKE2_3D_REG &= BIT3_0;
+ 130   1          BKE2_3D_REG |= BIT3_1;//pcrpll_cal_en
+ 131   1      
+ 132   1          BKCD_80_REG = 0x0f;//rgd_tmds_pcr_freq_pixel_change
+ 133   1          BKCD_9C_REG &= 0x1f;//[7:5]rgd_tmds_pcr_line_cnt_sel:
+ 134   1          BKCD_9C_REG |= 0x60;//0x20-every  64 active line(001)
+ 135   1                              //0x40-every 128 active line(010)
+ 136   1                              //0x60-every 256 active line(011)
+ 137   1          BKCB_B4_REG = 0x01;//pcr mode sel,ps5 will have issue
+ 138   1          BKCD_A2_REG = 0xc0;//[7:4]kp sel
+ 139   1          BKCD_A0_REG = 0x94;//lw limit
+ 140   1          BKCD_A1_REG = 0xe2;//up limit
+ 141   1          BKCD_A3_REG = 0x14;//load lw limit
+ 142   1          BKCD_A4_REG = 0xe2;//load up limit
+ 143   1      
+ 144   1          BKCB_9B_REG = 0x01;
+ 145   1          BKCB_9C_REG = 0x01;
+ 146   1          BKCB_9F_REG = 0x01;
+ 147   1          BKCB_A0_REG = 0x01;
+ 148   1      
+ 149   1          BKCB_D5_REG = 0x00;//da_pcrpll_rst_n end set.
+ 150   1      
+ 151   1          BKC8_B0_REG = 0x20;//gd_pcr_stb_chk_sel
+ 152   1          #if SYSCLK == SYS_CLK_40M
+                  BKC8_B1_REG = 0x28;//rgd_sys_cnt_1us[6:0]
+                  #endif
+ 155   1          #if SYSCLK == SYS_CLK_48M
+ 156   1          BKC8_B1_REG = 0x30;//rgd_sys_cnt_1us[6:0]
+ 157   1          #endif
+ 158   1          BKC8_B2_REG = 0x0f;//rgd_pcr_stb_chk1_cnt
+ 159   1          BKC8_B3_REG = 0x0f;//rgd_pcr_stb_chk2_cnt
+ 160   1          Drv_HdmiRx_Reset(HDMI_PCR_RST);
+ 161   1      }
+ 162          
+ 163          void Drv_HdmiRx_Frl_SecPcrInit(void)
+ 164          {
+ 165   1          BKCE_00_REG = 0x0f;//rgd_dsc_pcr_freq_pixel_change[15:8]
+ 166   1          BKCE_28_REG |=0x60;//0x20-every  64 active line(001)
+ 167   1                             //0x40-every 128 active line(010)
+ 168   1                             //0x60-every 256 active line(011)
+ 169   1          BKCE_4C_REG = 0x80; //step 2: tmds de
+ 170   1          BKCE_4A_REG = 0xcc; //0xcc: level 2/3 mute
+ 171   1          BKCE_4D_REG = 0x02; //rgd_dsc pcr de dly set[11:8]
+ 172   1          BKCE_4E_REG = 0x00; //rgd_dsc pcr de dly set[7:0]
+ 173   1       
+ 174   1          BKCE_35_REG = 0xa0;//rgd_dsc_pcr_step_out
+ 175   1          BKCE_4F_REG = 0x00;//secpcrpll_rst_end
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 4   
+
+ 176   1      
+ 177   1          BKCE_2C_REG = 0x94; //lw limit
+ 178   1          BKCE_2D_REG = 0xe2; //up limit
+ 179   1          BKCE_2F_REG = 0x14; //load lw limit
+ 180   1          BKCE_30_REG = 0xe2; //load up limit
+ 181   1          
+ 182   1          BKCE_32_REG = 0x7b; //step 3: tmds de
+ 183   1          BKCE_49_REG = 0x03; 
+ 184   1          BKCB_CE_REG = 0x41;
+ 185   1          BKCB_C3_REG = 0x08;  
+ 186   1          
+ 187   1          BKCB_CD_REG = 0x10; //tmds hfp set[7:0]
+ 188   1          BKCB_D0_REG = 0x10; //tmds hs set[7:0]
+ 189   1      
+ 190   1          BKCE_2E_REG = 0xc0; //refer 0xcda2
+ 191   1      
+ 192   1          BKE2_50_REG |= BIT3_1;//secpcrpll cal en
+ 193   1          BKE2_50_REG &= 0xcf;
+ 194   1          BKE2_50_REG |= 0x20;//[5:4]ks = 2
+ 195   1      }
+ 196          
+ 197          void Drv_HdmiRx_Frl_PhyCtleSet(u8 ucFrlRate)
+ 198          {
+ 199   1          BKA1_02_REG = szHdmiRxEqConfig[ucFrlRate - 1][0];//[7:4]rg_dhrx_eq0 is; [3:0]rg_dhrx_eq0 rl;
+ 200   1          BKA1_03_REG = szHdmiRxEqConfig[ucFrlRate - 1][1];//[7:4]rg_dhrx_eq1 is; [3:0]rg_dhrx_eq1 rl;
+ 201   1      
+ 202   1          BKA1_04_REG = szHdmiRxEqConfig[ucFrlRate - 1][2];//[7:4]rg_dhrx_bf0 is; [3:0]rg_dhrx_bf0 rl;
+ 203   1          BKA1_05_REG = szHdmiRxEqConfig[ucFrlRate - 1][3];//[7:4]rg_dhrx_bf1 is; [3:0]rg_dhrx_bf1 rl;
+ 204   1      
+ 205   1          BKA1_06_REG = szHdmiRxEqConfig[ucFrlRate - 1][4];//[7:4]rg_dhrx_fb0 is; [3:0]rg_dhrx_fb1is;
+ 206   1          BKA1_07_REG = szHdmiRxEqConfig[ucFrlRate - 1][5];//[7:4]rg_dhrx_eq  cs; [3:2]rg_dgrx_fb rs; [1]rg_dhrx
+             -_nrb_en; [0]rg_dhrx_nr_en;
+ 207   1      
+ 208   1          BKA1_08_REG = 0x09;//[7]rg_dhrx_ldo_en: 0-disable, eq power use external vcc11_dhrx;
+ 209   1                             //[6:4]rg_dhrx_ldo_vset: 000-1.1v
+ 210   1                             //[3]rg_dhrx_en: 0-dis, 1-en;
+ 211   1                             //[2:0]rg_dhrx_vcm_adj: 011-0.75v
+ 212   1                             //0X0B==>>0X09
+ 213   1      
+ 214   1          BKA3_7C_REG = 0x8a;//ECO
+ 215   1          BKA1_09_REG |= 0xf0;//[7:4]rg_dhrx_d0(d0~d3)_hseq_en
+ 216   1      
+ 217   1          BKA1_0E_REG &= 0xf3;//[7:4]rg_dhrx_d0(d0~d3)bf2cdr_en; [3:2]2'b00 = Stronger DFE; [1:0]rg_dhrx_bf2cdr_
+             -fbis;
+ 218   1      }
+ 219          
+ 220          void Drv_HdmiRx_Frl_CdrSet(u8 ucFrlRate)
+ 221          {
+ 222   1          switch(ucFrlRate)
+ 223   1          {
+ 224   2              case FRL_3G3LANE:
+ 225   2                  BKC8_11_REG &= BIT0_0;//[0]rgd_cdr_ord_sel: 0-first, 1-second;
+ 226   2                  BKC8_12_REG = 0x37;//[6:4]rgd_cdr_frug_sel; [3:0]rgd_cdr_phug_sel;
+ 227   2                  break;
+ 228   2              case FRL_6G3LANE:
+ 229   2                  BKC8_11_REG &= BIT0_0;//[0]rgd_cdr_ord_sel: 0-first, 1-second;
+ 230   2                  BKC8_12_REG = 0x37;//[6:4]rgd_cdr_frug_sel; [3:0]rgd_cdr_phug_sel;
+ 231   2                  break;
+ 232   2              case FRL_6G4LANE:
+ 233   2                  BKC8_11_REG &= BIT0_0;//[0]rgd_cdr_ord_sel: 0-first, 1-second;
+ 234   2                  BKC8_12_REG = 0x37;//[6:4]rgd_cdr_frug_sel; [3:0]rgd_cdr_phug_sel;
+ 235   2                  break;
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 5   
+
+ 236   2              case FRL_8G4LANE:
+ 237   2                  BKC8_11_REG &= BIT0_0;//[0]rgd_cdr_ord_sel: 0-first, 1-second;
+ 238   2                  BKC8_12_REG = 0x37;//[6:4]rgd_cdr_frug_sel; [3:0]rgd_cdr_phug_sel;
+ 239   2                  break;
+ 240   2              case FRL_10G4LANE:
+ 241   2                  BKC8_11_REG &= BIT0_0;//[0]rgd_cdr_ord_sel: 0-first, 1-second;
+ 242   2                  BKC8_12_REG = 0x37;//[6:4]rgd_cdr_frug_sel; [3:0]rgd_cdr_phug_sel;
+ 243   2                  break;
+ 244   2              case FRL_12G4LANE:
+ 245   2                  BKC8_11_REG &= BIT0_0;//[0]rgd_cdr_ord_sel: 0-first, 1-second;
+ 246   2                  BKC8_12_REG = 0x37;//[6:4]rgd_cdr_frug_sel; [3:0]rgd_cdr_phug_sel;
+ 247   2                  break;
+ 248   2              default:
+ 249   2                  break;
+ 250   2          }
+ 251   1      }
+ 252          
+ 253          void Drv_HdmiRx_Frl_PiSet(u8 ucFrlRate)
+ 254          {
+ 255   1          switch(ucFrlRate)
+ 256   1          {
+ 257   2              case FRL_3G3LANE:
+ 258   2              case FRL_6G3LANE:
+ 259   2              case FRL_6G4LANE:
+ 260   2              case FRL_8G4LANE:
+ 261   2                  BKA1_26_REG = 0x13;
+ 262   2                  BKA1_27_REG = 0x13;
+ 263   2                  BKA1_28_REG = 0x03;
+ 264   2                  break;
+ 265   2              case FRL_10G4LANE:
+ 266   2              case FRL_12G4LANE:
+ 267   2                  BKA1_26_REG = 0x8f;//[7]rgd_sw_en_dhrxpi_mix_cap_sel: 1-en
+ 268   2                                     //[5:4]rgd_sw_dhrxpi_mix_cap_sel
+ 269   2                                     //[3]rgd_sw_en_dhrxpi_mix_rd_sel: 1-en
+ 270   2                                     //[2:0]rgd_sw_dhrxpi_mix_rd_sel
+ 271   2                  BKA1_27_REG = 0x8f;//[7]rgd_sw_en_dhrxpi_mux_cap_sel: 1-en
+ 272   2                                     //[5:4]rgd_sw_dhrxpi_mux_cap_sel
+ 273   2                                     //[3]rgd_sw_en_dhrxpi_mux_rd_sel: 1-en
+ 274   2                                     //[2:0]rgd_sw_dhrxpi_mux_rd_se
+ 275   2                  BKA1_28_REG = 0x17;//[7]rgd_sw_en_dhrxpi_buf_cap_sel: 1-en
+ 276   2                                     //[5:4]rgd_sw_dhrxpi_buf_cap_sel
+ 277   2                                     //[3]rgd_sw_en_dhrxpi_buf_rd_sel: 1-en
+ 278   2                                     //[2:0]rgd_sw_dhrxpi_buf_rd_se
+ 279   2                  break;
+ 280   2          }
+ 281   1      }
+ 282          
+ 283          void Drv_HdmiRx_Frl_PllCali(void)
+ 284          {
+ 285   1          u8 ucCnt;
+ 286   1          u8 ucloop_rxpll_cal;
+ 287   1          BKA1_30_REG &= 0xfc;//bit7 pll power on [1:0]rg_dhrxpll_ref_sel: 00-xtal_25m_clk or xtal_50m_clk
+ 288   1          BKA1_33_REG = 0x60;//rxpll prediv = 1
+ 289   1          BKA1_3E_REG = 0X60;//rxpll fb div = 1;
+ 290   1          BKA1_35_REG |=BIT7_1;//hdmi mode must set 
+ 291   1          BKA1_42_REG = 0x80; //rxpll freqset  = 0
+ 292   1          BKA1_44_REG = 0x80;// not analogic cdr mode
+ 293   1          
+ 294   1          BKE3_00_REG |= BIT1_1;//[1]rgd_dhrxpll_cal_pll_cal_en_auto_en: 1-calibrate multiple frequenc
+ 295   1          BKE3_09_REG |= BIT3_1;// sel hdmi2.1 mode  00 hdmi2.0 01 XX 10 hdmi2.1  11 dp mode
+ 296   1      
+ 297   1          BKE3_0A_REG &= 0xcf;//[5:4]rgd_dhrxpll_cal_frl_set_mode_sel: 00-auto ctrl mode
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 6   
+
+ 298   1          BKE3_0B_REG &= BIT0_0;//[0]rgd_dhrxpll_cal_pll_band_sw_en: 0-dis
+ 299   1          
+ 300   1          for(ucloop_rxpll_cal = 0;ucloop_rxpll_cal < 2;ucloop_rxpll_cal++)
+ 301   1          {
+ 302   2              (ucloop_rxpll_cal == 0)?(BKA1_31_REG &= BIT7_0):(BKA1_31_REG |= BIT7_1);//vco in high freq
+ 303   2              ucCnt = 3;
+ 304   2              while(ucCnt--)
+ 305   2              {
+ 306   3                  BKE1_05_REG &= 0xfc;//[0]rgd_sw_dhrxpll_cal_rst_n: 0-en
+ 307   3                  BKA1_30_REG &= BIT6_0;//[6]rg_dhrxpll_rst_n: 0-en
+ 308   3                  BKE3_00_REG &= BIT0_0;//[0]rgd_dhrxpll_cal_pll_cal_en: 0-dis
+ 309   3                  Ocm_Delay1ms(1);
+ 310   3                  BKE1_05_REG |= 0x03;//[0]rgd_sw_dhrxpll_cal_rst_n: 1-dis
+ 311   3                  BKA1_30_REG |= BIT6_1;//[6]rg_dhrxpll_rst_n: 1-dis
+ 312   3                  BKE3_00_REG |= BIT0_1;//[0]rgd_dhrxpll_cal_pll_cal_en: 1-en
+ 313   3                  Ocm_Delay1ms(2);
+ 314   3                  if((BKE3_1A_REG < 0xff)&&(BKE3_1B_REG == 0xff)&&((BKE3_24_REG&0x03) == 0x03))
+ 315   3                  {
+ 316   4                      break;
+ 317   4                  }
+ 318   3                  if((BKE3_24_REG&0x03) == 0x02) //[1]rgod_dhrxpll_pll_cal_done: 1-done
+ 319   3                  {
+ 320   4                      break;
+ 321   4                  }
+ 322   3              }
+ 323   2              if(ucloop_rxpll_cal == 0)
+ 324   2              {
+ 325   3                  BKE3_0D_REG = BKE3_18_REG;//dhrxpll hd03 band
+ 326   3                  BKE3_0E_REG = BKE3_19_REG;//dhrxpll hd06 band
+ 327   3                  BKE3_0F_REG = BKE3_1A_REG;//dhrxpll hd08 band
+ 328   3              }
+ 329   2              else if(ucloop_rxpll_cal == 1)
+ 330   2              {
+ 331   3                  BKE3_10_REG = BKE3_1B_REG;//dhrxpll hd10 band
+ 332   3                  BKE3_11_REG = BKE3_1C_REG;//dhrxpll hd12 band
+ 333   3              }
+ 334   2          }
+ 335   1          printLT(PRINT_PRIO_TEST, "\nFrl rxpll cali band= %02bx,%02bx,%02bx,%02bx,%02bx",
+ 336   1                              BKE3_0D_REG, BKE3_0E_REG, BKE3_0F_REG, BKE3_10_REG, BKE3_11_REG);
+ 337   1          BKA1_31_REG &= BIT7_0;
+ 338   1          BKE3_00_REG &= BIT1_0;//[1]rgd_dhrxpll_cal_pll_cal_en_auto_en: 0-calibrate a single frequency
+ 339   1      }
+ 340          
+ 341          void Drv_HdmiRx_Frl_PllBandSet(u8 frlrate)
+ 342          {
+ 343   1          BKA1_31_REG &= 0xe0;
+ 344   1          BKA1_31_REG |= 0x08;//[4:0]rg_dhrxpll_cpcur_sel
+ 345   1          (frlrate <= FRL_8G4LANE)?(BKA1_31_REG &= BIT7_0):(BKA1_31_REG |= BIT7_1);//vco in high freq
+ 346   1          BKA1_33_REG = 0x60;//rxpll prediv = 1
+ 347   1          BKA1_36_REG = 0x33;//[6:4]rg_dhrxpll_lpf_cinset
+ 348   1          BKA1_3E_REG = 0X60;//rxpll fb div = 1;
+ 349   1          BKA1_35_REG |=BIT7_1;//hdmi mode must set 
+ 350   1          BKA1_42_REG = 0x80; //frl mode freq_set = 0
+ 351   1          BKA1_43_REG = 0x00;
+ 352   1          
+ 353   1          BKE3_00_REG &= BIT0_0;//[0]rgd_dhrxpll_cal_pll_cal_en: 0-dis
+ 354   1          BKE3_0A_REG |= BIT4_1;//[5:4]rgd_dhrxpll_cal_frl_set_mode_sel: 01-hdmi2.1 rx control
+ 355   1          BKE3_0B_REG |= BIT0_1;//[0]rgd_dhrxpll_cal_pll_band_sw_en: 1-en
+ 356   1      
+ 357   1          BKA1_30_REG &= BIT6_0;//[6]rg_dhrxpll_rst_n: 0-en
+ 358   1          BKA1_30_REG |= BIT6_1;//[6]rg_dhrxpll_rst_n: 1-dis
+ 359   1      }
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 7   
+
+ 360          
+ 361          u8 Drv_HdmiRx_DeSkewCheck(void)
+ 362          {
+ 363   1          u8 ucLane;
+ 364   1          ucLane = BKCD_B5_REG & 0x0f;//[3:0]rgod_frl_rate: 1-3g3lane, 2-6g3lane, other-4lane
+ 365   1          if (ucLane <= 2)//3lane
+ 366   1          {
+ 367   2              if (BKCD_B6_REG & 0x07)//[3:0]rgod_ln3(lan3~lan0)_locked: 1-lock
+ 368   2              {
+ 369   3                  return SUCCESS;
+ 370   3              }
+ 371   2          }
+ 372   1          else//4lane
+ 373   1          {
+ 374   2              if (BKCD_B6_REG & 0x0f)//[3:0]rgod_ln3(lan3~lan0)_locked: 1-lock
+ 375   2              {
+ 376   3                  return SUCCESS;
+ 377   3              }
+ 378   2          }
+ 379   1          return FAIL;
+ 380   1      }
+ 381          
+ 382          u8 Drv_HdmiRx_LinkVidTimingChk(void)
+ 383          {
+ 384   1          u16 ucTempHactive,ucTempVactive;
+ 385   1          ucTempHactive = ((u16)BKCD_DB_REG << 8) + BKCD_DC_REG;
+ 386   1          ucTempVactive = ((u16)BKCD_DF_REG << 8) + BKCD_E0_REG;
+ 387   1          if((ucTempHactive <= 0x00ff)||(ucTempHactive == 0xffff))
+ 388   1          {
+ 389   2              return FAIL;
+ 390   2          }
+ 391   1          if((ucTempVactive <= 0x00ff)||(ucTempVactive == 0xffff))
+ 392   1          {
+ 393   2              return FAIL;
+ 394   2          }
+ 395   1          Ocm_Delay1ms(2);
+ 396   1          if((BKCD_DB_REG != ((ucTempHactive>>8)&0xff))||(BKCD_DC_REG != (ucTempHactive&0xff)))
+ 397   1          {
+ 398   2              return FAIL;
+ 399   2          }
+ 400   1          if((BKCD_DF_REG != ((ucTempVactive>>8)&0xff))||(BKCD_E0_REG != (ucTempVactive&0xff)))
+ 401   1          {
+ 402   2              return FAIL;
+ 403   2          }
+ 404   1          printLT(PRINT_PRIO_TEST, "\nThe hdmirx timing is 0x%04x,0x%04x", ucTempHactive,ucTempVactive);
+ 405   1          return SUCCESS;
+ 406   1      }
+ 407          
+ 408          void Drv_HdmiRx_Frl_ErrClr(void)
+ 409          {
+ 410   1          BKCD_16_REG |= BIT2_1;//[2]rgd_err_clr_soft: 1-en
+ 411   1          BKCD_16_REG &= BIT2_0;//[2]rgd_err_clr_soft: 0-dis
+ 412   1      }
+ 413          
+ 414          void Drv_HdmiRx_Frl_FecErrClr(void)
+ 415          {
+ 416   1          BKCD_16_REG |= BIT6_1;//[2]rgd_err_clr_soft: 1-en
+ 417   1          BKCD_16_REG &= BIT6_0;//[2]rgd_err_clr_soft: 0-dis
+ 418   1      }
+ 419          #endif
+ 420          
+ 421          void Drv_HdmiRx_PowerDown(void)
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 8   
+
+ 422          {
+ 423   1          ;
+ 424   1      }
+ 425          
+ 426          void Drv_HdmiRx_SecPcrPower(u8 ucOpt)
+ 427          {
+ 428   1          if (ucOpt == ON)
+ 429   1          {
+ 430   2              BKA3_2F_REG &= BIT4_0;//[4]rg_secpcrpll_pd: 0-normal work
+ 431   2          }
+ 432   1          else
+ 433   1          {
+ 434   2              BKA3_2F_REG |= BIT4_1;//[4]rg_secpcrpll_pd: 1-power down
+ 435   2          }
+ 436   1      }
+ 437          
+ 438          void Drv_HdmiRx_PllInit(void)
+ 439          {
+ 440   1          BKA1_30_REG = 0x69;//[7]rg_dhrxpll_pd = 0: normal work. 
+ 441   1                             //[6]rg_dhrxpll_rst_n = 1: nowmal work.
+ 442   1                             //[5]rg_dhrxpll_vcodiv_rstn = 1: normal.
+ 443   1                             //[3]rg_dhrxpll_ibias_en: 1-en
+ 444   1                             //[2]rg_dhrxpll_dp_lpen = 0: hdmi mode.
+ 445   1                             //[1:0]rg_dhrxpll_ref_sel = 01: aa_dhrx_tmds_clk.
+ 446   1          BKA1_37_REG |= 0x0d;//[3]rg_dhrxpll_pix_muxsel: 1-from deep color
+ 447   1                              //[1:0]rg_dhrxpll_halfpix_divsel: 01-div2
+ 448   1          BKE3_01_REG = 0x20; //ks = 2;
+ 449   1      }
+ 450          
+ 451          void Drv_HdmiRx_RtermCali(void)
+ 452          {
+ 453   1          u8 ucIndex;
+ 454   1          u8 ucResult = FAIL;
+ 455   1          
+ 456   1          BKA1_08_REG |= BIT3_1;//[3]rg_dhrx_en: 0-dis, 1-en;
+ 457   1          #if CHIP_VERSION_SEL > U1_VERSION
+ 458   1          BKA1_1D_REG &= BIT7_0;//[7]clk pkdet soft mode: 0-dis
+ 459   1          #endif
+ 460   1          ucIndex = 10;
+ 461   1          while(ucIndex--)
+ 462   1          {
+ 463   2              BKE2_00_REG &= BIT0_0;//[0]rgd_dhrx_rterm_cali_en, 0-dis
+ 464   2              Ocm_Delay1ms(1);
+ 465   2              BKE2_00_REG |= BIT0_1;//[0]rgd_dhrx_rterm_cali_en, 1-en
+ 466   2              Ocm_Delay1ms(2);
+ 467   2      
+ 468   2              if(0x02 == (BKE2_07_REG & 0x03))//[1]rgod_dhrx_rterm_cali_done: 1-done; [0]rgod_dhrx_rterm_cali_fa
+             -il: 1-fail
+ 469   2              {
+ 470   3                  ucResult = SUCCESS;
+ 471   3                  break;
+ 472   3              }
+ 473   2          }
+ 474   1      
+ 475   1          printLT(PRINT_PRIO_HIG, "\nHdmi rx rterm cali value is 0x%02bx", BKE2_08_REG);
+ 476   1          if(ucResult == SUCCESS)//Rterm calibration done
+ 477   1          {
+ 478   2              printLT(PRINT_PRIO_HIG, "\nCali success");
+ 479   2          }
+ 480   1          else
+ 481   1          {
+ 482   2              printLT(PRINT_PRIO_HIG, "\nCali failed");
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 9   
+
+ 483   2          }
+ 484   1      }
+ 485          
+ 486          void Drv_HdmiRx_PhyInit(void)
+ 487          {
+ 488   1          BKA1_08_REG = 0x0a;//[7]rg_dhrx_ldo_en: 0-disable, eq power use external vcc11_dhrx;
+ 489   1                             //[6:4]rg_dhrx_ldo_vset: 000-1.1v
+ 490   1                             //[3]rg_dhrx_en: 0-dis, 1-en;
+ 491   1                             //[2:0]rg_dhrx_vcm_adj: 011-0.75v
+ 492   1          BKA1_0D_REG = 0xa8;//[7:6]rg_dhrx_temp_sense_vset; 
+ 493   1                             //[5]rg_dhrx_temp_sense_en
+ 494   1                             //[4]rg_dhrx_eqrg_sel: 0-small range, 1-large range for 121 mode only
+ 495   1                             //[3]rg_dhrx_mxchsel: do not touch this bit, default is 1
+ 496   1                             //[2]rg_dhrx_refclk_sel: 0-sel from eq path, 1-sel from dhrxpll
+ 497   1                             //[1]rg_dhrx_linkclk_sel: 0-sel from dhrx, 1-sel from dhrxpll
+ 498   1                             //[0]rg_dhrx_linkclk_div2_en: 0-use from normal half-rate mode, 1-use for new full-
+             -rate mede;
+ 499   1      }
+ 500          
+ 501          void Drv_HdmiRx_PiEnable(u8 ucOpt)
+ 502          {
+ 503   1          if (ON == ucOpt)
+ 504   1          {
+ 505   2              BKA1_1F_REG = 0x10;//[4]rg_dhrxpi_bias_en: 1-en
+ 506   2                                 //[3:0]rg_dhrxpi_pd: 4'b0000 = four channel normal
+ 507   2          }
+ 508   1          else
+ 509   1          {
+ 510   2              BKA1_1F_REG = 0x0f;//[4]rg_dhrxpi_bias_en: 0-dis;
+ 511   2                                 //[3:0]rg_dhrxpi_pd: 4'b1111 = four channel power down.
+ 512   2          }
+ 513   1      }
+ 514          
+ 515          //========================================================================
+ 516          // Func Name   : Drv_HdmiRX_ChannelSwap
+ 517          // Description : dhrx logical data channel select phy channel.
+ 518          //  connect(tmds/frl)    phy channel      logical channel
+ 519          //            D2/D2------D3---------------D2
+ 520          //            D1/D1------D2---------------D1
+ 521          //            D0/D0------D1---------------D0
+ 522          //           CLK/D3------D0---------------D3
+ 523          // Input       : void  
+ 524          // Output      : None
+ 525          // Return      : void
+ 526          //========================================================================
+ 527          void Drv_HdmiRx_ChannelSwap(void)
+ 528          {
+ 529   1          #if CHIP_SEL == LT7911UXE_HD
+                        
+                  #else
+ 532   1          BKC7_E6_REG |= 0xf0;// pn swap 
+ 533   1                #endif
+ 534   1          
+ 535   1          BKC7_E6_REG &= BIT0_0;//eq mode sel hdmi rx
+ 536   1          BKC7_E7_REG = 0x12; //[7:4]dhrx logical channel data 0 source select, 1-chl1;
+ 537   1                              //[3:0]dhrx logical channel data 1 source select, 2-chl2;
+ 538   1          BKC7_E8_REG = 0x30; //[7:4]dhrx logical channel data 2 source select, 3-chl3;
+ 539   1                              //[3:0]dhrx logical channel data 3 source select, 0-chl0;
+ 540   1      }
+ 541          
+ 542          void Drv_HdmiRx_DdcVthSet(void)
+ 543          {
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 10  
+
+ 544   1          BKA3_5B_REG |= BIT1_1;//rg_dhrx_ddc_vth_sel: 1-high vth mode
+ 545   1      }
+ 546          
+ 547          //========================================================================
+ 548          // Func Name   : Drv_HdmiRx_ReadReqInit
+ 549          // Description : Read request 1s timer set
+ 550          // Input       : void  
+ 551          // Output      : None
+ 552          // Return      : void
+ 553          //========================================================================
+ 554          void Drv_HdmiRx_ReadReqInit(void)
+ 555          {
+ 556   1          #if SYSCLK == SYS_CLK_40M
+                  BKCC_63_REG = 0x28;
+                  BKCC_FC_REG = 0xe5;
+                  #endif
+ 560   1      
+ 561   1          #if SYSCLK == SYS_CLK_48M
+ 562   1          BKCC_63_REG = 0x30;
+ 563   1          BKCC_FC_REG = 0xe5;
+ 564   1          #endif 
+ 565   1      }
+ 566          
+ 567          void Drv_HdmiRx_ErrorDetSet(void)
+ 568          {
+ 569   1          BKCC_19_REG = 0x60;
+ 570   1          #if SYSCLK == SYS_CLK_40M
+                  BKCC_2A_REG = 0x09;//
+                  BKCC_2B_REG = 0xc4;//
+                  #endif
+ 574   1      
+ 575   1          #if SYSCLK == SYS_CLK_48M
+ 576   1          BKCC_2A_REG = 0x0b;//
+ 577   1          BKCC_2B_REG = 0xb8;//
+ 578   1          #endif  
+ 579   1      }
+ 580          
+ 581          void Drv_HdmiRx_Pkdetset(void)
+ 582          {
+ 583   1          BKE6_EE_REG = 0x10;// sel rx1 for design issue
+ 584   1          BKE6_EE_REG |= BIT6_1;// pk det enable
+ 585   1      }
+ 586          
+ 587          void Drv_HdmiRx_HwResetSet(void)
+ 588          {
+ 589   1          BKE1_0C_REG &= BIT4_0; //disable rx hard reset
+ 590   1          BKE1_0C_REG &= BIT5_0; //disable rxpll cal hard reset
+ 591   1          BKE1_0D_REG &= BIT7_0; //disable cdr hw rst.
+ 592   1          BKE1_0D_REG &= BIT5_0; //disable pi hard reset
+ 593   1          
+ 594   1          BKE1_0E_REG &= BIT7_0;//[7]rg_audpll_hw_rst_en: 0-dis
+ 595   1          BKE1_0E_REG &= BIT6_0; //pcrpll0_hw_reset = 0;
+ 596   1          BKE1_0E_REG &= BIT5_0; //pcrpll1 hw reset = 0;
+ 597   1      }
+ 598          
+ 599          //========================================================================
+ 600          // Func Name   : Drv_HdmiRx_PowerOnInit
+ 601          // Description : The setting init for power on
+ 602          //             : Be called only one time at power on.
+ 603          // Input       : void  
+ 604          // Output      : None
+ 605          // Return      : void
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 11  
+
+ 606          //========================================================================
+ 607          void Drv_HdmiRx_PowerOnInit(void)
+ 608          {
+ 609   1          Drv_HdmiRx_PowerDown();
+ 610   1          Drv_HdmiRx_DdcVthSet();
+ 611   1          Drv_HdmiRx_ErrorDetSet();
+ 612   1          Drv_HdmiRx_ReadReqInit();
+ 613   1          Drv_HdmiRx_PllInit();
+ 614   1          Drv_HdmiRx_RtermCali();
+ 615   1          Drv_HdmiRx_PhyInit();
+ 616   1          Drv_HdmiRx_PiEnable(ON);
+ 617   1          Drv_HdmiRx_ChannelSwap();
+ 618   1          Drv_HdmiRx_HwResetSet();
+ 619   1          Drv_System_PktHeadSet(HDR_INFO_FRAME_0X87);
+ 620   1          #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+ 621   1          Drv_HdmiRx_Frl_PllCali();
+ 622   1          #endif
+ 623   1          Drv_HdmiRx_Pkdetset();
+ 624   1          Mod_HdmiRxEq_Init();
+ 625   1          #if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED) || (HDMIRX_DSC_BYPASS_SUPPORT == ENABLED))
+ 626   1          Drv_HdmiRx_SecPcrPower(ON);
+ 627   1          #endif
+ 628   1      }
+ 629          
+ 630          void Drv_HdmiRx_Reset(EnumHdmiRstType ucOpt)
+ 631          {
+ 632   1          switch(ucOpt)
+ 633   1          {
+ 634   2              case HDMI_PCR_RST:
+ 635   2                  BKCD_48_REG &= BIT0_0;//[0]pcr reset en
+ 636   2                  BKCD_48_REG |= BIT0_1;//[0]pcr reset dis
+ 637   2                  break;
+ 638   2              case HDMI_ERR_DET_RST:
+ 639   2                  BKCD_48_REG &= BIT6_0;//[6]hdmi 21 rx error detect rst_n en
+ 640   2                  BKCD_48_REG |= BIT6_1;//[6]hdmi 21 rx error detect rst_n dis
+ 641   2                  break;
+ 642   2              case HDMI_FRL_DEC_RST:
+ 643   2                  BKCD_48_REG &= BIT5_0;//[5]rgd_sw_frl_dec_rst_n: 0-en
+ 644   2                  BKCD_48_REG |= BIT5_1;//[5]rgd_sw_frl_dec_rst_n: 1-dis
+ 645   2                  break;
+ 646   2              case HDMI_FEC_DEC_RST:
+ 647   2                  BKCD_48_REG &= BIT3_0;//[3]rgd_sw_fec_dec_rst_n: 1-en
+ 648   2                  BKCD_48_REG |= BIT3_1;//[3]rgd_sw_fec_dec_rst_n: 0-dis
+ 649   2                  break;
+ 650   2              case HDMI_FRL_DEPKT_RST:
+ 651   2                  BKCD_48_REG &= BIT2_0;
+ 652   2                  BKCD_48_REG |= BIT2_1;//[2]rgd_sw_frl_depkt_rst_n: 1-dis
+ 653   2                  break;
+ 654   2              case HDMI_FRL_TRAIN_RST:
+ 655   2                  BKCD_48_REG &= 0x81;//[5]rgd_sw_frl_dec_rst_n
+ 656   2                                      //[4]rgd_sw_frl_start_rst_n
+ 657   2                                      //[3]rgd_sw_fec_dec_rst_n
+ 658   2                                      //[2]rgd_sw_frl_depkt_rst_n
+ 659   2                                      //[1]rgd_sw_glb_rst_n
+ 660   2                  BKCD_48_REG |= 0x7e;
+ 661   2                  break;
+ 662   2              case HDMI_RX_FIFO_RST:
+ 663   2                  BKC9_08_REG &= BIT4_0;
+ 664   2                  BKC9_08_REG |= BIT4_1;
+ 665   2                  break;
+ 666   2              case HDMI_RX_DEPKT_RST:
+ 667   2                  BKC9_07_REG &= BIT6_0;//[6]rgd_sw_hdmi20rx_aud_rst_n: 0-en
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 12  
+
+ 668   2                  BKC9_07_REG |= BIT6_1;//[6]rgd_sw_hdmi20rx_aud_rst_n: 1-dis
+ 669   2                  break;        
+ 670   2              
+ 671   2              default:
+ 672   2                  break;
+ 673   2          }
+ 674   1      }
+ 675          
+ 676          void Drv_HdmiRx_PktClr(EnumHdmiRstType ucOpt)
+ 677          {
+ 678   1           switch(ucOpt)
+ 679   1          {
+ 680   2              case HDMIRX_EMP_CLR:
+ 681   2                  BKCB_19_REG |= BIT4_1;
+ 682   2                  BKCB_19_REG &= BIT4_0;
+ 683   2               default:
+ 684   2                  break;
+ 685   2          }
+ 686   1      }
+ 687          
+ 688          void Drv_HdmiRx_EdidLoad(u8 *pEDID_Data)
+ 689          {
+ 690   1          u8 ucBlockNum;
+ 691   1          u16 usLoop;
+ 692   1      
+ 693   1          BKCC_08_REG &= BIT1_0;//[1]rgd_rx_src_rd_en: 0-i2c slvae rd en, 1-src rd en; 
+ 694   1          BKCC_08_REG |= BIT7_1 | BIT0_1;//[7]rgd_edid_addr_plus_en, [0]rgd_accs_edid_en: 1-en, 0-dis
+ 695   1          BKCC_07_REG = 0x00;//[7:0]init address value
+ 696   1          BKCC_08_REG &= BIT7_0;//[7]rgd_edid_addr_plus_dis
+ 697   1      
+ 698   1          ucBlockNum = pEDID_Data[0x7e] + 1;
+ 699   1          if (ucBlockNum > 2)
+ 700   1          {
+ 701   2              BKCC_06_REG |= BIT6_1;//[6]rgd_edid_v3_en: 1-4block;
+ 702   2          }
+ 703   1          else
+ 704   1          {
+ 705   2              BKCC_06_REG &= BIT6_0;//[6]rgd_edid_v3_en: 0-2block;
+ 706   2          }
+ 707   1          for(usLoop = 0; usLoop < ((u16)ucBlockNum << 7); usLoop++)
+ 708   1          {
+ 709   2              BKCC_94_REG = pEDID_Data[usLoop];
+ 710   2          }
+ 711   1          BKCC_08_REG |= BIT1_1;//[1]src read en
+ 712   1          BKCC_08_REG &= BIT0_0;//[0]rgd_accs_edid_en: 1-en, 0-dis
+ 713   1          #ifdef NVIDIA_FW_EN
+                  #if (EDID_DDC_DIS == ENABLED)
+                  BKCC_03_REG &= 0xe0;
+                  BKCC_03_REG |= 0x02;//nivia glitch;
+                  BKCC_03_REG |= BIT5_1|BIT6_1;
+                  BKCC_06_REG  = 0x02; //RGD_SDA_OUT_DLY
+                  BKCA_1E_REG  = 0x04;//HDCP RX DDC SDA out delay.
+                  #endif
+                  #endif
+ 722   1      }
+ 723          
+ 724          void Drv_HdmiRx_Tmds_CdrSet(u8 ucOpt)
+ 725          {
+ 726   1          switch(ucOpt)
+ 727   1          {
+ 728   2              case HDMI14:
+ 729   2              case HDMI20:
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 13  
+
+ 730   2                  BKC8_11_REG &= BIT0_0;//[0]rgd_cdr_ord_sel: 0-first, 1-second;
+ 731   2                  BKC8_12_REG = 0x37;//[6:4]rgd_cdr_frug_sel; [3:0]rgd_cdr_phug_sel;
+ 732   2                  break;
+ 733   2      
+ 734   2              default:
+ 735   2                  break;
+ 736   2          }
+ 737   1      }
+ 738          
+ 739          //========================================================================
+ 740          // Func Name   : Drv_HdmiRx_PhyInit
+ 741          // Description : Select which phy dig_wclk for link clock.
+ 742          //            D2/D2------D3---------------D2
+ 743          //            D1/D1------D2---------------D1
+ 744          //            D0/D0------D1---------------D0
+ 745          //           CLK/D3------D0---------------D3
+ 746          // Input       : u8 ucOpt  
+ 747          // Output      : None
+ 748          // Return      : void
+ 749          //========================================================================
+ 750          void Drv_HdmiRx_PhySet(u8 ucOpt)
+ 751          {
+ 752   1          switch(ucOpt)
+ 753   1          {
+ 754   2              case HDMI14:
+ 755   2              case HDMI20:
+ 756   2                  BKA1_09_REG &= 0x0f;//[7:4]for hdmi2.1 to hdmi2.0 mode
+ 757   2                  BKA1_0B_REG = 0x4f;//[7:4]D1 link clk enable.
+ 758   2                                     //[3:0]D1/D2/D3 dig_clk enable.
+ 759   2                  BKA1_0A_REG = 0xf8;//[7:4]rg_dhrx_d0(d0~d3)_pkdet_en; [3:0]rg_dhrx_d0(d0~d3)_clkdet_en: 
+ 760   2                  BKA1_0C_REG = 0x7a;//[7]rg_dhrx_pwr_sel: 0-select from internal ldo
+ 761   2                                     //[2:0]rg_dhrx_pkdet_sdth: 0x02
+ 762   2                  #if CHIP_VERSION_SEL > U1_VERSION
+ 763   2                  BKA1_1D_REG = 0x82;//[7]soft en
+ 764   2                                     //[2:0]rg_dhrx_pkdet_sdth: 0x02
+ 765   2                  #endif
+ 766   2                  break;
+ 767   2      
+ 768   2              #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+ 769   2              case HDMI21:
+ 770   2                  BKA1_09_REG |= 0xf0;
+ 771   2                  BKA1_0B_REG = 0x4f;//[7:4]D1 link clk enable.
+ 772   2                                     //[3:0]D0/D1/D2/D3 dig_clk enable.
+ 773   2                  BKA1_0A_REG = 0xf0;//[7:4]rg_dhrx_d0(d0~d3)_pkdet_en; 
+ 774   2                                     //[3:0]rg_dhrx_d0(d0~d3)_clkdet_en;
+ 775   2                  BKA1_0C_REG = 0x7c;//[7]rg_dhrx_pwr_sel: 0-select from internal ldo
+ 776   2                                     //[2:0]rg_dhrx_pkdet_sdth: 0x04
+ 777   2                  break;
+ 778   2              #endif
+ 779   2          }
+ 780   1      }
+ 781          
+ 782          void Drv_HdmiRx_DigInit(u8 ucOpt)
+ 783          {
+ 784   1          switch(ucOpt)
+ 785   1          {
+ 786   2              case HDMI14:
+ 787   2              case HDMI20:
+ 788   2                  BKCC_1A_REG = 0x0c;//rgd_scp_cnt 
+ 789   2                  break;
+ 790   2      
+ 791   2              #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 14  
+
+ 792   2              case HDMI21:
+ 793   2                  BKCD_08_REG &= BIT4_0;//[4]force frl start disable
+ 794   2                  break;
+ 795   2              #endif
+ 796   2      
+ 797   2              default:
+ 798   2                  break;
+ 799   2          }
+ 800   1      }
+ 801          
+ 802          //========================================================================
+ 803          // Func Name   : Drv_HdmiRx_LogicalReset
+ 804          // Description : Reset phy and cdr with given sequence, to make sure cdr working correctly.
+ 805          // Input       : void  
+ 806          // Output      : None
+ 807          // Return      : void
+ 808          //========================================================================
+ 809          void Drv_HdmiRx_LogicalReset(void)
+ 810          {
+ 811   1          BKC9_07_REG &= 0xc9;//[5]rgd_sw_hdmi20rx_dc_rst_n
+ 812   1                              //[4]rgd_sw_hdmi20rx_dec_rst_n
+ 813   1                              //[2]rgd_sw_hdmi20rx_err_det_rst_n
+ 814   1                              //[1]rgd_sw_hdmi20rx_fec_rst_n
+ 815   1          BKC9_07_REG |= 0x36;
+ 816   1      }
+ 817          
+ 818          void Drv_HdmiRx_Tmds_PhyCtleSet(u8 ucOpt)
+ 819          {
+ 820   1          if (HDMI20 == ucOpt)
+ 821   1          {
+ 822   2              BKA1_02_REG = 0x44;//[7:4]rg_dhrx_eq0 is; [3:0]rg_dhrx_eq0 rl;
+ 823   2              BKA1_03_REG = 0x44;//[7:4]rg_dhrx_eq1 is; [3:0]rg_dhrx_eq1 rl;
+ 824   2      
+ 825   2              BKA1_04_REG = 0x48;//[7:4]rg_dhrx_bf0 is; [3:0]rg_dhrx_bf0 rl;
+ 826   2              BKA1_05_REG = 0x48;//[7:4]rg_dhrx_bf1 is; [3:0]rg_dhrx_bf1 rl;
+ 827   2      
+ 828   2              BKA1_06_REG = 0x62;//[7:4]rg_dhrx_fb0 is; [3:0]rg_dhrx_fb1is;
+ 829   2              BKA1_07_REG = 0x80;//[7:4]rg_dhrx_eq  cs; [3:2]rg_dgrx_fb rs; [1]rg_dhrx_nrb_en; [0]rg_dhrx_nr_en;
+ 830   2          }
+ 831   1          else
+ 832   1          {
+ 833   2              BKA1_02_REG = 0x22;//[7:4]rg_dhrx_eq0 is; [3:0]rg_dhrx_eq0 rl;
+ 834   2              BKA1_03_REG = 0x22;//[7:4]rg_dhrx_eq1 is; [3:0]rg_dhrx_eq1 rl;
+ 835   2      
+ 836   2              BKA1_04_REG = 0x22;//[7:4]rg_dhrx_bf0 is; [3:0]rg_dhrx_bf0 rl;
+ 837   2              BKA1_05_REG = 0x22;//[7:4]rg_dhrx_bf1 is; [3:0]rg_dhrx_bf1 rl;
+ 838   2      
+ 839   2              BKA1_06_REG = 0x23;//[7:4]rg_dhrx_fb0 is; [3:0]rg_dhrx_fb1is;
+ 840   2              BKA1_07_REG = 0x80;//[7:4]rg_dhrx_eq  cs; [3:2]rg_dgrx_fb rs; [1]rg_dhrx_nrb_en; [0]rg_dhrx_nr_en;
+ 841   2          }
+ 842   1      
+ 843   1          BKA1_08_REG = 0x0a;//[7]rg_dhrx_ldo_en: 0-disable, eq power use external vcc11_dhrx;
+ 844   1                             //[6:4]rg_dhrx_ldo_vset: 000-1.1v
+ 845   1                             //[3]rg_dhrx_en: 0-dis, 1-en;
+ 846   1                             //[2:0]rg_dhrx_vcm_adj: 011-0.75v
+ 847   1          BKA1_09_REG |= 0x70;//[7:4]rg_dhrx_d0(d0~d3)_hseq_en: because d0 is clk lane for hdmi2.0/1.4 mode, so 
+             -d0 disable hseq_en
+ 848   1                              //[0]rg_dhrx_linkclk_div2_en: 0-use from normal half-rate mode, 1-use for new full
+             --rate mede;
+ 849   1          BKA1_0E_REG &= 0xfc;
+ 850   1          BKA1_0E_REG |= BIT3_1; //[3:2]2'b10 = no DFE
+ 851   1      }
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 15  
+
+ 852          
+ 853          //========================================================================
+ 854          // Func Name   : to slove hdmi2.0 10bit case
+ 855          // Description : this is a bug for rxpll that, SRC is HDMI2.0 and deep color is 10bit
+ 856          // Input       : void  
+ 857          // Output      : None
+ 858          // Return      : void
+ 859          //========================================================================
+ 860          void Drv_HdmiRx_TenBitSet(void)
+ 861          {
+ 862   1          BKA1_37_REG &= 0xfc;//default
+ 863   1          //CCD7: [3:0] 0101-10bit
+ 864   1          //CC70: [1]tmds_bit_clock_ratio: 1 is 1/40, HDMI2.0;
+ 865   1          if ((BKCC_70_REG & BIT1_1) && ((BKCC_D7_REG & 0x0f) == 0x05))
+ 866   1          {
+ 867   2              BKA1_37_REG |= BIT6_1;//[6]rg_dhrxpll_tenbit_sel: 1-from register
+ 868   2              BKA1_37_REG |= BIT4_1;//[5:4]rg_dhrxpll_tenbit_set: 01-vco_out_clk
+ 869   2              BKA1_37_REG |= 0x02;  //half pixel div = 1;
+ 870   2              printLT(PRINT_PRIO_HIG, "\nHdmi rx tmds ten bit set");
+ 871   2          }
+ 872   1          else
+ 873   1          {
+ 874   2              BKA1_37_REG &= BIT6_0;//[6]rg_dhrxpll_tenbit_sel: 0-from digital-to-analog interface
+ 875   2              BKA1_37_REG &= BIT4_0;//[5:4]rg_dhrxpll_tenbit_set: 00-2*vco_out_clk
+ 876   2              BKA1_37_REG |= 0x01;//
+ 877   2          }
+ 878   1      }
+ 879          
+ 880          //========================================================================
+ 881          // Func Name   : to slove hdmi2.0 10bit case with csc ,using the pcrpll to creat pixel clk  in tmds mode
+ 882          // Description : this is a bug for rxpll that, SRC is HDMI2.0 and deep color is 10bit
+ 883          // Input       : void  
+ 884          // Output      : None
+ 885          // Return      : void
+ 886          //========================================================================
+ 887          void Drv_HdmiRx_TmdsPcrPllCal(u32 ulTmdsClk)
+ 888          {
+ 889   1          u8 ucpcrpll_cal_cnt,ucpcrpll_lock_cnt;
+ 890   1      
+ 891   1          BKA3_20_REG &= BIT4_0;//[4]rg_pcrpll_pd: 0-normal work
+ 892   1          BKA3_20_REG &= 0xfc;//[1:0]rg_pcrpll_ref_sel: 00-Xtal_25m_clk
+ 893   1          BKA3_20_REG |= 0X03;//pcr pll sel 
+ 894   1          BKA3_43_REG &= 0xf3;
+ 895   1          BKA3_43_REG |= BIT3_1;//sel rxpll half pixel clk
+ 896   1          
+ 897   1          BKA3_21_REG &= 0xe0;
+ 898   1          BKA3_21_REG |= 0x04; //prediv = 5;
+ 899   1          
+ 900   1          BKA3_24_REG = 0x00;//pcrpll_pixel_clk
+ 901   1          BKA3_2E_REG = 0x08;//da_pcrpll_post_divsel = 1;
+ 902   1          BKE2_3D_REG &= BIT3_0;//pcrpll_cal_disable
+ 903   1          BKE2_3D_REG = 0x20;// ks =2;
+ 904   1          // ulRxpll_In_Clk is half tmds clk, pcrpll_in ref half pixel clk
+ 905   1          // 4K30 pcrpll in clk  370M  ulRxpll_In_Clk*4 = real tmds clk
+ 906   1          if(ulTmdsClk < 375000) //half pixel clk
+ 907   1          {
+ 908   2              BKA3_20_REG |=BIT2_1;//rg_pcrpll post div = 2;
+ 909   2              BKA3_2A_REG = 0x80|0x28;// divset =  40;
+ 910   2              BKA3_2B_REG = 0xb0;//freq_set =  div 8
+ 911   2          }
+ 912   1          else  //
+ 913   1          {
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 16  
+
+ 914   2              BKA3_20_REG &=BIT2_0;//rg_pcrpll post div = 1;
+ 915   2              BKA3_2A_REG = 0x80|0x28;// divset = 40;
+ 916   2              BKA3_2B_REG = 0xa0;//freq_set =  div 4 
+ 917   2          }
+ 918   1          ucpcrpll_cal_cnt = 0;
+ 919   1          do{
+ 920   2              BKE1_08_REG &= 0xfc;//[1]rgd_sw_pcrpll_cal_rst_n
+ 921   2              BKE1_0E_REG &= BIT1_0;//[1]rg_sw_pcrpll_rst_n
+ 922   2              BKE2_3D_REG &= BIT3_0;//[3]rgd_pcrpll_pll_cal_en
+ 923   2              Ocm_Delay1ms(1);
+ 924   2              BKE1_08_REG |= 0x03;
+ 925   2              BKE1_0E_REG |= BIT1_1;
+ 926   2              Ocm_Delay1ms(1);
+ 927   2              BKE2_3D_REG |= BIT3_1;
+ 928   2              Ocm_Delay1ms(2);
+ 929   2              ucpcrpll_cal_cnt++;
+ 930   2          }while((ucpcrpll_cal_cnt < 3)&&((BKE2_47_REG&0x3) != 0x02));
+ 931   1          printLT(PRINT_PRIO_HIG, "\nPcrpll band = 0x%02bx", BKE2_4E_REG);
+ 932   1          ucpcrpll_lock_cnt = 0;      
+ 933   1          while((!(BKE2_28_REG&BIT4_1)) && (ucpcrpll_lock_cnt < 6))  //PLL lock output lock status
+ 934   1          {
+ 935   2              ucpcrpll_lock_cnt++;
+ 936   2              Ocm_Delay1ms(1);
+ 937   2          }
+ 938   1      }
+ 939          
+ 940          void Drv_HdmiRx_TmdsPcrPllDis(void)
+ 941          {
+ 942   1      
+ 943   1          BKA3_20_REG &= BIT4_0;//[4]rg_pcrpll_pd: 0-normal work
+ 944   1          BKA3_20_REG &= BIT2_0;//pcrpll post div =0;
+ 945   1          BKA3_20_REG &= 0xfc;//[1:0]rg_pcrpll_ref_sel: 00-Xtal_25m_clk
+ 946   1          BKA3_43_REG &= 0xf3;
+ 947   1          
+ 948   1          BKA3_21_REG &= 0xe0; //pre div = 1
+ 949   1          BKA3_24_REG =  0x20; //half pixel clk
+ 950   1          BKA3_2A_REG =  0x00;
+ 951   1          BKA3_2B_REG =  0x00;
+ 952   1          BKA3_2E_REG =  0x00; 
+ 953   1      }
+ 954          
+ 955          void Drv_HdmiRx_PllModeSet(u8 ucOpt)
+ 956          {
+ 957   1          if (ucOpt == HDMI21)
+ 958   1          {
+ 959   2              BKE3_09_REG &= 0xf3;  //default
+ 960   2              BKE3_09_REG |= BIT3_1;//[3:2]rgd_dhrxpll_cal_hdmidp_sel: 10-hdmi2.1
+ 961   2              BKA1_30_REG &= 0xfc;  //bit7 pll power on [1:0]rg_dhrxpll_ref_sel: 00-xtal_25m_clk or xtal_50m_clk
+ 962   2          }
+ 963   1          else
+ 964   1          {
+ 965   2              BKE3_09_REG &= 0xf3;  //[3:2]rgd_dhrxpll_cal_hdmidp_sel: 00-hdmi1.4/2.0 mode
+ 966   2              BKA1_30_REG &= 0xfc;  //default
+ 967   2              BKA1_30_REG |= BIT0_1;//[1:0]rg_dhrxpll_ref_sel = 01: aa_dhrx_tmds_clk
+ 968   2      
+ 969   2              BKE1_05_REG &= BIT2_0;//[2]rgd_sw_dhrxpll_freq_meter_rst_n:
+ 970   2              BKE1_05_REG |= BIT2_1;//[2]rgd_sw_dhrxpll_freq_meter_rst_n:
+ 971   2          }
+ 972   1      }
+ 973          
+ 974          void Drv_HdmiRx_Tmds_PiSet(u8 ucOpt)
+ 975          {
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 17  
+
+ 976   1          switch(ucOpt)
+ 977   1          {
+ 978   2              case HDMI14:
+ 979   2              case HDMI20:
+ 980   2                  BKA1_26_REG = 0x13;
+ 981   2                  BKA1_27_REG = 0x13;
+ 982   2                  BKA1_28_REG = 0x03;
+ 983   2                  break;
+ 984   2      
+ 985   2              default:
+ 986   2                  break;
+ 987   2          }
+ 988   1      }
+ 989          
+ 990          void Drv_HdmiRx_Tmds_PllCali(void)
+ 991          {
+ 992   1          BKA1_31_REG &= BIT7_0;//[7]rg_dhrxpll_iband_enhace: 0-500M~4GHz
+ 993   1          BKA1_35_REG |= BIT7_1;//[7]rg_dhrxpll_fec_clken: 1-en(only for dsc mode)
+ 994   1          BKA1_37_REG |= BIT2_1;//[2]rg_dhrxpll_halfpix_muxsel: 1-from deep color divider, applicable to all hdm
+             -i mode.
+ 995   1      
+ 996   1          BKE3_00_REG &= BIT1_0;//[1]rgd_dhrxpll_cal_pll_cal_en_auto_en: 0-calibrate a single frequency
+ 997   1          BKE3_0A_REG &= 0xcf;  //[5:4]rgd_dhrxpll_cal_frl_set_mode_sel: 00-auto ctrl mode
+ 998   1          BKE3_0B_REG &= BIT0_0;//[0]rgd_dhrxpll_cal_pll_band_sw_en: 0-dis
+ 999   1      
+1000   1          BKE1_05_REG &= 0xfc;//[0]rgd_sw_dhrxpll_cal_rst_n: 0-en
+1001   1          BKA1_30_REG &= BIT6_0;//[6]rg_dhrxpll_rst_n: 0-en
+1002   1          BKE3_00_REG &= BIT0_0;//[0]rgd_dhrxpll_cal_pll_cal_en: 0-dis
+1003   1          Ocm_Delay1ms(1);
+1004   1          BKE1_05_REG |= 0x03;//[0]rgd_sw_dhrxpll_cal_rst_n: 1-dis
+1005   1          BKA1_30_REG |= BIT6_1;//[6]rg_dhrxpll_rst_n: 1-dis
+1006   1          BKE3_00_REG |= BIT0_1;//[0]rgd_dhrxpll_cal_pll_cal_en: 1-en
+1007   1          Ocm_Delay1ms(2);
+1008   1          printLT(PRINT_PRIO_TEST, "\nTmds Rxpll cal band = 0x%02bx", BKE3_2E_REG);
+1009   1      }
+1010          
+1011          void Drv_HdmiRx_Tmds_PllVcoReset(void)
+1012          {   
+1013   1          //-wait add reason-
+1014   1          BKA1_30_REG &= BIT5_0;//[5]rg_dhrxpll_vcodiv_rst_n: 0-en
+1015   1          BKA1_30_REG |= BIT5_1;//[5]rg_dhrxpll_vcodiv_rst_n: 1-dis
+1016   1      }
+1017          
+1018          void Drv_HdmiRx_NewErrorStatistic(u8 ucOpt)
+1019          {
+1020   1          if (ucOpt == DISABLED)
+1021   1          {
+1022   2              BKCC_15_REG &= BIT4_0;//2204 old error statistic method
+1023   2              BKCC_2C_REG |= BIT2_1;//2102 new error statistic method
+1024   2              printLT(PRINT_PRIO_TEST, "\nHdmirx old err");
+1025   2          }
+1026   1          else
+1027   1          {
+1028   2              BKCC_29_REG |= BIT0_1;//[0]1-not concerned disparity cnt
+1029   2              BKCC_15_REG |= BIT4_1;//2204 new error statistic method   
+1030   2              printLT(PRINT_PRIO_TEST, "\nHdmirx new err");  
+1031   2          }
+1032   1      
+1033   1      }
+1034          
+1035          void Drv_HdmiRx_RxpllDivSet(u8 ucOpt)
+1036          {
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 18  
+
+1037   1          switch(ucOpt)
+1038   1          {
+1039   2              case HDMI14:
+1040   2                  if((BKE3_62_REG&0x30)==0x00)
+1041   2                  {
+1042   3                      BKA1_33_REG = 0x50;//rxpll prediv by da_freq set 
+1043   3                      BKA1_3E_REG = 0x50;//rxpll fb div by da_freq set
+1044   3                  }
+1045   2                  else
+1046   2                  {
+1047   3                      BKA1_33_REG = 0x00;//rxpll prediv by da_freq set 
+1048   3                      BKA1_3E_REG = 0x00;//rxpll fb div by da_freq set
+1049   3                  }
+1050   2                  BKA1_37_REG &= BIT7_0;//[7]rg_dhrxpll_hdmi20_sel: 0-hdmi1.4  div = 5
+1051   2                  BKA1_42_REG = 0x08;//frl mode freq_set = 0 el hard mode
+1052   2                  BKA1_31_REG = 0x02;//[4:0]rg_dhrxpll_cpcur_sel
+1053   2                  BKA1_36_REG = 0x43;//[6:4]rg_dhrxpll_lpf_cinset
+1054   2                  break;
+1055   2              case HDMI20:
+1056   2                  BKA1_33_REG = 0x60;//rxpll prediv by da_freq set = 1 
+1057   2                  BKA1_37_REG |= BIT7_1;//[7]rg_dhrxpll_hdmi20_sel: 1-hdmi2.0 div = 20
+1058   2                  BKA1_3E_REG = 0x60;//rxpll fb div by da_freq set fb_div =1;
+1059   2                  BKA1_42_REG = 0x88;//frl mode freq_set = 0 freq_set = 1
+1060   2                  BKA1_31_REG = 0x08;//[4:0]rg_dhrxpll_cpcur_sel
+1061   2                  BKA1_36_REG = 0x33;//[6:4]rg_dhrxpll_lpf_cinset
+1062   2                  break;
+1063   2              default:
+1064   2                  break;
+1065   2          }
+1066   1      }
+1067          
+1068          //========================================================================
+1069          // Func Name   : Drv_HdmiRx_ScrambeTimerSet
+1070          // Description : SCP cnt hold in HDMIRX scramble signal detect timer
+1071          // Input       : u8 ucOpt  
+1072          // Output      : None
+1073          // Return      : void
+1074          //========================================================================
+1075          void Drv_HdmiRx_ScrambeTimerSet(u8 ucOpt)
+1076          {
+1077   1          switch(ucOpt)
+1078   1          {
+1079   2              case HDMI14:
+1080   2                  BKCC_1A_REG = 0x0c;//rgd_scp_cnt
+1081   2                  break;
+1082   2              case HDMI20:
+1083   2                  BKCC_1A_REG = 0x08;//rgd_scp_cnt
+1084   2                  break;
+1085   2              default:
+1086   2                  break;
+1087   2          }
+1088   1      }
+1089          
+1090          //========================================================================
+1091          // Func Name   : Drv_HdmiRx_PhyRst
+1092          // Description : Reset phy and cdr with given sequence, to make sure cdr working correctly.
+1093          //               WARNING: the reset step cannot be changed
+1094          // Input       : void
+1095          // Output      : None
+1096          // Return      : void
+1097          //========================================================================
+1098          void Drv_HdmiRx_PhyRst(void)
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 19  
+
+1099          {
+1100   1          //WARNING: the reset step cannot be changed
+1101   1          BKE1_0C_REG &= 0xf0;//[6]rgd_sw_dhrx_rst_n: 0-en
+1102   1          BKE1_0D_REG &= 0xe1;//[4:1]rg_sw_dhrxpi3(3~0)_rst_n: 0-en ;
+1103   1          BKC9_03_REG &= 0x0f;// rx cdr reset
+1104   1      
+1105   1          BKE1_0C_REG |= 0x0f;//[6]rgd_sw_dhrx_rst_n: 1-dis
+1106   1          BKE1_0D_REG |= 0x1e;//[4:1]rg_sw_dhrxpi3(3~0)_rst_n: 1-dis; 
+1107   1          BKC9_03_REG |= 0xf0;//rx cdr reset
+1108   1      }
+1109          
+1110          void Drv_HdmiRx_HpdSet(u8 b1IsHigh)
+1111          {
+1112   1          BKA3_7F_REG |= BIT3_1;//[3]rgd_sw_en_dhrx_hpd: 0-hardware, 1-software
+1113   1          if (b1IsHigh == HPD_HIGH)
+1114   1          {
+1115   2              BKA3_5A_REG |= BIT6_1;
+1116   2              BKA1_09_REG |=0x0f;
+1117   2              BKCC_08_REG |= BIT6_1;//[6]rgd_rx_hpd: 1-HPD high, for cts test
+1118   2              BKCD_08_REG |= BIT2_1;//[2]hdmi 21 rx hpd indicated flag: for cts test
+1119   2              BKCC_00_REG |= BIT3_1;//[3]rgd_5v_det: 1-for scdc read request
+1120   2              BKA3_7F_REG |= BIT2_1;//[2]rgd_sw_dhrx_hpd: 0-soft output 0, 1-soft output 1
+1121   2              printLT(PRINT_PRIO_HIG,"\nHdmi rx hpd high");
+1122   2          }
+1123   1          else
+1124   1          {
+1125   2              BKA3_5A_REG &=0x3f;
+1126   2              BKA1_09_REG &=0xf0;//disable hdmirx-term
+1127   2              BKCC_08_REG &= BIT6_0;//[6]rgd_rx_hpd: 0-dis, for cts test
+1128   2              BKCD_08_REG &= BIT2_0;//[2]hdmi 21 rx hpd indicated flag, for cts test
+1129   2              BKCC_00_REG &= BIT3_0;//[3]rgd_5v_det: 0-no scdc read request
+1130   2              BKA3_7F_REG &= BIT2_0;//[2]rgd_sw_dhrx_hpd: 0-soft output 0, 1-soft output 1
+1131   2              printLT(PRINT_PRIO_HIG,"\nHdmi rx hpd low");
+1132   2          }
+1133   1      }
+1134          
+1135          
+1136          void Drv_HdmiRx_ClkMux(u8 ucOpt)
+1137          {
+1138   1          //default
+1139   1          BKA3_45_REG &= 0xe0;
+1140   1          BKA3_3C_REG &= 0x80;
+1141   1          BKA3_3D_REG &= 0x80;
+1142   1          BKA3_3E_REG &= 0x80;
+1143   1          BKA3_3F_REG &= 0x80;
+1144   1          BKA3_40_REG &= 0x80;
+1145   1          BKA3_41_REG &= 0x80;
+1146   1          BKA3_42_REG &= 0x80;
+1147   1      
+1148   1          if (ucOpt == HDMI21)//hdmi2.1
+1149   1          {
+1150   2              //sel dsc_in_clk = rx_link_clk
+1151   2              BKA3_3D_REG |= 0x60;//[6:4]rg_clkgen_div_link_muxsel     : 110-aa_pcrpll_dsc_in_clk
+1152   2              
+1153   2              //half pix
+1154   2              BKA3_45_REG = 0xe0;//[4]rg_clkgen_dscin_clk_recvsel      : 0-aa_pcrpll_dsc_in_clk
+1155   2                                  //[3:1]rg_clkgen_divpcr_clk_recvsel  : 000-aa_pcrpll_div_pcr_clk
+1156   2                                  //[0]rg_clkgen_pix_clk_recvsel       : 0-aa_pcrpll_pix_clk
+1157   2              BKA3_46_REG = 0x00;//[2:0]rg_clkgen_pcr_clk_recvsel      : 000-aa_pcrpll_pcr_clk
+1158   2      
+1159   2      
+1160   2              //pix
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 20  
+
+1161   2              BKA3_3C_REG |= 0x01;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_p
+             -ix_clk
+1162   2                                  //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+1163   2              BKA3_3E_REG |= 0x11;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+1164   2                                  //[3:0]rg_clkgen_dscout_divse        : div 2
+1165   2              BKA3_3F_REG |= 0x01;//ad_dscrx_dsc_clk    2f/2
+1166   2              BKA3_40_REG |= 0x11;//ad_dscrx_dsc_rd_clk 2f/2
+1167   2              BKA3_41_REG |= 0x01;//[6:4]rg_clkgen_dsctx_dsc_muxsel    : 000-aa_pcrpll_pix_clk
+1168   2              BKA3_42_REG |= 0x11;//[6:4]rg_clkgen_dsctx_dscrd_muxsel  : 001-aa_pcrpll_pix_clk
+1169   2                                   //[3:0]rg_clkgen_dsctx_dscrd_divsel : div 2
+1170   2          }
+1171   1          else//hdmi2.0 or hdmi1.4
+1172   1          {
+1173   2              //sel rx_link clk
+1174   2              BKA3_3D_REG |= 0x30;//[6:4]rg_clkgen_div_link_muxsel     : 011-aa_dhrxpll_link_clk
+1175   2      
+1176   2              //half pix
+1177   2              BKA3_45_REG |= 0x0a;//[3:1]rg_clkgen_divpcr_clk_recvsel  : 101-aa_dhrxpll_half_pix_clk
+1178   2              BKA3_46_REG  = 0x03; //[2:0]rg_clkgen_pcr_clk_recvsel    : 011-aa_dhrxpll_half_pix_clk
+1179   2      
+1180   2              
+1181   2              //pix
+1182   2              BKA3_3C_REG |= 0x51;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 101-aa_dhrxpll_pix_clk
+1183   2              BKA3_3E_REG |= 0x51;//[6:4]rg_clkgen_dscout_muxsel       : 101-aa_dhrxpll_pix_clk
+1184   2      
+1185   2              BKA3_3F_REG |= 0x51;//ad_dscrx_dsc_clk    2f/2
+1186   2              BKA3_40_REG |= 0x51;//ad_dscrx_dsc_rd_clk 2f/2
+1187   2              BKA3_41_REG |= 0x51;//[6:4]rg_clkgen_dsctx_dsc_muxsel    : 101-aa_dhrxpll_pix_clk
+1188   2              BKA3_42_REG |= 0x51;//[6:4]rg_clkgen_dsctx_dscrd_muxsel  : 101-aa_dhrxpll_pix_clk
+1189   2          }
+1190   1      }
+1191          
+1192          void Drv_HdmiRx_PcrClkMux(void)
+1193          {
+1194   1          BKA3_23_REG = 0x21;//[6:4]rg_pcrpll_half_pcrck_muxsel : 010-aa_pll_half_pix_clk
+1195   1          BKA3_24_REG = 0x20;//[6:4]rg_pcrpll_half_pixck_muxsel : 010-aa_pll_half_pix_clk
+1196   1          BKA3_25_REG = 0x21;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+1197   1          BKA3_26_REG = 0x01;//[6:4]rg_pcrpll_dscin_muxsel      : 000-aa_pll_pix_clk
+1198   1      }
+1199          
+1200          void Drv_HdmiRx_SecPcrClkMux(void)
+1201          {
+1202   1          BKA3_32_REG = 0x01;//[6:4]rg_secpcrpll_half_pcrck_muxsel: 000-aa_pll_pix_clk
+1203   1          BKA3_33_REG = 0x00;//[6:4]rg_secpcrpll_half_pixck_muxsel: 000-aa_pll_pix_clk
+1204   1          BKA3_34_REG = 0x00;
+1205   1          BKA3_35_REG = 0x00;//[6:4]rg_secpcrpll_dscin_muxsel     : 000-aa_pll_pix_clk
+1206   1      }
+1207          
+1208          u8 Drv_HdmiRx_VersionGet(void)
+1209          {
+1210   1          if (BKCC_70_REG & BIT1_1)//rgod_scdc_reg20[1]tmds_bit_clock_ratio: 1 is 1/40;
+1211   1          {
+1212   2              return HDMI20;
+1213   2          }
+1214   1          else//rgod_scdc_reg20[1]tmds_bit_clock_ratio: 0 is 1/10, 
+1215   1          {
+1216   2              return HDMI14;
+1217   2          }
+1218   1      }
+1219          
+1220          u8 Drv_HdmiRx_HdmiModeGet(void)
+1221          {
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 21  
+
+1222   1          if ((BKCC_E1_REG & BIT5_1)||(BKCC_70_REG & 0x03)||((BKCD_B5_REG&0x0f) != 0))//[5]sramble or scdc 1:0 o
+             -r hdmi2.1
+1223   1           {
+1224   2                return TRUE;
+1225   2           }
+1226   1           else
+1227   1           {
+1228   2               return FALSE;
+1229   2           }
+1230   1      }
+1231          //========================================================================
+1232          // Func Name   : Drv_HdmiRx_SettingInit
+1233          // Description : The setting init for HPD High.
+1234          //             : Shall be called every time before HPD go to high.
+1235          // Input       : void  
+1236          // Output      : None
+1237          // Return      : void
+1238          //========================================================================
+1239          void Drv_HdmiRx_SettingInit(void)
+1240          {
+1241   1          Drv_HdmiRx_PhySet(HDMI20);
+1242   1          Drv_HdmiRx_DigInit(HDMI20);
+1243   1          Drv_HdmiRx_Tmds_CdrSet(HDMI20);
+1244   1          Drv_HdmiRx_ErrValidClr(ENABLED);
+1245   1          Drv_HdcpRx_Enable(HDMIRX_HDCP_DEC_MODE);
+1246   1          Drv_HdcpRx_SoftAvmuteEn(ENABLED);
+1247   1      
+1248   1          #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+1249   1          Drv_HdmiRx_Frl_Init();
+1250   1          Drv_HdmiRx_Frl_PcrInit();
+1251   1          #if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED) || (HDMIRX_DSC_BYPASS_SUPPORT == ENABLED))
+1252   1          Drv_HdmiRx_Frl_SecPcrInit();
+1253   1          #endif
+1254   1          Drv_System_IntSet(IRQ_HDMIRX_FRL_INT, OFF);
+1255   1          Drv_System_IntClr(IRQ_HDMIRX_FRL_INT);
+1256   1          #endif
+1257   1          Drv_System_IntSet(IRQ_HDMIRX_VRRSTART_INT, ON);
+1258   1          Drv_System_IntClr(IRQ_HDMIRX_VRRSTART_INT);
+1259   1          Drv_System_IntSet(IRQ_HDMIRX_VRRSTOP_INT, ON);
+1260   1          Drv_System_IntClr(IRQ_HDMIRX_VRRSTOP_INT);
+1261   1          Drv_System_IntSet(IRQ_HDMIRX_STATICHDR_INT, ON);
+1262   1          Drv_System_IntClr(IRQ_HDMIRX_STATICHDR_INT);
+1263   1          Drv_System_IntSet(IRQ_HDMIRX_DYNAMICHDR_INT, ON);
+1264   1          Drv_System_IntClr(IRQ_HDMIRX_DYNAMICHDR_INT);
+1265   1          Drv_System_IntSet(IRQ_HDMIRX_VSI_INT, ON);
+1266   1          Drv_System_IntClr(IRQ_HDMIRX_VSI_INT);
+1267   1          
+1268   1      }
+1269          
+1270          u8 Drv_HdmiRx_PacketInfoCheck(void)
+1271          {
+1272   1          u8 ucRtn;
+1273   1      
+1274   1          if(Drv_HdmiRx_HdmiModeGet()== TRUE)//hdmi mode
+1275   1          {
+1276   2              if (Drv_System_PktDataChk(AVI_INFO_FRAME_0X82) == SUCCESS)//avi info frame
+1277   2              {
+1278   3                  printLT(PRINT_PRIO_TEST, "\nHdmi rx de-packet check ok");
+1279   3                  ucRtn = SUCCESS;
+1280   3              }
+1281   2              else
+1282   2              {
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 22  
+
+1283   3                  printLT(PRINT_PRIO_TEST, "\nHdmi rx de-packet check fail");
+1284   3                  ucRtn = FAIL;
+1285   3              }
+1286   2          }
+1287   1          else
+1288   1          {
+1289   2              ucRtn = SUCCESS;//dvi mode not have avi info, so return success
+1290   2          }
+1291   1          printLT(PRINT_PRIO_HIG, "\nHdmi rx ecc err 0x%02bx, 0x%02bx", BKCC_F5_REG, BKCC_F6_REG);
+1292   1          printLT(PRINT_PRIO_HIG, "\nHdmi rx ecc 50err state[6:5] is 0x%02bx", BKCC_F4_REG);
+1293   1          return ucRtn;
+1294   1      }
+1295          
+1296          u8 Drv_HdmiRx_DscDecState(void)
+1297          {
+1298   1          #if ((CHIP_SEL == LT86121GXE))//121 case
+              
+                  #if (DSC_USER_DEFINE_PKT_EN == ENABLED)
+                  return ENABLED;
+                  #elif ((HDMIRX_DSC_DEC_SUPPORT == ENABLED) || (HDMIRX_DSC_BYPASS_SUPPORT == ENABLED))
+                  if(BKCB_41_REG & BIT1_1)//[1]rgod_h20rx_pps_set_flag: 1-have pps
+                  {
+                      return ENABLED;
+                  }
+                  else//0-no pps
+                  {
+                      return DISABLED;
+                  }
+                  #else
+                  return DISABLED;
+                  #endif
+              
+                  #else //not 121 case
+1316   1      
+1317   1          #if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED) || (HDMIRX_DSC_BYPASS_SUPPORT == ENABLED))
+1318   1          if(BKCB_41_REG & BIT1_1)//[1]rgod_h20rx_pps_set_flag: 1-have pps
+1319   1          {
+1320   2              return ENABLED;
+1321   2          }
+1322   1          else//0-no pps
+1323   1          {
+1324   2              return DISABLED;
+1325   2          }
+1326   1          #else
+                  return DISABLED;
+                  #endif
+1329   1      
+1330   1          #endif
+1331   1      }
+1332          
+1333          void Drv_HdmiRx_ColorInfoGet(ColorInfo_S *pstInfo)
+1334          {
+1335   1          pstInfo->ucBitDepth          = BKCC_D7_REG  & 0x0f;//[3:0]color depth: 4-8bit, 5-10bit, 6-12bit
+1336   1          if(pstInfo->ucBitDepth == 0x00)//00 also 8bit
+1337   1          {
+1338   2              pstInfo->ucBitDepth = HDMIRX_8BIT_4;
+1339   2          }
+1340   1          pstInfo->ucPixelEncoding     = (BKCC_A3_REG & 0x60) >> 5;//pb1[7:5]0-rgb, 1-422, 2-444, 3-420
+1341   1          if(pstInfo->ucPixelEncoding == 0x01)
+1342   1          {
+1343   2              pstInfo->ucBitDepth = HDMIRX_12BIT_6;
+1344   2          }
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 23  
+
+1345   1      
+1346   1          pstInfo->ucColorimetryFormat = (BKCC_A4_REG & 0xc0) >> 6;//pb2[7:6]3-use colorimetry ext
+1347   1          pstInfo->ucAspectRatio       = BKCC_A4_REG  & 0x0f;
+1348   1          pstInfo->ucColorimetryExt    = (BKCC_A5_REG & 0x70) >> 4;//pb3[6:4]colorimetry ext
+1349   1          pstInfo->ucRgbRange          = (BKCC_A5_REG & 0x0c) >> 2;//pb3[3:2]00-default, 1-limit, 2-full, 3-rese
+             -rved
+1350   1      
+1351   1          pstInfo->ucVic               =  BKCC_A6_REG;//pb4 vic value
+1352   1          pstInfo->ucYccRange          = (BKCC_A7_REG & 0xc0)>>6;//pb5[7:6]00-limited, 1-full, other-reserved
+1353   1      }
+1354          
+1355          void Drv_HdmiRx_RxTimingGet(LtTiming_S *pstTiming)
+1356          {
+1357   1          //get V timing by video check
+1358   1          pstTiming->usVfp =   ((u16)BKC8_4C_REG << 8) + BKC8_4D_REG;
+1359   1          pstTiming->usVsync = ((u16)BKC8_46_REG << 8) + BKC8_47_REG;
+1360   1          pstTiming->usVbp =   ((u16)BKC8_4A_REG << 8) + BKC8_4B_REG;
+1361   1          pstTiming->usVact =  ((u16)BKC8_56_REG << 8) + BKC8_57_REG;
+1362   1          pstTiming->usVtol =  ((u16)BKC8_52_REG << 8) + BKC8_53_REG;
+1363   1          //h
+1364   1          pstTiming->usHfp =   ((u16)BKC8_50_REG << 8) + BKC8_51_REG;
+1365   1          pstTiming->usHsync = ((u16)BKC8_48_REG << 8) + BKC8_49_REG;
+1366   1          pstTiming->usHbp =   ((u16)BKC8_4E_REG << 8) + BKC8_4F_REG;
+1367   1          pstTiming->usHact =  ((u16)BKC8_58_REG << 8) + BKC8_59_REG;
+1368   1          pstTiming->usHtol =  ((u16)BKC8_54_REG << 8) + BKC8_55_REG;
+1369   1          //recover to real timing
+1370   1          if ((BKCC_D0_REG & 0x70) == 0x30)//[6:4]hdmi rx color space, 11-yuv420, -wangtt- wait update
+1371   1          {
+1372   2              pstTiming->usHbp   <<= 2;
+1373   2              pstTiming->usHfp   <<= 2;
+1374   2              pstTiming->usHsync <<= 2;
+1375   2              pstTiming->usHtol  <<= 2;
+1376   2              pstTiming->usHact  <<= 2;
+1377   2          }
+1378   1          else
+1379   1          {
+1380   2              pstTiming->usHbp   <<= 1;
+1381   2              pstTiming->usHfp   <<= 1;
+1382   2              pstTiming->usHsync <<= 1;
+1383   2              pstTiming->usHtol  <<= 1;
+1384   2              pstTiming->usHact  <<= 1;
+1385   2          }
+1386   1      }
+1387          
+1388          void Drv_HdmiRx_AudioInfoGet(AudioChlInfo_S *pstInfo)
+1389          {
+1390   1          pstInfo->ucFsValue = BKC6_7C_REG;
+1391   1      
+1392   1          pstInfo->ucLayout = (BKCC_D3_REG >> 2) & BIT0_1;//[2]rgod_audc_pkt_layout: 1-audio is 8 chl, 0-is 2 ch
+             -l
+1393   1          pstInfo->ucChannel = BKCC_AC_REG & 0x07;
+1394   1          pstInfo->ucCodingType = (BKCC_D3_REG & BIT3_1)?(ENABLED):(DISABLED); 
+1395   1      
+1396   1          pstInfo->szAudioInfo[0] = BKCC_AC_REG;//aif pb1
+1397   1          pstInfo->szAudioInfo[1] = BKCC_AD_REG;//aif pb2
+1398   1          pstInfo->szAudioInfo[2] = BKCC_AE_REG;//aif pb3
+1399   1          pstInfo->szAudioInfo[3] = BKCC_AF_REG;//aif pb4
+1400   1          pstInfo->szAudioInfo[4] = BKCC_B0_REG;//aif pb5
+1401   1      }
+1402          
+1403          u8 Drv_HdmiRx_Tmds_ClkStbChk(void)
+1404          {
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 24  
+
+1405   1          u8 ucState = UNSTABLE;
+1406   1          static u8 ucStableCnt = 0;
+1407   1      
+1408   1          if ((BKE3_24_REG & BIT5_1)&&(Drv_System_IntSrcGet(IRQ_TMDS_STB_INT) == TRUE))
+1409   1          {
+1410   2              if (((BKE3_21_REG & 0x0f) > 0) || (BKE3_22_REG > 0x60))//
+1411   2              {
+1412   3                  ucState = STABLE;
+1413   3              }
+1414   2          }
+1415   1          if (Drv_System_IntFlagGet(IRQ_TMDS_UNSTB_INT) == TRUE)
+1416   1          {
+1417   2              Drv_System_IntClr(IRQ_TMDS_UNSTB_INT);
+1418   2              ucState = UNSTABLE;
+1419   2          }
+1420   1          if(ucState == UNSTABLE)
+1421   1          {
+1422   2              ucStableCnt = 0;
+1423   2              return UNSTABLE;
+1424   2          }
+1425   1          else
+1426   1          {
+1427   2              if((ucStableCnt++) >= 100)
+1428   2              {
+1429   3                  ucStableCnt = 0;
+1430   3                  return STABLE;
+1431   3              } 
+1432   2          }
+1433   1          return UNKNOWN;
+1434   1      }
+1435          
+1436          //========================================================================
+1437          // Func Name   : Drv_HdmiRx_Tmds_RxPllCaliCheck
+1438          // Description : Check rxpll calibration result
+1439          // Input       : void
+1440          // Output      : None
+1441          // Return      : SUCCESS-> calibration pass.
+1442          //             : FAIL   -> calibration fail.
+1443          //========================================================================
+1444          u8 Drv_HdmiRx_Tmds_RxPllCaliCheck(void)
+1445          {
+1446   1          if ((BKE3_24_REG & BIT1_1) == 0)// [1]rgod_dhrxpll_pll_cal_done
+1447   1          {
+1448   2              printLT(PRINT_PRIO_HIG, "\nHdmirx pll cali not done");
+1449   2              return FAIL;
+1450   2          }
+1451   1      
+1452   1          if (BKE3_24_REG & BIT0_1)//[0]rgod_dhrxpll_pll_cal_fail
+1453   1          {
+1454   2              printLT(PRINT_PRIO_HIG, "\nHdmirx pll cali fail");
+1455   2              return FAIL;
+1456   2          }
+1457   1           
+1458   1          if ((BKE3_24_REG & BIT4_1) == 0)//[4]rgod_dhrxpll_pll_lock_out
+1459   1          {
+1460   2              printLT(PRINT_PRIO_HIG, "\nHdmirx pll unlock");
+1461   2              return FAIL;
+1462   2          }
+1463   1      
+1464   1          return SUCCESS;  
+1465   1      }
+1466          
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 25  
+
+1467          void Drv_HdmiRx_Tmds_ErrClr(void)
+1468          {
+1469   1          BKCC_28_REG |= BIT2_1;//[2]rgd_err_clr: 1-en
+1470   1          BKCC_28_REG &= BIT2_0;//[2]rgd_err_clr: 0-dis
+1471   1      }
+1472          
+1473          void Drv_HdmiRx_SyncPolSet(u8 ucOpt)
+1474          {
+1475   1          if (ENABLED == ucOpt)
+1476   1          {
+1477   2              (!(BKC8_6F_REG&BIT5_1))? (BKCC_1C_REG |= BIT1_1) : (BKCC_1C_REG &= BIT1_0);//vsync pol
+1478   2              (!(BKC8_6F_REG&BIT4_1))? (BKCC_1C_REG |= BIT0_1) : (BKCC_1C_REG &= BIT0_0);//hsync pol
+1479   2          }
+1480   1          else
+1481   1          {
+1482   2              BKCC_1C_REG &= 0xfc;//[1:0]Vsync Hsync
+1483   2          }
+1484   1      }
+1485          
+1486          void Drv_HdmiRx_ErrValidClr(u8 ucOpt)
+1487          {
+1488   1          if (ucOpt == ENABLED)
+1489   1          {
+1490   2              BKCC_2C_REG &= BIT0_0;
+1491   2          }
+1492   1          else
+1493   1          {
+1494   2              BKCC_2C_REG |= BIT0_1;
+1495   2          }
+1496   1      }
+1497          
+1498          //--------------------------------------Eq--------------------------------------
+1499          #if HDMIRX_EQ_MODE == HW_MODE
+1500          #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+1501          void Drv_HdmiRx_Frl_HwEqInit(void)
+1502          {
+1503   1          #if HDMIRX_EQ_STAGE == EQ_16_STAGE
+1504   1          BKCE_89_REG = 0xf0;//[7:4]rgd_eq_stage_tot_cnt: e-16 stage
+1505   1                             //[3:1]rgd_retry_eq_cnt: 3 times
+1506   1                             //[0]rgd_eq_normal_en: 0-dis
+1507   1          BKCE_AB_REG = 0x07;//EQ STP0 level7 setting.
+1508   1          #endif
+1509   1      
+1510   1          #if HDMIRX_EQ_STAGE == EQ_8_STAGE
+                  BKCE_89_REG = 0x70;//[7:4]rgd_eq_stage_tot_cnt: e-16 stage
+                                     //[3:1]rgd_retry_eq_cnt: 3 times
+                                     //[0]rgd_eq_normal_en: 0-dis
+                  #endif
+1515   1      
+1516   1          BKCE_84_REG = 0x00;//rgd_scvchk_wait_timer[15:8]
+1517   1          BKCE_83_REG = 0x60;//rgd_scvchk_wait_timer[ 7:0]
+1518   1          BKCE_86_REG = 0x00;//rgd_eq_wait_timer[15:8]
+1519   1          BKCE_85_REG = 0xc0;//rgd_eq_wait_timer[ 7:0]
+1520   1          BKCE_C4_REG = 0x01;//rgd_eq_scan_timer[15:8]
+1521   1          BKCE_C3_REG = 0x00;//rgd_eq_scan_timer[ 7:0]
+1522   1          BKCE_8B_REG = 0x08;//rgd_eq_err_uplmt[15:8]
+1523   1          BKCE_8A_REG = 0xff;//rgd_eq_err_uplmt[ 7:0]
+1524   1          BKCE_8C_REG = 0x08;//[3] 3CH SYSN enable
+1525   1                             //[0]EQ_EARLY_RETRY diable -0629
+1526   1      }
+1527          
+1528          void Drv_HdmiRx_Frl_HwEqEn(void)
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 26  
+
+1529          {
+1530   1          BKC7_FB_REG |= BIT7_1;//[7]rgd_hdmi21_mode: 1-hdmi21 eq
+1531   1      
+1532   1          BKCE_AF_REG &= BIT4_0;//[0]eq soft reset: 0-reset enable -0629
+1533   1          BKCE_AF_REG |= BIT4_1;//[0]eq soft reset: 1-reset disable -0629
+1534   1      
+1535   1          BKCE_81_REG |= BIT3_1;//hardware auto eq start, positive edge effective
+1536   1          BKCE_81_REG &= BIT3_0;
+1537   1      }
+1538          #endif
+1539          
+1540          void Drv_HdmiRx_Tmds_HwEqInit(void)
+1541          {
+1542   1          #if HDMIRX_EQ_MODE == HW_MODE
+1543   1          #if HDMIRX_EQ_STAGE == EQ_16_STAGE
+1544   1          BKCC_35_REG = 0x0f;//[3:0]rgd_eq_stage_tot_cnt: e-16 stage
+1545   1          BKCC_56_REG = 0x07;//EQ STP0 level7 setting.
+1546   1          #endif
+1547   1      
+1548   1          #if HDMIRX_EQ_STAGE == EQ_8_STAGE
+                  BKCC_35_REG = 0x07;//[3:0]rgd_eq_stage_tot_cnt: 7-8 stage
+                  #endif
+1551   1      
+1552   1          BKCC_1F_REG = 0x00;//1.024ms
+1553   1          BKCC_20_REG = 0x60;//scvchk wait timer after change eq value when hw auto eq scan
+1554   1          BKCC_2E_REG = 0x00;//2.048ms
+1555   1          BKCC_2F_REG = 0xc0;//eq wait timer after scvchk wait timer when hw auto eq scan, eq wait time must be 
+             -greater than scvchk wait time
+1556   1          BKCC_32_REG = 0x01;//2.730ms
+1557   1          BKCC_33_REG = 0x00;//eq scan timer after clear error cnt when hw auto eq scan
+1558   1          BKCC_36_REG = 0x08;//[7]can not set to 1; error counter uplimit [15:8]: 0x08;
+1559   1          BKCC_37_REG = 0xff;//Error counter uplimit [7:0]: use default value is 0xff;
+1560   1          BKCC_34_REG = 0x80;//[6:4]: Maximum numbler of retry attempt current EQ set to 3
+1561   1                             //[1]: early retry mode enable
+1562   1                             //[0]: Normal stage ajust EQ enable
+1563   1      
+1564   1          BKCC_2D_REG = 0x05;//Current EQ is considered to be good EQ when errorcounter less than this register 
+             -value.
+1565   1          #endif
+1566   1      }
+1567          
+1568          void Drv_HdmiRx_Tmds_HwEqEn(void)
+1569          {
+1570   1          #if HDMIRX_EQ_MODE == HW_MODE
+1571   1          BKC7_FB_REG &= BIT7_0;//[7]rgd_hdmi21_mode: 0-hdmi20 eq
+1572   1      
+1573   1          BKC9_07_REG &= BIT0_0;//[0]eq soft reset: 0-reset enable -0628
+1574   1          BKC9_07_REG |= BIT0_1;//[0]eq soft reset: 1-reset disable -0628
+1575   1      
+1576   1          BKCC_2C_REG |= BIT3_1;//hardware auto eq start,positive edge effective
+1577   1          BKCC_2C_REG &= BIT3_0;
+1578   1          #endif
+1579   1      }
+1580          
+1581          #endif
+1582          #endif
+1583          
+1584          
+1585          #if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD)) 
+              u8 Drv_HdmiRx_AudioChangeDetect(void)
+              {
+                  u8 current_audioFS = 0;
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 27  
+
+                      
+                              current_audioFS = BKC6_7C_REG;
+                              if(BKE0_91_REG > current_audioFS)
+                              {
+                                              if(BKE0_91_REG - current_audioFS > 1)
+                                              {
+                                                              if((current_audioFS==31)||(current_audioFS==32)||(current_audioFS==44)||(current_audioFS==47)||(curr
+             -ent_audioFS==48))
+                                                              {
+              //                                                              Audio_interrupt_trigger = 1;
+              //                                                              Ocm_Timer_UpdLocalTime(&ulCurrentAudioTime);
+                                                                              BKE0_90_REG = 0x01;
+                                                                              BKE0_91_REG = current_audioFS;//audio sample rate
+                                                                        return 1;
+                                                              }
+                                                              else if(current_audioFS==0)
+                                                              {
+              //                                                              Audio_interrupt_trigger = 1;
+              //                                                              Ocm_Timer_UpdLocalTime(&ulCurrentAudioTime);
+                                                                              BKE0_90_REG = 0x00;
+                                                                              BKE0_91_REG = current_audioFS;//audio sample rate
+                                                                        return 1;
+                                                              }
+                                                              else
+                                                              {
+                                                                        return 0;
+                                                              }
+                                              }
+                                              else
+                                              {
+                                                        return 0;
+                                              }
+                              }
+                              else if(current_audioFS > BKE0_91_REG)
+                              {
+                                              if(current_audioFS - BKE0_91_REG > 1)
+                                              {
+                                                              if((current_audioFS==31)||(current_audioFS==32)||(current_audioFS==44)||(current_audioFS==47)||(curr
+             -ent_audioFS==48))
+                                                              {
+              //                                                              Audio_interrupt_trigger = 1;
+              //                                                              Ocm_Timer_UpdLocalTime(&ulCurrentAudioTime);
+                                                                              BKE0_90_REG = 0x01;
+                                                                              BKE0_91_REG = current_audioFS;//audio sample rate
+                                                                        return 1;
+                                                              }
+                                                              else
+                                                              {
+                                                                        return 0;
+                                                              }
+                                              }
+                                              else
+                                              {
+                                                        return 0;
+                                              }
+                                              
+                              }
+                              else
+                              {
+                                        return 0;
+                              }
+              }
+C51 COMPILER V9.53.0.0   DRVHDMIRX                                                         02/13/2025 10:14:18 PAGE 28  
+
+              
+              u8 Drv_HdmiRx_VideoDisappearDetect()
+              {
+                              if(BKE0_84_REG != 0x00)
+                              {
+                                              BKE0_84_REG = 0x00;//video interrupt type
+                                              BKE0_90_REG = 0x00;//audio interrupt type
+                                      
+                                              //resolution
+                                              BKE0_88_REG = 0;
+                                              BKE0_89_REG = 0;
+                                              BKE0_8A_REG = 0;
+                                              BKE0_8B_REG = 0;
+                                              BKE0_8C_REG = 0;
+                                              BKE0_8D_REG = 0;
+                                              BKE0_8E_REG = 0;
+                                              BKE0_8F_REG = 0;
+                                      
+                                              //Byteclk
+                                              BKE0_92_REG = 0;
+                                              BKE0_93_REG = 0;
+                                              BKE0_94_REG = 0;
+                                      
+                                              //pixlClk
+                                              BKE0_85_REG = 0;
+                                              BKE0_86_REG = 0;
+                                              BKE0_87_REG = 0;
+                                              
+                                              //audio sample rate
+                                              BKE0_91_REG = 0;
+                                              
+                                              //color space
+                                              BKE0_95_REG = 0;
+                                              return 1;
+                              }
+                              else
+                              {
+                                        return 0;
+                              }
+              }
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   5063    ----
+   CONSTANT SIZE    =    529    ----
+   XDATA SIZE       =      1      17
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

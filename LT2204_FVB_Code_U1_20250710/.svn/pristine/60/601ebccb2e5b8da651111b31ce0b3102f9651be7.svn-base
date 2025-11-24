@@ -1,0 +1,44 @@
+C51 COMPILER V9.53.0.0   MODCC2TYPEC                                                       02/13/2025 10:14:00 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODCC2TYPEC
+OBJECT MODULE PLACED IN .\Objects\ModCC2Typec.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModCC2Typec.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZ
+                    -E) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG P
+                    -RINT(.\Listings\ModCC2Typec.lst) OBJECT(.\Objects\ModCC2Typec.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  I2CMast.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          #include "Include.h"
+   8          
+   9          #if TYPECTX_EN == ENABLED
+              void Mod_CCTx_Loop(void)
+              {
+                  
+              }
+              
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

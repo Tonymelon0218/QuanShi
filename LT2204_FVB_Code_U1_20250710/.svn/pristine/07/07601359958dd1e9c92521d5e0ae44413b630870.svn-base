@@ -1,0 +1,545 @@
+//////////////////////////////////////
+//Project:   LT2204
+//Filename:  Lt6711gxe.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+#if CHIP_SEL == LT6711GXE
+
+void LT6711GXE_PowerOnInit(void)
+{
+    #if ((TYPECRX_EN == ENABLED)||(TYPECTX_EN == ENABLED))
+    Mod_CC1Vari_Init();
+    Mod_CC2Vari_Init();
+    #endif
+    Mod_HdmiRx_PowerOnInit();
+    Mod_DpTx_PowerOnInit();
+    #ifdef NVIDIA_FW_EN
+    #if (SLEEP_MODE == ENABLED)
+    memset(&g_stSleep, 0, sizeof(StructSleepInfo));
+    g_stSleep.ucSleepState = SLEEP_INIT_0;
+    #endif
+    #endif
+    #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+    Drv_HdmiRxDscDec_ParaInit();
+    #endif
+    Drv_Sys_DecPowerDomain(TRUE);
+    Drv_Sys_EncPowerDomain(TRUE);
+    Drv_Sys_LmtxPowerDomain(TRUE);
+
+    #ifdef NVIDIA_FW_EN
+    #if EDID_DDC_DIS == ENABLED
+    printLT(PRINT_PRIO_HIG, "\nDis_Edid");
+    #else
+    printLT(PRINT_PRIO_HIG, "\nFixed_Edid");
+    #endif
+    #endif
+}
+
+void LT6711GXE_HdmiRxVarInit(void)
+{
+    g_stHdmiRx.ucHdmiVer = HDMI20;
+    #ifdef NVIDIA_FW_EN
+    #if (SLEEP_MODE == ENABLED)
+    g_stSleep.ucSleepState = SLEEP_INIT_0;
+    #endif
+    #endif
+}
+
+void LT6711GXE_DpTxVarInit(void)
+{
+    memset(&g_stAuxDpTx, 0, sizeof(DpTxAuX_S));
+    g_stAuxDpTx.ucLinkRateMax = DPTX_MAX_LINK_RATE;
+    g_stAuxDpTx.ucLaneCntMax  = DPTX_MAX_LANE_CNT;
+    g_stAuxDpTx.ucTps3En      = DPTX_TPS3_SUPPORT;
+    g_stAuxDpTx.ucTps4En      = DPTX_TPS4_SUPPORT;
+    g_stAuxDpTx.b1SscCap      = DPTX_SSC_SUPPORT;
+    g_stAuxDpTx.b1ScrambleCap = DPTX_SCRAMBLE_SUPPORT;
+}
+
+void LT6711GXE_CCGpioInit(void)
+{
+    #if TYPECTX_EN == ENABLED
+    UCCStatus.uclaneCount  = DPTX_MAX_LANE_CNT;
+    #endif
+
+    #ifdef NVIDIA_FW_EN
+    #if (CUSTOMER_DEFINED == ENABLED)
+    Drv_Gpio_ModeSet(GPIO16_MCLKA, OUT_PP_2x|PD_100K, VOL_3_3);
+    Drv_IOSoftLevel_Set(GPIO16_MCLKA, LOW); //for nvidia case 1: hdmi mode, 0:dvi mode
+    Drv_Gpio_ModeSet(GPIO17_SCLKA, OUT_PP_2x|PD_100K, VOL_3_3);
+    Drv_IOSoftLevel_Set(GPIO17_SCLKA, LOW); //for nvidia case 1: hdmi rx stable 0: hdmi rx unstable   
+    #endif
+    #endif
+    
+//// 不支持PD功能的话需要打开此部分的设置  
+////    Drv_Gpio_ModeSet(GPIO19_SD0A_VSYNC, OUT_PP_1x|PD_100K, VOL_3_3);
+////    DISCSOURCE_GPIO_CTRL(LOW);
+
+////    Drv_Gpio_ModeSet(GPIO28_SD1B, OUT_PP_1x|PD_100K, VOL_3_3);
+////    DISCADAPTER_GPIO_CTRL(LOW);
+//    
+////    Drv_Gpio_ModeSet(GPIO16_MCLKA, OUT_PP_1x|PD_100K, VOL_3_3);
+////    SOURCE_GPIO_CTRL(LOW);
+
+//    Drv_Gpio_ModeSet(GPIO26_SD3B, OUT_PP_1x|PD_100K, VOL_3_3);
+//    SOURCE_GPIO_CTRL(LOW);
+//    
+////    Drv_Gpio_ModeSet(GPIO27_SD2B, OUT_PP_1x|PD_100K, VOL_3_3);
+////    ADAPTER_GPIO_CTRL(LOW);
+//// 不支持PD功能的话需要打开此部分的设置  	
+
+    
+// 支持PD功能的话需要打开此部分的设置 
+    Drv_Gpio_ModeSet(GPIO19_SD0A_VSYNC, OUT_PP_1x|PD_100K, VOL_3_3);
+    DISCSOURCE_GPIO_CTRL(LOW);
+
+    Drv_Gpio_ModeSet(GPIO28_SD1B, OUT_PP_1x|PD_100K, VOL_3_3);
+    DISCADAPTER_GPIO_CTRL(LOW);
+    
+    Drv_Gpio_ModeSet(GPIO26_SD3B, OUT_PP_1x|PD_100K, VOL_3_3);
+    SOURCE_GPIO_CTRL(LOW);
+
+    Drv_Gpio_ModeSet(GPIO27_SD2B, OUT_PP_1x|PD_100K, VOL_3_3);
+    ADAPTER_GPIO_CTRL(LOW);
+	
+ // 支持PD功能的话需要打开此部分的设置 
+    
+    Drv_Gpio_ModeSet(GPIO17_SCLKA, OUT_PP_1x|PD_100K, VOL_3_3);
+	Drv_Gpio_ModeSet(GPIO18_WSA, OUT_PP_1x|PD_100K, VOL_3_3);
+    
+    #if TYPECTX_EN == ENABLED
+	Mod_CC1Vconn_Off();
+    UCCStatus.b1UCcInput_type = FEMALE;
+    #endif
+
+    
+}
+
+void LT6711GXE_DpTxDpOrTypecDet(void)
+{
+    #if TYPECTX_EN == ENABLED
+    g_stDpTx.b1IsDpOrTypec = TYPEC_INTF;//male or female GPIO26    
+    printLT(PRINT_PRIO_HIG, "\nTYPEC");
+    #else
+    g_stDpTx.b1IsDpOrTypec = DP_INTF;
+    printLT(PRINT_PRIO_HIG, "\nDP");
+    #endif
+    
+}
+
+void LT6711GXE_HdmiRxColorInfoCvt(void)
+{
+    ColorInfo_S stInfo;
+
+    Drv_HdmiRx_ColorInfoGet(&stInfo);
+    #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+    if (Drv_HdmiRxDscDec_SwitchGet() == ENABLED)
+    {
+        Drv_HdmiRxDscDec_ColorInfoGet(&stInfo);
+    }
+    #endif
+    #if HDMIRX_DSC_BYPASS_SUPPORT == ENABLED
+    if (Drv_HdmiRxDscBy_SwitchGet() == ENABLED)
+    {
+        Drv_HdmiRxDscBy_ColorInfoGet(&stInfo);
+    }
+    #endif
+//stInfo.ucBitDepth = BPC8;
+    Mod_DpTx_ColorDepthCal(&stInfo,&g_stDpTx);
+    Mod_DpTx_ColorSpaceCal(&stInfo,&g_stDpTx);
+    Mod_DpTx_ColorRangeCal(&stInfo,&g_stDpTx);
+    Mod_DpTx_ColorimetryCal(&stInfo,&g_stDpTx);
+}
+
+void LT6711GXE_HdmiRxAudioInfoCvt(void)
+{
+    AudioChlInfo_S stInfo;
+    Drv_HdmiRx_AudioInfoGet(&stInfo);
+    Mod_Audio_DpTxInfoCvt(&stInfo,&g_stDpTx);
+}
+
+//========================================================================
+// Func Name   : LT6711GXE_DpTxTimingSet
+// Description : LT6711GXE dp tx timing set
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void LT6711GXE_DpTxTimingSet(void)
+{
+    Drv_HdmiRx_RxTimingGet(&g_stDpTxTiming);
+}
+
+
+void LT6711GXE_HdmiRxCscOrEncSel(void)
+{
+    g_stHdmiRx.b1CscRxEnable = DISABLED;
+
+    g_stDpTx.b1EncodeEn      = DISABLED;
+    g_stDpTx.b1FecEnable     = DISABLED;
+    g_stDpTx.b1HbeEnable     = DISABLED; 
+    g_stDpTx.ulTxPixelClk    = g_stHdmiRx.ulRxPixelClk;
+    g_stDpTx.ulTxPeakClk     = g_stHdmiRx.ulRxTmdsClk;
+
+//g_stDpTx.b1EncodeEn  = ENABLED;
+//g_stDpTx.b1FecEnable = ENABLED;
+//Drv_HdmiRx_SyncPolSet(ENABLED);
+
+    //rgb ycc444,420,  422: hdmi rx 422 12bit,bandwidth = dp tx 12bit bandwith
+    #if CSC_SUPPORT == ENABLED
+     if((g_stHdmiRx.ucPixelEncoding == YCbCr420_3)&&((g_stAuxDpTx.b1SinkVscSupport == FALSE)||(g_stDpEdidInfo.b1Yuv420Edid == FALSE)))
+   {
+        g_stHdmiRx.b1CscRxEnable    = ENABLED;
+        g_stHdmiRx.b1CscRxOutFormat = YCbCr422_1;
+        g_stDpTx.ulTxPixelClk <<= 1;
+        g_stDpTx.ulTxPeakClk  = (g_stDpTx.ulTxPeakClk << 2)/3;
+        printLT(PRINT_PRIO_HIG, "\nY420 to Y422");
+    }
+    #endif
+   if(((g_stHdmiRxDscByInfo.ucDscByEn == ENABLED)&&(g_stDpTx.ulTxPixelClk > Mod_DpTx_LinkBandWidthGet()))||((g_stHdmiRxDscByInfo.ucDscByEn == DISABLED)&&(g_stDpTx.ulTxPeakClk > Mod_DpTx_LinkBandWidthGet())))
+    {
+        if((g_stHdmiRxDscByInfo.ucDscByEn == DISABLED)&&(g_stAuxDpTx.ucHbeCap == TRUE)&&(Mod_DpTx_LinkBandWidthGet() == 1080000)&&(g_stDpTx.ulTxPeakClk > 1080000)&&(g_stDpTx.ulTxPeakClk < 1190000))
+        {
+            if (Mod_DpTx_HbeEnableJudge() == ENABLED)
+            {
+                g_stDpTx.b1HbeEnable = ENABLED;
+                printLT(PRINT_PRIO_HIG, "\nDpTx hbe ");
+                return;
+            }
+        }
+        #if DPTX_DSC_ENC_SUPPORT == ENABLED
+        if((g_stAuxDpTx.ucDscCap == TRUE)&&(g_stAuxDpTx.ucFecCap == TRUE))
+        {
+            if (Mod_DpTx_DscEncEnableJudge() == ENABLED)
+            {
+                g_stDpTx.b1EncodeEn  = ENABLED;
+                g_stDpTx.b1FecEnable = ENABLED;
+                #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+                if (Drv_HdmiRxDscDec_SwitchGet() == DISABLED)
+                #endif
+                {
+                    Drv_HdmiRx_SyncPolSet(ENABLED);//dsc enc must be + pol
+                }
+                printLT(PRINT_PRIO_HIG, "\nDpTx encode enable");
+            }
+        }
+        #endif
+        #if CSC_SUPPORT == ENABLED
+        if(g_stDpTx.b1EncodeEn == DISABLED)
+        {
+            if((g_stHdmiRx.ucPixelEncoding == RGB_0)||(g_stHdmiRx.ucPixelEncoding ==YCbCr444_2))
+            {
+                g_stHdmiRx.b1CscRxEnable = ENABLED;
+                g_stHdmiRx.b1CscRxOutFormat = YCbCr422_1;
+               // printLT(PRINT_PRIO_HIG, "\nDpTx Csc enable");
+            }
+        }
+        #endif
+    }
+}
+
+#if CSC_SUPPORT == ENABLED
+void LT6711GXE_HdmiRxCscCvt(void)
+{
+    ColorInfo_S stInfo;
+
+    Drv_HdmiRx_ColorInfoGet(&stInfo);
+    if(g_stHdmiRx.b1CscRxEnable == ENABLED)
+    {
+        g_stHdmiRx.b1CscRxOutRange = LIMIT_RANGE;
+        if((g_stHdmiRx.ucPixelEncoding == RGB_0)||(g_stHdmiRx.ucPixelEncoding == RGB_WIDE_4))
+        {
+            g_stHdmiRx.b1CscRxOutRange = FULL_RANGE;
+        }
+        Drv_CscRx_RxtoTx(&g_stHdmiRx,&g_stDpTx);
+ 
+        if((g_stHdmiRx.ucPixelEncoding == RGB_0)||(g_stHdmiRx.ucPixelEncoding == RGB_WIDE_4))
+        { 
+            if ((stInfo.ucRgbRange == 2)|| (stInfo.ucRgbRange == 0))
+            { 
+//                BKC7_65_REG |= BIT4_1;  
+//                BKC7_65_REG &= BIT2_0;  
+//                BKC7_65_REG &= BIT1_0;  
+//                BKC7_65_REG &= BIT0_0; 
+                BKC7_65_REG |= BIT4_1;  
+                BKC7_65_REG &= BIT2_0;  
+                BKC7_65_REG |= BIT1_1;  
+                BKC7_65_REG |= BIT0_1;    
+    //          printLT(PRINT_PRIO_HIG, "\n222222");                
+            }
+            else
+            {
+                BKC7_65_REG |= BIT4_1;  
+                BKC7_65_REG &= BIT2_0;  
+                BKC7_65_REG &= BIT1_0;  
+                BKC7_65_REG &= BIT0_0; 
+     //            printLT(PRINT_PRIO_HIG, "\n11111");
+            }
+        }
+        else
+        {
+//            if ((stInfo.ucYccRange == 1))
+//            { 
+//                BKC7_65_REG |= BIT4_1;  
+//                BKC7_65_REG &= BIT2_0;  
+//                BKC7_65_REG |= BIT1_1;  
+//                BKC7_65_REG |= BIT1_1;  
+//            }
+        }
+    }
+}
+#endif
+
+#ifdef NVIDIA_FW_EN
+#if (CUSTOMER_DEFINED == ENABLED)
+u8 LT6711GXE_NvidiaValue(void)
+{
+    u8 ucRegE086 = 0;
+    //rx frl or hmdi14 or hdmi20
+    if(g_stHdmiRx.ucHdmiVer == HDMI21)
+    {
+        ucRegE086 = BKCD_B5_REG & 0x0f;
+    }
+    else if(g_stHdmiRx.ucHdmiVer == HDMI20)
+    {
+        ucRegE086 = 0x07;
+    }
+    else if(g_stHdmiRx.ucHdmiVer == HDMI14)
+    {
+        ucRegE086 = 0x06;
+    }
+    //limit range
+    if(g_stDpTx.ucVscDb17&BIT7_1)
+    {
+         ucRegE086 |= BIT3_1;
+    }
+    //color depth
+    if((g_stDpTx.ucVscDb17&0x0f)== 0x01) 
+    {
+        ucRegE086 |= 0x10;
+    }
+    else if((g_stDpTx.ucVscDb17&0x0f)== 0x02)
+    {
+        ucRegE086 |= 0x20;
+    }
+    else if((g_stDpTx.ucVscDb17&0x0f)== 0x03)
+    {
+        ucRegE086 |= 0x30;
+    }
+     //color space
+    if((g_stDpTx.ucVscDb16&0xf0)== 0x10)
+    {
+        ucRegE086 |= 0x40;
+    }
+    else if((g_stDpTx.ucVscDb16&0xf0)== 0x20)
+    {
+        ucRegE086 |= 0x80;
+    }
+    else if((g_stDpTx.ucVscDb16&0xf0)== 0x30)
+    {
+        ucRegE086 |= 0xc0;
+    }
+
+    switch (ucRegE086&0x07)
+    {
+        case 0x00:
+            printLT(PRINT_PRIO_TEST, "\nBKE0_86_REG = 0x%02bx: Unknown", ucRegE086);
+            break;
+        case 0x01:
+            printLT(PRINT_PRIO_TEST, "\nBKE0_86_REG = 0x%02bx: FRL 3G3L", ucRegE086);
+            break;
+        case 0x02: 
+            printLT(PRINT_PRIO_TEST, "\nBKE0_86_REG = 0x%02bx: FRL 6G3L", ucRegE086);
+            break;
+        case 0x03:
+            printLT(PRINT_PRIO_TEST, "\nBKE0_86_REG = 0x%02bx: FRL 6G4L", ucRegE086);
+            break;            
+        case 0x04: 
+            printLT(PRINT_PRIO_TEST, "\nBKE0_86_REG = 0x%02bx: FRL 8G4L", ucRegE086); 
+            break;  
+        case 0x05:
+            printLT(PRINT_PRIO_TEST, "\nBKE0_86_REG = 0x%02bx: FRL 10G4L", ucRegE086);
+            break;
+        case 0x06: 
+            printLT(PRINT_PRIO_TEST, "\nBKE0_86_REG = 0x%02bx: TMDS10", ucRegE086); 
+            break;
+        case 0x07:
+            printLT(PRINT_PRIO_TEST, "\nBKE0_86_REG = 0x%02bx: TMDS40", ucRegE086);
+            break;
+        default:
+            break;
+    }
+    return ucRegE086; 
+}
+#endif
+#endif
+
+
+void LT6711GXE_HdmiRxMsgNotify(u8 ucEvent)
+{
+    switch(ucEvent)
+    {
+        case HDMIRX_SOURECE_PLUG_EVENT:
+            g_stDpTx.b1UpstreamDeviceReady = TRUE;
+            break;
+
+        case HDMIRX_SOURECE_UNPLUG_EVENT:
+            g_stDpTx.b1UpstreamDeviceReady = FALSE;
+            break;
+
+        case HDMIRX_VIDEO_ON_EVENT:
+            Mod_HdmiRx_TmdsClkCal();
+            Mod_HdmiRx_InfoDisplay();
+            LT6711GXE_DpTxTimingSet();
+            LT6711GXE_HdmiRxCscOrEncSel();
+            LT6711GXE_HdmiRxColorInfoCvt();
+
+            #if CSC_SUPPORT == ENABLED
+            LT6711GXE_HdmiRxCscCvt();
+            #endif
+
+            #ifdef NVIDIA_FW_EN
+            #if (CUSTOMER_DEFINED == ENABLED)
+            BKE0_86_REG  = LT6711GXE_NvidiaValue();
+            #endif
+            #endif
+            #if HDMIRX_DSC_BYPASS_SUPPORT == ENABLED
+            if (Drv_HdmiRxDscBy_SwitchGet() == ENABLED)
+            {
+                g_stDpTx.b1SrcDscByEn = ENABLED;
+            }
+            else
+            {
+                 g_stDpTx.b1SrcDscByEn = DISABLED;
+            }
+            #endif
+            g_stDpTx.b1UpstreamVideoReady = TRUE;
+            break;
+
+        case HDMIRX_VIDEO_OFF_EVENT:
+            Drv_HdmiRx_SyncPolSet(DISABLED);
+            Drv_HdmiRx_TmdsPcrPllDis();
+            Drv_Sys_DecPowerDomain(TRUE);
+            Drv_Sys_EncPowerDomain(TRUE);
+            #if CSC_SUPPORT == ENABLED
+            Drv_CscRx_Init();
+            #endif
+        
+        
+            g_stDpTx.b1SrcVrrEn         = DISABLED;
+            g_stDpTx.b1SrcDscByEn       = DISABLED;
+            g_stDpTx.b1EncodeEn         = DISABLED;
+            g_stDpTx.b1SrcStaticHdrEn   = DISABLED;       
+            g_stDpTx.b1SrcDoblyHdrEn    = DISABLED;
+            g_stDpTx.b1SrcDynamicHdrEn  = DISABLED;
+            g_stDpTx.b1AudioMuteEn      = DISABLED;
+            g_stDpTx.b1SrcInterlaceEn   = DISABLED;
+            g_stDpTx.ucHdcpRxVersion    = NO_HDCP;
+            #ifdef NVIDIA_FW_EN
+            #if (SOFT_POWER_DOWN == ENABLED)
+            Mod_Sleep_PowerDownSet(FALSE);
+            #endif
+            #endif
+            g_stDpTx.b1UpstreamVideoReady = FALSE;
+            break;
+        
+        case HDMIRX_VID_CHK_CHG_EVENT:
+            g_stDpTx.b1SoftMsaUpdate = TRUE; 
+            break;        
+
+        case HDMIRX_HDCP_VER_CHG_EVENT:
+            g_stDpTx.ucHdcpRxVerChg = TRUE;
+            g_stDpTx.ucHdcpRxVersion = Drv_HdcpRx_VerGet();
+            break;
+
+        case HDMIRX_AUDIO_CHG_EVENT:
+            g_stDpTx.b1AudioInfoChg = TRUE;
+            LT6711GXE_HdmiRxAudioInfoCvt();
+            break;
+
+        case HDMIRX_VRR_NOTIFY_EVENT:
+            g_stDpTx.b1SrcVrrEn = Mod_HdmiRx_VrrSwitchGet();
+            g_stDpTx.b1SrcVrrChg = TRUE;
+            break;
+
+        case HDMIRX_INTERLACE_EVENT:
+            g_stDpTx.b1SrcInterlaceEn  = Mod_HdmiRx_InterlaceGet();
+            g_stDpTx.b1SrcInterlaceChg = TRUE;
+            break;
+
+        case HDMIRX_DOBLY_HDR_NOTIFY_EVENT:
+            g_stDpTx.b1SrcDoblyHdrEn  = Mod_HdmiRx_HdrStateGet();
+            g_stDpTx.b1SrcDoblyHdrChg = TRUE;
+            break;
+        
+        case HDMIRX_STATIC_HDR_NOTIFY_EVENT:
+            g_stDpTx.b1SrcStaticHdrEn  = Mod_HdmiRx_HdrStateGet();
+            g_stDpTx.b1SrcStaticHdrChg = TRUE;
+            break; 
+        
+        case HDMIRX_DYNAMIC_HDR_NOTIFY_EVENT:
+            g_stDpTx.b1SrcDynamicHdrEn  = Mod_HdmiRx_HdrStateGet();
+            g_stDpTx.b1SrcDynamicHdrChg = TRUE;
+            break;
+
+        case HDMIRX_AUDIO_MUTE_EN:
+            g_stDpTx.b1AudioMuteEn = ENABLED;
+            Drv_Audio_OutEn(OFF);
+            break;
+
+        case HDMIRX_AUDIO_MUTE_DIS:
+            g_stDpTx.b1AudioMuteEn = DISABLED;
+            Drv_Audio_OutEn(ON);
+            break;
+
+        case HDMIRX_VIDEO_MUTE_EN:
+            Drv_DpTx_VbidNoVideoStreamFlag(ENABLED);
+            break;
+
+        case HDMIRX_VIDEO_MUTE_DIS:
+            Drv_DpTx_VbidNoVideoStreamFlag(DISABLED);
+            break;
+        default:
+            break;
+    }
+}
+
+void LT6711GXE_DpTxMsgNotify(u8 ucEvent)
+{
+    switch(ucEvent)
+    {
+        case DPTX_SINK_PLUG_EVENT:
+            break;
+
+        case DPTX_SINK_UNPLUG_EVENT:
+            g_stHdmiRx.b1DownstreamDeviceReady = FALSE;
+            break;
+
+        case DPTX_EDID_VALID_EVENT:
+           Mod_Edid_Update();
+            g_stHdmiRx.b1DownstreamDeviceReady = TRUE;
+            break;
+
+        case DPTX_EDID_INVALID_EVENT:
+            break;
+    }
+}
+
+
+void LT6711GXE_Main_Scan(void)
+{
+    //rx handler
+    Mod_HdmiRx_Handler();
+    //tx handler
+    Mod_DpTx_Handler();
+//    #if TYPECTX_EN == ENABLED
+//    Mod_CCTx_Loop();
+//    #endif
+    #if TYPECRX_EN == ENABLED
+    Mod_CC1Rx_Loop();
+    #endif
+}
+#endif

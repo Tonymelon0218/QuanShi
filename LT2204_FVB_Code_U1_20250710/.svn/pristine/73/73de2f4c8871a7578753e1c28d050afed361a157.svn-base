@@ -1,0 +1,564 @@
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVMIPIDSCENCTX
+OBJECT MODULE PLACED IN .\Objects\DrvMipiDscEncTx.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvMipiDscEncTx.c LARGE OBJECTADVANCED OPTIMIZE(11,
+                    -SIZE) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBU
+                    -G PRINT(.\Listings\DrvMipiDscEncTx.lst) OBJECT(.\Objects\DrvMipiDscEncTx.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: DrvMipi.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.05.26
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          #if TX_PORT_SIGN == MIPI_PORT
+              #if MIPITX_DSC == ENABLED
+              
+              DSCConfig_Stru g_stMipiTxDscEncConfig;
+              StructTiming g_stMipiTxDscEncVideoTiming;
+              
+              
+              void Drv_MipiTxDscEnc_Init(void)
+              {               
+                  BKEF_80_REG = 0x00;
+                  BKEF_F8_REG = 0x00;
+              
+              #if RX_PORT_SIGN == DP_PORT     
+                  BKA3_3E_REG = 0x11;//[3:0]rg_clkgen_dscout_divsel
+                  BKA3_41_REG = 0x01;//[3:0]rg_clkgen_dsctx_dsc_divsel
+                  BKA3_42_REG = 0x11;//[3:0]rg_clkgen_dsctx_dscrd_divsel
+              #endif
+                      
+                  CLEAR_BIT(BKED_30_REG, BIT4);
+                  CLEAR_BIT(BKF9_84_REG, BIT6);//1:DSC encode  , 0:DSC bypass
+              }
+              
+              void Drv_MipiTxDscEnc_InitForPattern(void)
+              {
+                  BKEF_80_REG = 0x00;
+                  BKEF_F8_REG = 0x00;
+              
+                  CLEAR_BIT(BKED_30_REG, BIT4);
+                  CLEAR_BIT(BKF9_84_REG, BIT6);//1:DSC encode  , 0:DSC bypass 
+              }
+              
+              void Drv_MipiTxDscEnc_ColorInfoGet()
+              {
+              #if RX_PORT_SIGN == HDMI_PORT
+                  g_stMipiTxDscEncConfig.ucColorSpace = (BKCC_D0_REG & 0x70) >> 4; //Input Color space
+                  g_stMipiTxDscEncConfig.ucColorDepth = BKCC_D7_REG & 0x0f;        //8 bit = 0x04
+                  if (0x00 == g_stMipiTxDscEncConfig.ucColorDepth)
+                  {
+                      g_stMipiTxDscEncConfig.ucColorDepth = BPC8;
+                  }
+              #endif
+              
+              #if RX_PORT_SIGN == DP_PORT
+                  g_stMipiTxDscEncConfig.ucColorSpace = Mod_DpRx_ColorSpace();//Input Color space
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 2   
+
+                  g_stMipiTxDscEncConfig.ucColorDepth = Mod_DpRx_ColorDepth() + 3;//+3: 4-8bit
+              #endif
+                  LTLog(LOG_DEBUG,"ColorSpace: %bd , ColorDepth: %bd", g_stMipiTxDscEncConfig.ucColorSpace, g_stMipiTxDs
+             -cEncConfig.ucColorDepth);
+              
+              }
+              
+              void Drv_MipiTxDscEnc_TimingGet()
+              {
+                  memset(&g_stMipiTxDscEncVideoTiming,0,sizeof(StructTiming));
+                  Drv_VideoCheckAll_Get(&g_stMipiTxDscEncVideoTiming);
+                  LTLog(LOG_INFO, "DSC[H]: Htotal:%d,Hactive:%d,Hsw:%d,Hfp:%d,Hbp:%d,Hspol:%bd",  g_stMipiTxDscEncVideoT
+             -iming.Htotal, g_stMipiTxDscEncVideoTiming.Hactive, g_stMipiTxDscEncVideoTiming.Hsw, g_stMipiTxDscEncVideoTiming.Hfp, g_s
+             -tMipiTxDscEncVideoTiming.Hbp,g_stMipiTxDscEncVideoTiming.Hspol);
+                  LTLog(LOG_INFO, "DSC[V]: Vtotal:%d,Vactive:%d,Vsw:%d,Vfp:%d,Vbp:%d,Vspol:%bd",  g_stMipiTxDscEncVideoT
+             -iming.Vtotal, g_stMipiTxDscEncVideoTiming.Vactive, g_stMipiTxDscEncVideoTiming.Vsw, g_stMipiTxDscEncVideoTiming.Vfp, g_s
+             -tMipiTxDscEncVideoTiming.Vbp,g_stMipiTxDscEncVideoTiming.Vspol);    
+              
+                  if (YCbCr420_3 == g_stMipiTxDscEncConfig.ucColorSpace )
+                  {
+                      g_stMipiTxDscEncVideoTiming.Hbp >>= 1;
+                      g_stMipiTxDscEncVideoTiming.Hfp >>= 1;
+                      g_stMipiTxDscEncVideoTiming.Hsw >>= 1;
+                      g_stMipiTxDscEncVideoTiming.Htotal >>= 1;
+                      g_stMipiTxDscEncVideoTiming.Hactive >>= 1;
+                  }
+              
+              }
+              
+              void Drv_MipiTxDscEnc_InfoGet(void)
+              {
+                  Drv_MipiTxDscEnc_ColorInfoGet();
+                  Drv_MipiTxDscEnc_TimingGet();
+              }
+              
+              void Drv_MipiTxDscEnc_DataMux()
+              {
+                  //pps path set
+                  Drv_System_SramPathSet(MIPITX_DSCENC_PPS_PATH);//-fywang- wait confirm
+              
+                  SET_BIT(BKF9_84_REG, BIT6);//1:DSC encode  , 0:DSC bypass
+                  SET_BIT(BKED_30_REG, BIT4);//video check 需要选择dsc decode
+              }
+              
+              void Drv_MipiTxDscEnc_ClkMux()
+              {
+                  u8 ucDiv;
+                  u8 ucRatio;
+                  u32 ulRdClk;
+              
+                  SET_BIT(BKE1_40_REG, BIT0);//[0]rgd_pps_data_wr_clk_src_sel: 1-sys clk
+                   
+                  BKA3_3E_REG &= 0xf0;//[3:0]rg_clkgen_dscout_divsel
+                  BKA3_41_REG &= 0xf0;//[3:0]rg_clkgen_dsctx_dsc_divsel
+                  BKA3_42_REG &= 0xf0;//[3:0]rg_clkgen_dsctx_dscrd_divsel
+                  BKA3_42_REG |= 0x01;////0001-div2 recover to default clk
+              
+                  //ad_dsctx_dsc_out_clk set
+                  if (YCbCr420_3 == g_stMipiTxDscEncConfig.ucColorSpace )
+                  {
+                      ucRatio = g_stMipiTxDscEncConfig.ucCompressRatio - 1;
+                  }
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 3   
+
+                  else
+                  {
+                      ucRatio = g_stMipiTxDscEncConfig.ucCompressRatio * 2 - 1;
+                  }
+                  BKA3_3E_REG |= ucRatio;
+              
+                  //ad_dsctx_dsc_rd_clk set
+                  Drv_System_FmSet(TOP_FM, TOPFM_AD_DSCTX_DSC_RD_CLK);
+                  Ocm_Delay1ms(10);
+                  ulRdClk = Drv_System_FmGet(TOP_FM, HALF_PIX_CLK);
+                  
+                  BKA3_42_REG &= 0xf0;//[3:0]rg_clkgen_dsctx_dscrd_divsel
+                  if (ulRdClk > 400000)//400M
+                  {
+                      BKA3_42_REG |= 0x02;//0010-div3
+                  }
+                  else
+                  {
+                      BKA3_42_REG |= 0x01;//0001-div2
+                  }
+              
+                  //Ad_dsctx_dsc_clk set
+                  ucDiv = g_stMipiTxDscEncConfig.ucSliceNum;
+                  if (YCbCr422_1 == g_stMipiTxDscEncConfig.ucColorSpace)
+                  {
+                      ucDiv *= 2;
+                  }
+                  if (ucDiv == 1)
+                  {
+                      BKA3_41_REG |= 0x02;//0010-div3
+                  }
+                  else
+                  {
+                      ucDiv = 0x08 | (ucDiv - 1);
+                      BKA3_41_REG |= ucDiv;
+                  }
+              
+                  Ocm_Delay1ms(100);
+              
+              
+              }
+              
+              void Drv_MipiTxDscEnc_ClkMuxForPattern()
+              {
+                  u8 ucDiv;
+                  u8 ucRatio;
+                  u32 ulRdClk;
+                      
+                  SET_BIT(BKE1_40_REG, BIT0);//[0]rgd_pps_data_wr_clk_src_sel: 1-sys clk
+                   
+                  BKA3_3E_REG &= 0xf0;//[3:0]rg_clkgen_dscout_divsel
+                  BKA3_41_REG &= 0xf0;//[3:0]rg_clkgen_dsctx_dsc_divsel
+                  BKA3_42_REG &= 0xf0;//[3:0]rg_clkgen_dsctx_dscrd_divsel
+              //    BKA3_42_REG |= 0x01;////0001-div2 recover to default clk
+              
+                  //ad_dsctx_dsc_out_clk set
+                  if (YCbCr420_3 == g_stMipiTxDscEncConfig.ucColorSpace )
+                  {
+                      ucRatio = g_stMipiTxDscEncConfig.ucCompressRatio - 1;
+                  }
+                  else
+                  {
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 4   
+
+              //        ucRatio = g_stMipiTxDscEncConfig.ucCompressRatio * 2 - 1;   //??
+                                      
+                        ucRatio = (g_stMipiTxDscEncConfig.ucCompressRatio - 1)&0x0f;//pattern
+                  }
+                  BKA3_3E_REG |= ucRatio;  //ad_dsctx_dsc_out_clk :pix / 2 / DscConfig.CompressRatio  
+              
+                  //ad_dsctx_dsc_rd_clk set
+                  Drv_System_FmSet(TOP_FM, TOPFM_AD_DSCTX_DSC_RD_CLK);                
+                  Ocm_Delay1ms(10);
+                  ulRdClk = Drv_System_FmGet(TOP_FM, HALF_PIX_CLK);
+                                 
+                  BKA3_42_REG &= 0xf0;//[3:0]rg_clkgen_dsctx_dscrd_divsel
+              //    if (ulRdClk > 400000)//400M
+              //    {
+              //        BKA3_42_REG |= 0x02;//0010-div3
+              //    }
+              //    else
+              //    {
+              //        BKA3_42_REG |= 0x01;//0001-div2                                                     
+              //    }
+              
+                  //Ad_dsctx_dsc_clk set
+                  ucDiv = g_stMipiTxDscEncConfig.ucSliceNum;
+                  if (YCbCr422_1 == g_stMipiTxDscEncConfig.ucColorSpace)
+                  {
+                      ucDiv *= 2;
+                  }
+                              
+                  if (ucDiv == 1)// 1 Slice
+                  {
+              //        BKA3_41_REG |= 0x05;//ad_dsctx_dsc_clk      :2 * (pix / 2) / 3 / dsc_number
+              //        BKA3_42_REG |= 0x01;//ad_dsctx_dsc_rd_clk   : < pix / 2                                
+                                      
+                      //pattern
+                      BKA3_41_REG |= 0x02;//ad_dsctx_dsc_clk      :2 * (pix / 2) / 3 / dsc_number
+                      BKA3_42_REG |= 0x00;//ad_dsctx_dsc_rd_clk   : < pix / 2                
+                  }
+                  else if (ucDiv == 2)// 2 Slice
+                  {                        
+              //        BKA3_41_REG |= 0x05;//ad_dsctx_dsc_clk      :2 * (pix / 2) / 3 / dsc_number
+              //        BKA3_42_REG |= 0x01;//ad_dsctx_dsc_rd_clk   : < pix / 2                
+              
+                      //pattern
+                      BKA3_41_REG |= 0x02;//ad_dsctx_dsc_clk      :2 * (pix / 2) / 3 / dsc_number
+                      BKA3_42_REG |= 0x00;//ad_dsctx_dsc_rd_clk   : < pix / 2                        
+                  }
+                  else if (ucDiv == 4)// 4 Slice
+                  {
+              //        BKA3_41_REG |= 0x09;//ad_dsctx_dsc_clk      :2 * (pix / 2) / 3 / dsc_number
+              //        BKA3_42_REG |= 0x01;//ad_dsctx_dsc_rd_clk   : < pix / 2                
+                                      
+                      //pattern
+                      BKA3_41_REG |= 0x05;//ad_dsctx_dsc_clk      :2 * (pix / 2) / 3 / dsc_number                       
+             - 
+                      BKA3_42_REG |= 0x00;//ad_dsctx_dsc_rd_clk   : < pix / 2                              
+                  }
+                  else if (ucDiv == 8)// 8 Slice
+                  {
+              //        BKA3_41_REG |= 0x09;//ad_dsctx_dsc_clk      :2 * (pix / 2) / 3 / dsc_number
+              //        BKA3_42_REG |= 0x01;//ad_dsctx_dsc_rd_clk   : < pix / 2                
+                                      
+                      //pattern
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 5   
+
+                      BKA3_41_REG |= 0x0B;//ad_dsctx_dsc_clk      :2 * (pix / 2) / 3 / dsc_number                       
+             - 
+                      BKA3_42_REG |= 0x00;//ad_dsctx_dsc_rd_clk   : < pix / 2                              
+                  }           
+                      
+                  //ad_dsctx_dsc_rd_clk set
+                  Drv_System_FmSet(TOP_FM, TOPFM_AD_DSCTX_DSC_RD_CLK);
+                  Ocm_Delay1ms(10);
+                  ulRdClk = Drv_System_FmGet(TOP_FM, HALF_PIX_CLK);
+                  
+                  BKA3_42_REG &= 0xf0;//[3:0]rg_clkgen_dsctx_dscrd_divsel
+                  if (ulRdClk > 400000)//400M
+                  {
+                      BKA3_42_REG |= 0x01;//0001-div2
+                  }
+                  else
+                  {
+                      BKA3_42_REG |= 0x00;//0000-div1
+                  }
+                              
+              //         BKA3_41_REG = 0x02;         //pattern待定                
+              //         BKA3_3E_REG = 0x02;         //pattern待定  
+                              
+                  Ocm_Delay1ms(100);  
+              }
+              
+              void Drv_MipiTxDscEnc_RxParamSet(void)
+              {
+                  #if RX_PORT_SIGN == DP_PORT
+                  BKEA_18_REG |= BIT0_1;//[0]rgd_pps_dp_in: 1-dp in, 0-hdmi in 
+                  #endif
+              
+                  #if RX_PORT_SIGN == HDMI_PORT
+                  BKEA_18_REG &= BIT0_0;//[0]rgd_pps_dp_in: 1-dp in, 0-hdmi in 
+                  #endif
+              }
+              
+              void  Drv_MipiTxDscEnc_ExtraHactSet()
+              {
+                  u8 ucRemainHact;
+              
+                  //half pixel时钟域下的hact
+                  ucRemainHact = (u8)g_stMipiTxDscEncVideoTiming.Hactive >> 1;
+                  
+                  if(1 == g_stMipiTxDscEncConfig.ucSliceNum)
+                      ucRemainHact = 0;
+                  else if(2 == g_stMipiTxDscEncConfig.ucSliceNum)
+                      ucRemainHact &= 0x01;
+                  else if(4 == g_stMipiTxDscEncConfig.ucSliceNum)
+                      ucRemainHact &= 0x03;
+                  else if(8 == g_stMipiTxDscEncConfig.ucSliceNum)
+                      ucRemainHact &= 0x07;
+              
+                  if (0 == ucRemainHact )
+                      g_stMipiTxDscEncConfig.ucExtraHact = 0x00;
+                  else
+                      g_stMipiTxDscEncConfig.ucExtraHact = g_stMipiTxDscEncConfig.ucSliceNum - ucRemainHact;
+              
+                  BKEF_9F_REG &= 0xf3;//[3:2]The number of extend pixel
+                  BKEF_9F_REG |= (g_stMipiTxDscEncConfig.ucExtraHact << 2) & 0x0C;
+                  BKEF_9F_REG |= BIT4_1;//[4]extend pixel is black or the same as last pixel: 1-last pixel, 0-black pixe
+             -l
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 6   
+
+              
+                  
+                  g_stMipiTxDscEncConfig.ucExtraHact <<= 1;//换算成pixel时钟域下的hact
+              
+                  g_stMipiTxDscEncVideoTiming.Hactive += g_stMipiTxDscEncConfig.ucExtraHact;//pixel下的hact
+              
+              }
+              
+              void Drv_MipiTxDscEnc_TimingSet()
+              {
+                  //V video timing set
+              //    BKEF_A3_REG = g_stMipiTxDscEncVideoTiming.Vsw & 0xff;
+              //    BKEF_A6_REG = (g_stMipiTxDscEncVideoTiming.Vfp >> 8) & 0xff;
+              //    BKEF_96_REG = g_stMipiTxDscEncVideoTiming.Vfp & 0xff;
+              //    BKEF_90_REG = (g_stMipiTxDscEncVideoTiming.Vtotal >> 8) & 0xff;
+              //    BKEF_91_REG = g_stMipiTxDscEncVideoTiming.Vtotal & 0xff;
+              //
+              //    //H adjust to half pixel timing
+              //    g_stMipiTxDscEncVideoTiming.Hbp >>= 1;
+              //    g_stMipiTxDscEncVideoTiming.Hfp >>= 1;
+              //    g_stMipiTxDscEncVideoTiming.Hsw >>= 1;
+              //    g_stMipiTxDscEncVideoTiming.Htotal >>= 1;
+              //
+              //    //H video timing set
+              //    BKEF_A2_REG = g_stMipiTxDscEncVideoTiming.Hsw & 0xff;
+              //    BKEF_A0_REG = (g_stMipiTxDscEncVideoTiming.Hfp >> 8) & 0xff;
+              //    BKEF_A1_REG = (g_stMipiTxDscEncVideoTiming.Hfp & 0xff) +1;
+              //    BKEF_92_REG = (g_stMipiTxDscEncVideoTiming.Htotal >> 8) & 0xFF;
+              //    BKEF_93_REG = g_stMipiTxDscEncVideoTiming.Htotal & 0xFF;
+              //
+              //    //H recover to pixel timing
+              //    g_stMipiTxDscEncVideoTiming.Hbp <<= 1;
+              //    g_stMipiTxDscEncVideoTiming.Hfp <<= 1;
+              //    g_stMipiTxDscEncVideoTiming.Hsw <<= 1;
+              //    g_stMipiTxDscEncVideoTiming.Htotal <<= 1; 
+              
+              
+                  u8 ucDiv;
+                  u8 ucTemp;
+              
+                  BKEF_A3_REG = g_stMipiTxDscEncVideoTiming.Vsw & 0xff;
+                  BKEF_A6_REG = (g_stMipiTxDscEncVideoTiming.Vfp >> 8) & 0xff;
+                  BKEF_96_REG = g_stMipiTxDscEncVideoTiming.Vfp& 0xff;
+                  BKEF_90_REG = (g_stMipiTxDscEncVideoTiming.Vtotal >> 8) & 0xff;
+                  BKEF_91_REG = g_stMipiTxDscEncVideoTiming.Vtotal & 0xff;
+              
+                  //H adjust to half pixel timing
+                  g_stMipiTxDscEncVideoTiming.Hbp >>= 1;
+                  g_stMipiTxDscEncVideoTiming.Hfp >>= 1;
+                  g_stMipiTxDscEncVideoTiming.Hsw>>= 1;
+                  g_stMipiTxDscEncVideoTiming.Htotal >>= 1;
+                  g_stMipiTxDscEncVideoTiming.Hactive >>= 1;
+              
+                  //H video timing set
+                  ucTemp = (BKEF_9C_REG & 0x0f)? (11) : (10);
+                  ucDiv = (BKA3_3E_REG & 0x0f) + 1;
+                  if (g_stMipiTxDscEncConfig.ucColorSpace == YCbCr420_3)
+                  {
+                      ucTemp = ucTemp * ucDiv;
+                  }
+                  else
+                  {
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 7   
+
+                      ucTemp = ucTemp * ucDiv >> 1;
+                  }
+              
+                  BKEF_A0_REG = ((g_stMipiTxDscEncVideoTiming.Hfp + ucTemp) >> 8) & 0xff;//solve that hblank is very sma
+             -ll, so fixed parameter in all cases
+                  BKEF_A1_REG = (g_stMipiTxDscEncVideoTiming.Hfp + ucTemp) & 0xff-23;       //solve that hblank is very 
+             -small, so fixed parameter in all cases
+                  BKEF_A2_REG = 0x08;
+                  BKEF_92_REG = (g_stMipiTxDscEncVideoTiming.Htotal >> 8) & 0xFF;
+                  BKEF_93_REG = g_stMipiTxDscEncVideoTiming.Htotal & 0xFF;
+              
+                  //H recover to pixel timing
+                  g_stMipiTxDscEncVideoTiming.Hbp <<= 1;
+                  g_stMipiTxDscEncVideoTiming.Hfp <<= 1;
+                  g_stMipiTxDscEncVideoTiming.Hsw <<= 1;
+                  g_stMipiTxDscEncVideoTiming.Htotal <<= 1;
+                  g_stMipiTxDscEncVideoTiming.Hactive <<= 1;
+              
+              
+              }
+              
+              void Drv_MipiTxDscEnc_ColorSpaceSet()
+              {
+                  if(YCbCr422_1 == g_stMipiTxDscEncConfig.ucColorSpace )
+                  {
+                      BKEF_89_REG = 0xe0;//[7:0]rg_enc_ovfl_av_thresh
+                      g_stMipiTxDscEncConfig.ucGroupUnit = 0x04;
+                      g_stMipiTxDscEncConfig.usExtraBits = 0x142;
+                  }
+                  else
+                  {
+                      BKEF_89_REG = 0xac;//[7:0]rg_enc_ovfl_av_thresh
+                      g_stMipiTxDscEncConfig.ucGroupUnit = 0x03;
+                      g_stMipiTxDscEncConfig.usExtraBits = 0xf2; 
+                  }
+              
+                  if(BPC8 == g_stMipiTxDscEncConfig.ucColorDepth )
+                  {
+                      BKEF_83_REG = 0x47;//EF83 BIT3-0:7+2*(BPC-8)
+                      BKEF_84_REG = 0x21;//EF84 BIT3-0:1+2*(BPC-8)
+                  }
+                  else 
+                  {
+                      BKEF_83_REG = 0x4B;
+                      BKEF_84_REG = 0x85;
+                  }
+              
+                  if(BPC8 == g_stMipiTxDscEncConfig.ucColorDepth )
+                  {
+                      if(RGB_0 == g_stMipiTxDscEncConfig.ucColorSpace )
+                          BKEF_8D_REG = 0x0f;//default, 1080p, DSC C-code parameter
+                      else
+                          BKEF_8D_REG = 0x0e;//YU422 8bit
+                  }
+                  else
+                  {
+                      if(RGB_0 == g_stMipiTxDscEncConfig.ucColorSpace)
+                          BKEF_8D_REG = 0x13;//color depth,  DSC C-code parameter
+                      else
+                          BKEF_8D_REG = 0x12;//[4:0]DSC C-code parameter
+                  }
+              
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 8   
+
+              }
+              
+              void Drv_MipiTxDscEnc_MuxWordDly(void)
+              {
+                  BKEF_87_REG = 0x01;//bkef_mux_word_delay[15:8]
+                  BKEF_88_REG = 0x80;//bkef_mux_word_delay[7:0]
+              
+              }
+              
+              void Drv_MipiTxDscEnc_PpsSet(u8 *ucuzEncPPS )
+              {
+                  u8 loopx ;
+                  u8 XDATA *Reg;
+                  
+                  Reg = 0xEF00;//&BKEF_00_REG;//(u8 XDATA *)(0xEF00);
+                  for(loopx = 0;loopx < 128;loopx++)
+                  {
+                      *(Reg + loopx)= *(ucuzEncPPS+loopx);
+                  }
+                  BKEF_AD_REG = 0xFF;//dsc sram full & empty flag enable 
+              }
+              
+              void Drv_MipiTxDscEnc_ParamSet(void)
+              {
+                  u8 ucTemp, ucDscNum;
+              
+                  BKEF_98_REG |= BIT1_1;//[1]adaptive sync, timing follow
+              
+                  if(0x01 == g_stMipiTxDscEncConfig.ucSliceNum)
+                      BKEF_97_REG = 0x00;//rg_ich_clr
+                  else
+                      BKEF_97_REG = 0x01;
+              
+                  ucDscNum = g_stMipiTxDscEncConfig.ucDscNumber;
+                  BKEF_A7_REG = 0x68;//rg_bkef_dsc_en, hdmi tx//28
+              
+                  if(ucDscNum == 0x01)
+                    {                        
+                      ucTemp = 0x80;
+                    }
+                  else if(ucDscNum == 0x02)
+                    {
+                      ucTemp = 0xc0;
+                    }
+                  else if(ucDscNum == 0x04)
+                    {
+                      ucTemp = 0xe0;
+                    }
+                  else if(ucDscNum == 0x08)
+                    {
+                      ucTemp = 0xf0;
+                    }
+                              
+                  BKEF_AD_REG = 0xFF;
+              
+                  //dsc reset
+                  BKEF_F8_REG = 0x00;
+                  BKEF_80_REG = 0x00;
+                  Ocm_Delay1ms(1);
+                  BKEF_F8_REG = 0xff;
+                  BKEF_80_REG |= ucDscNum;//
+                  BKEF_80_REG |= ucTemp;
+C51 COMPILER V9.53.0.0   DRVMIPIDSCENCTX                                                   02/13/2025 10:14:22 PAGE 9   
+
+              
+              }
+              
+              void Drv_MipiTxDscEnc_PpsDynamicSet(void)
+              {
+                  u8 ucTemp;
+                  u32 temp0 =0;
+              
+                  g_stMipiTxDscEncConfig.usSliceGroup = (u16)(ceil((double)g_stMipiTxDscEncConfig.usSliceWidth / 3));
+                  ucTemp = (u8)(g_stMipiTxDscEncConfig.usSliceWidth % 3);//SliceRemainder
+              
+                  BKEF_81_REG = 0x00;
+                  BKEF_81_REG = ucTemp << 6;//SliceRemainder
+                  BKEF_81_REG |= BIT4_1;
+                  BKEF_81_REG |= g_stMipiTxDscEncConfig.usSliceGroup >> 8;
+                  BKEF_82_REG = g_stMipiTxDscEncConfig.usSliceGroup;
+              
+                  temp0 = (g_stMipiTxDscEncConfig.usSliceWidth * g_stMipiTxDscEncConfig.ucOutBpp);
+                  BKEF_8E_REG = (temp0 >> 8);
+                  BKEF_8F_REG = temp0 % 256;
+                  BKEF_8B_REG = (3 * g_stMipiTxDscEncConfig.ucOutBpp) + 8;
+                  BKEF_8C_REG = (3 * g_stMipiTxDscEncConfig.ucOutBpp) -  g_stMipiTxDscEncConfig.ucGroupUnit;;
+                  
+                  temp0 = ceil((double)g_stMipiTxDscEncConfig.usChunkSize/6);
+                  BKEF_9A_REG = (temp0 >> 8);
+                  BKEF_9B_REG = temp0 % 256;
+                  BKEF_9C_REG = (g_stMipiTxDscEncConfig.usChunkSize + 6 - temp0*6) % 6;
+                  BKEF_AD_REG = 0xff;
+              }
+              
+              #endif
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,1161 @@
+/******************************************************************************
+  * @project: LT2101
+  * @file: ChipHdmiTx.c
+  * @author: qihan
+  * @company: LONTIUM
+  * @date: 2021.10.12
+/******************************************************************************/
+#include "include.h"
+
+
+
+#if TX_PORT_SIGN == HDMI_PORT
+#define EVENT_CLEAR                 0x00
+#define EVENT_HPD_INT               0x01
+#define EVENT_RSEN_INT              0x02
+#define EVENT_HPDRSEN_INT           0x03
+#define EVENT_HPDRSEN_LOW           0x04
+
+HdmiTx_S g_stHdmiTx;
+LtTiming_S  stRxTimingInfo; 
+void Mod_HdmiTx_PowerOnInit(void)
+{
+    memset(&g_stHdmiTx, 0, sizeof(HdmiTx_S));
+    g_stHdmiTx.ucTxState = STATE_HDMITX_POWER_ON_1;
+}
+
+void Mod_HdmiTx_VarInit(void)
+{
+    #if CHIP_SEL == LT8711GXE
+    LT8711GXE_HdmiTxVarInit();
+    #endif
+    #if CHIP_SEL == LT86121GXE
+    LT86121GXE_HdmiTxVarInit();
+    #endif
+}
+
+void Mod_HdmiTx_MsgNotify(u8 ucEvent)
+{
+    #if CHIP_SEL == LT8711GXE
+    LT8711GXE_HdmiTxMsgNotify(ucEvent);
+    #endif
+    #if CHIP_SEL == LT86121GXE
+    LT86121GXE_HdmiTxMsgNotify(ucEvent);
+    #endif
+}
+#if HDMITX_EDID_READ_EN == ENABLED
+u8 Mod_EdidHeader_Chk(u8 *pucEdidData)
+{
+	if((pucEdidData[0]==0x00)&&(pucEdidData[1]==0xFF)&&(pucEdidData[2]==0xFF))
+    {
+        ;
+    }
+    else
+    {
+        return HEADERERROR;
+    }
+	return EDIDCORRECT;
+}
+u8 Mod_B0B1EdidValid_Chk(u8 *pucEdidData)
+{
+    u8 ucOriCheckSum = 0;
+	if(Mod_EdidHeader_Chk(pucEdidData) == HEADERERROR)
+	{
+		return HEADERERROR;
+	}
+    ucOriCheckSum = pucEdidData[0x7F];
+    if(ucOriCheckSum != Mod_Check_Sum(pucEdidData))
+    {
+         return CHECKSUMERROR;
+    }
+    return EDIDCORRECT;
+}
+#endif
+u8 Mod_HmdiTx_EdidRead(u8 *pucEdidData,u8 ucCntClr)
+{
+    u8 ucBlocKNum = 2;
+	#if HDMITX_EDID_READ_EN == ENABLED
+    u8 ucReadCnt;
+	#endif
+    u8 b2Result = EDIDCORRECT;
+    u16 usLoop_Cnt;
+    static u8 ucEdidLoop = 0x00;
+	memcpy(pucEdidData,szEdidDefault,512);
+    if(ucCntClr == ENABLED)
+    {
+        ucEdidLoop = 0;
+        return 0;
+    }
+    #if HDMITX_EDID_READ_EN == ENABLED
+    
+    #if 0
+    //edid read
+    BKF4_02_REG &= BIT4_0;//[4]iic master of aux enable:1=iic master is masked, 0-iic master is enable.
+    BKF4_05_REG |= BIT0_1;//[0]rgd_iic_edid_en: 1-en, 0-dis
+    BKF4_06_REG = 0x3B;   //ddc speed 100Khz
+    ucReadCnt = 5;
+    while(ucReadCnt--)
+    {
+        //[3]rgd_read_edid_stop: 1-read over, 0-not read over
+        if(BKF4_39_REG & BIT3_1)
+        {
+            b2Result = (BKF4_39_REG & 0x70)?(CHECKSUMERROR):(EDIDCORRECT);
+            if (CHECKSUMERROR == b2Result)
+            {
+                BKF4_05_REG &= BIT0_0;//[0]rgd_iic_edid_en: 1-en, 0-dis
+                BKF4_05_REG |= BIT0_1;//[0]rgd_iic_edid_en: 1-en, 0-dis
+            }
+            else
+            {
+                break;
+            }
+        }
+        else
+        {
+            Ocm_Delay1ms(10);
+            b2Result = CHECKSUMERROR;
+        }
+    }
+    BKF4_02_REG |= BIT4_1;//[4]iic master of aux enable:1=iic master is masked, 0-iic master is enable.
+    BKF4_05_REG &= BIT0_0;//[0]rgd_iic_edid_en: 1-en, 0-dis
+
+    //edid shadow read
+    if (EDIDCORRECT == b2Result)
+    {
+        ucBlocKNum = BKF4_38_REG + 1;
+        BKF4_05_REG |= BIT1_1;//[1]rg_bim_edid_en, 1-en
+        for(usLoop_Cnt = 0; usLoop_Cnt < (ucBlocKNum << 7); usLoop_Cnt++)
+        {
+            pucEdidData[usLoop_Cnt] = BKF4_0F_REG;
+        }
+        BKF4_05_REG &= BIT1_0;//[1]rg_bim_edid_en, 0-dis
+//		g_stHdmiTx.szEdidSave[0] = pucEdidData[0x7E];
+//		g_stHdmiTx.szEdidSave[1] = pucEdidData[0x7F];		
+//		if(pucEdidData[0x7E] >= 1)
+//		{
+//			g_stHdmiTx.szEdidSave[2] = pucEdidData[0xFF];
+//		}
+//		else
+//		{
+//			g_stHdmiTx.szEdidSave[2] = 0xFF;
+//		}
+    }
+    #else
+	ucReadCnt = 0;
+    while(ucReadCnt < 5)
+    {
+        Drv_HdmiTx_ReadI2CByteN(0x00,0xA000,&pucEdidData[0x00],128);
+		b2Result = Mod_B0B1EdidValid_Chk(&pucEdidData[0x00]);
+		if(EDIDCORRECT == b2Result)
+		{
+			break;
+		}
+        else
+        {
+            ucReadCnt++;
+            Ocm_Delay1ms(10);
+        }
+    }
+    if(ucReadCnt>0)
+    {
+        printLT(PRINT_PRIO_HIG, "\nucReadCnt = 0x%02bx",ucReadCnt);
+    }
+    
+    if (EDIDCORRECT != b2Result)
+    {
+        if(ucEdidLoop >= 10)
+        {
+            ucEdidLoop = 0; 
+        }
+        else
+        {
+            ucEdidLoop++;
+            return EDIDWAIT;
+        }
+    }
+    ucEdidLoop = 0;
+    if (HEADERERROR != b2Result)
+    {
+		if(pucEdidData[0x7e] > 3)
+		{
+			pucEdidData[0x7e] = 0x03;
+		}
+        ucBlocKNum = pucEdidData[0x7e]+1;		
+		if(ucBlocKNum >= 2)
+		{
+			Drv_HdmiTx_ReadI2CByteN(0x00,0xA080,&pucEdidData[0x80],128);
+		}
+		if(ucBlocKNum >= 3)
+		{
+			Drv_HdmiTx_ReadI2CByteN(0x01,0xA000,&pucEdidData[0x100],128);
+		}
+		if(ucBlocKNum == 4)
+		{    
+			Drv_HdmiTx_ReadI2CByteN(0x01,0xA080,&pucEdidData[0x180],128);
+		}
+    }
+    #endif
+    
+    
+    else //if(b2Result == HEADERERROR)
+    #endif
+    {
+        memcpy(pucEdidData, szEdidDefault, 512); //copy the EDID to matrix
+        ucBlocKNum = 2;    
+    }
+
+    #if DEBUG_HDMITX_EDID_PRINT_EN == ENABLED //print correct and incorrect EDID
+    for(usLoop_Cnt = 0; usLoop_Cnt < ((u16)ucBlocKNum << 7); usLoop_Cnt++)
+    {
+        if((usLoop_Cnt &0x0f) == 0)
+        {
+            printLT(PRINT_PRIO_TEST, "\n");
+        }
+        printLT(PRINT_PRIO_TEST, "0x%02bx,", pucEdidData[usLoop_Cnt]);
+
+    }
+    #else
+    usLoop_Cnt = 0;
+    #endif
+
+    return b2Result;
+}
+
+void Mod_HdmiTx_HpdLowAction(void)
+{
+    Mod_FrlTx_TrainFail();//-wangtt- wait update for name
+    Drv_HdmiTx_PhyDis();
+    #if HDMITX_HDCP_ENC_MODE != NO_HDCP
+    Drv_HdcpTx_Enable(NO_HDCP);
+    #endif
+    Drv_Audio_OutEn(OFF);
+
+    #if CSC_SUPPORT == ENABLED
+    #endif
+
+    g_stHdmiTx.b1SrcDscByEn = DISABLED;
+    
+    Mod_HdmiTx_MsgNotify(HDMITX_VIDEOOFF_EVENT);
+   
+    printLT(PRINT_PRIO_HIG, "\nHdmiTx Disabled");
+}
+
+
+
+//========================================================================
+// Func Name   : Mod_HdmiTx_HdmiVersionCal
+// Description : Calculate HDMI version by TMDS  character rate and sink edid info.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_HdmiTx_HdmiVersionCal(void)
+{
+    u8 ucDscEn = DISABLED;
+    LtTiming_S stTiming;
+
+    #if RX_PORT_SIGN == DP_PORT
+    Drv_DpRx_RxTimingGet(&stTiming);
+    #endif
+    #if RX_PORT_SIGN == HDMI_PORT
+    Drv_HdmiRx_RxTimingGet(&stTiming);
+    #endif
+
+    if ((g_stHdmiTx.b1SrcDscByEn == ENABLED) || (g_stHdmiTx.b1EncodeEn == ENABLED))
+    {
+        ucDscEn = ENABLED;
+    }
+    //8k30Hz 420 formate needs FRL transimitting
+    if((stTiming.usHact > 5120)&&(g_stHdmiEdidInfo.ucMaxFrlRate > 0))//5K
+    {
+        ucDscEn = ENABLED;
+    }
+    if((g_stHdmiTx.ulTxTmdsClk <= 340000) &&  (ucDscEn == DISABLED))
+    {
+        g_stHdmiTx.ucHdmiVersion = HDMI14;
+        printLT(PRINT_PRIO_TEST, "\nHdmi tx 1.4 out");
+    }
+    else if((g_stHdmiTx.ulTxTmdsClk <= 600000) &&  (ucDscEn == DISABLED))
+    {
+        g_stHdmiTx.ucHdmiVersion = HDMI20;
+        printLT(PRINT_PRIO_TEST, "\nHdmi tx 2.0 out");
+    }
+    #if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT
+    //if sink support frl mode, alway working at sink's max frl rate.
+    else if((g_stHdmiEdidInfo.ucMaxFrlRate > 0)&&(g_stHdmiEdidInfo.b1Scdc_Present == TRUE))
+    {
+        g_stHdmiTx.ucHdmiVersion = HDMI21;
+        printLT(PRINT_PRIO_HIG, "\nHdmi tx 2.1 out");
+    }
+    #endif
+    else
+    {
+        printLT(PRINT_PRIO_HIG, "\nWarning Tmds over bandwidh");
+    }
+}
+
+u32 Mod_HdmiTx_LinkBandWidthGet(void)
+{
+    u32 ulHdmiTxlaneWidth;
+
+    #if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT
+    if((g_stHdmiEdidInfo.ucMaxFrlRate > 0)&&(g_stHdmiEdidInfo.b1Scdc_Present == TRUE))
+    {
+        switch(g_stHdmiEdidInfo.ucMaxFrlRate)//ulHdmiTxlaneWidth = n * 37037;
+        {
+            case FRL_3G3LANE:
+                ulHdmiTxlaneWidth = 333333;
+                break;
+            case FRL_6G3LANE:
+                ulHdmiTxlaneWidth = 666666;
+                break;
+            case FRL_6G4LANE:
+                ulHdmiTxlaneWidth = 888888;
+                break;
+            case FRL_8G4LANE:
+                ulHdmiTxlaneWidth = 1189000;
+                break;
+            case FRL_10G4LANE:
+                ulHdmiTxlaneWidth = 1488000;
+                break;
+            case FRL_12G4LANE:
+                ulHdmiTxlaneWidth = 1777776;
+                break;
+            default:
+                break;
+        }
+    }
+    else
+    #endif
+    {
+        if (Mod_EdidHdmi20_Get() == TRUE)
+        {
+		//HDMITX  CTS 
+            //ulHdmiTxlaneWidth = 600000;
+			ulHdmiTxlaneWidth = g_stHdmiEdidInfo.ucHdmiTmdsClk;
+			ulHdmiTxlaneWidth = ulHdmiTxlaneWidth*5000;
+        }
+        else
+        {
+            ulHdmiTxlaneWidth = 340000;
+        }
+    }
+    
+    return ulHdmiTxlaneWidth;
+}
+
+//========================================================================
+// Func Name   : Mod_HdmiTx_DscEncEnableJudge
+// Description : g_stHdmiEdidInfo.ucMaxDscSlice:
+//               1-1slice, 2-2slice, 3-4slice, 4-8slice
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+u8 Mod_HdmiTx_DscEncEnableJudge(void)
+{
+    u8 ucRtn = DISABLED;
+
+    if (g_stHdmiTx.ulTxPixelClk > 1200000)
+    {
+        if (g_stHdmiEdidInfo.ucMaxDscSlice > 3)//1-1slice, 2-2slice, 3-4slice, 4-8slice
+        {
+            ucRtn = ENABLED;
+        }
+    }
+    else if (g_stHdmiTx.ulTxPixelClk > 600000)
+    {
+        if (g_stHdmiEdidInfo.ucMaxDscSlice > 2)//4slice
+        {
+            ucRtn = ENABLED;
+        }
+    }
+    else if (g_stHdmiTx.ulTxPixelClk > 300000)
+    {
+        if (g_stHdmiEdidInfo.ucMaxDscSlice > 1)
+        {
+            ucRtn = ENABLED;
+        }
+    }
+    else
+    {
+        ucRtn = ENABLED;
+    }
+
+    return ucRtn;
+}
+
+void Mod_HdmiTx_SetState(u8 ucState)
+{
+    u8 ucLastState;
+    if(ucState != g_stHdmiTx.ucTxState)
+    {        
+        ucLastState = g_stHdmiTx.ucTxState;
+        g_stHdmiTx.ucTxState = ucState;
+        g_stHdmiTx.b1TxStateChanged = TRUE;
+        printLT(PRINT_PRIO_TEST, "\nTxState = %bd", ucState);
+        
+        // other state-->STATE_DPRX_PLAY_BACK_16,need notify video on
+        if(g_stHdmiTx.ucTxState == STATE_HDMITX_PLAY_BACK_10)
+        {
+            ;
+        }
+        //STATE_DPRX_PLAY_BACK_16-->other state,need notify video off
+        if(ucLastState == STATE_HDMITX_PLAY_BACK_10)
+        {
+			#if HDMITX_VRR_SUPPORT == ENABLED
+            g_stHdmiTx.b1SrcVrrEn  = g_stDpRx.b1AdaptiveSyncEn;
+            g_stHdmiTx.b1SrcVrrChg = TRUE;
+            #endif
+			Drv_HdmiTx_PhyDis();
+			Drv_Audio_OutEn(OFF);
+        }
+    }
+}
+#if HDMITX_EDID_READ_EN == ENABLED
+u8 Mod_EdidData_Comp(void)
+{
+	u16 usLoop_Cnt = 0;
+	u8 ucReadCnt;
+	u8 b2CompResult = FALSE;
+	Mod_HmdiTx_EdidRead(szEdidData_Tmp,DISABLED);
+	Mod_Edid_Update(szEdidData_Tmp);
+	
+	for(ucReadCnt = 0;ucReadCnt<255;ucReadCnt++)
+	{
+		if(szEdidData_Tmp[ucReadCnt] != szEdidData[ucReadCnt])
+		{
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+#endif
+void Mod_HdmiTx_HpdDetProc(void)
+{
+    static u8 ucHpd_lowDet_Save = EVENT_CLEAR;
+    static u32 ulCurrentTime = 0;
+	static u8 b2HpdRsenLow_Start = 0x00;
+	
+	static u8 ucScdcCheckCnt = 0;
+    if(g_stHdmiTx.ucTxState >= STATE_HDMITX_UPSTREAM_DEVICE_READY_2)
+    {
+        if((Drv_HdmiTx_HpdDet() == LOW)||(Drv_HdmiTx_ResenState() == LOW)) //hdmi hpd is low
+        {
+            //the last hpd detect is high.
+            if(g_stHdmiTx.b1IsTxHpdDet == HIGH)
+            {
+				printLT(PRINT_PRIO_HIG, "\nHTX_CHNAGE");
+				g_stHdmiTx.b1ScdcCheck_En = FALSE;
+				g_stHdmiTx.b1IsTxHpdDet = LOW;          
+				b2HpdRsenLow_Start = 0x01;//给HPD拉低检测起始点
+            }	
+            #if HDMITX_HDCP_ENC_MODE != NO_HDCP
+            g_stHdmiTx.b1TxHdcpScanEn = ENABLED;
+            g_stHdmiTx.ucHdcpRxVerRecord = NO_HDCP;
+            Drv_HdcpTx_Enable(NO_HDCP);
+            #endif
+			if((Drv_HdmiTx_HpdDet() == LOW)&&(Drv_HdmiTx_ResenState() == LOW)) //HPD and Rsen
+			{
+				ucHpd_lowDet_Save |= EVENT_HPDRSEN_INT;
+				if(b2HpdRsenLow_Start == 0x01)//timer start
+                {
+                    b2HpdRsenLow_Start = 0x02;
+                    Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                }
+				if((b2HpdRsenLow_Start == 0x02)&&(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_500) == TRUE))//hpd low action     
+				{
+					b2HpdRsenLow_Start = 0x00;
+					printLT(PRINT_PRIO_HIG, "\nHTX_LOST"); 
+					ucHpd_lowDet_Save = EVENT_HPDRSEN_LOW;
+				} 
+			}
+			else if(Drv_HdmiTx_HpdDet() == LOW)
+			{
+//				b2HpdRsenLow_Start = 0x01;
+				ucHpd_lowDet_Save |= EVENT_HPD_INT;
+				if(b2HpdRsenLow_Start == 0x01)//timer start
+                {
+                    b2HpdRsenLow_Start = 0x02;
+                    Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                }
+				if((b2HpdRsenLow_Start == 0x02)&&(Ocm_Timer_IsOverFlow(&ulCurrentTime, SECOND_4) == TRUE))//hpd low action     
+				{
+					b2HpdRsenLow_Start = 0x00;
+					printLT(PRINT_PRIO_HIG, "\nHTX_OUT"); 
+					ucHpd_lowDet_Save = EVENT_HPDRSEN_LOW;
+				} 
+			}
+			else
+			{
+				b2HpdRsenLow_Start = 0x01;
+				ucHpd_lowDet_Save |= EVENT_RSEN_INT;
+			}
+        }
+        else
+        {
+            //the last hpd detect is low.
+            if(g_stHdmiTx.b1IsTxHpdDet == LOW)
+            {
+				printLT(PRINT_PRIO_HIG, "\nHTX_INPUT");
+                g_stHdmiTx.b1IsTxHpdDet = HIGH;
+                Mod_HdmiTx_MsgNotify(HDMITX_SINK_PLUG_EVENT);
+            }		
+        }
+		if(g_stHdmiTx.b1IsTxHpdDet == HIGH)
+		{
+			if(ucHpd_lowDet_Save != EVENT_CLEAR)
+			{				
+				if(ucHpd_lowDet_Save & EVENT_HPD_INT)//只要有HPD拉低的情况
+				{
+					if(g_stHdmiTx.ucTxState > STATE_HDMITX_WAIT_HPD_3)//已经读过EDID
+					{				
+						#if HDMITX_EDID_READ_EN == ENABLED
+						if(Mod_EdidData_Comp() == TRUE)
+						{
+							printLT(PRINT_PRIO_HIG, "\nEDID_Same"); 
+						}
+						else					
+						{
+//							printLT(PRINT_PRIO_HIG, "\nEdidComp = 0x%02bx,0x%02bx,0x%02bx,0x%02bx",g_stHdmiTx.szEdidComp[0],
+//							g_stHdmiTx.szEdidComp[1],g_stHdmiTx.szEdidComp[2],g_stHdmiTx.szEdidComp[3]);
+//							printLT(PRINT_PRIO_HIG, "\nEdidSave = 0x%02bx,0x%02bx,0x%02bx,0x%02bx",g_stHdmiTx.szEdidSave[0],
+//							g_stHdmiTx.szEdidSave[1],g_stHdmiTx.szEdidSave[2],g_stHdmiTx.szEdidSave[3]);
+							printLT(PRINT_PRIO_HIG, "\nEDID_CHNAGE"); 							
+							ucHpd_lowDet_Save = EVENT_CLEAR;
+							Mod_HdmiTx_SetState(STATE_HDMITX_UPSTREAM_DEVICE_READY_2);
+							Mod_HdmiTx_MsgNotify(HDMITX_SINK_UNPLUG_EVENT);
+							Mod_HdmiTx_HpdLowAction();  
+						}
+						#endif
+					}		    
+				}	
+				if(g_stHdmiTx.ucHdmiVersion == HDMI21)//FRL MODE
+				{
+					if(g_stHdmiTx.ucTxState >= STATE_HDMITX_FRL_TRAINING_6)//for hpd time  <100ms
+					{
+						printLT(PRINT_PRIO_HIG, "\nFRL_RETRAIN"); 
+						Mod_FrlTx_ParamInit();
+						g_stFrlTxInfo.ucFrlState = FRL_TRAIN_INIT_1;
+						Mod_HdmiTx_SetState(STATE_HDMITX_FRL_TRAINING_6);//重新进行LINK
+					}
+				}
+				else if(g_stHdmiTx.ucHdmiVersion == HDMI20)//SCDC MODE
+				{
+					if(g_stHdmiTx.ucTxState >= STATE_HDMITX_VIDEO_OUT_7)//for hpd time  <100ms
+					{
+						printLT(PRINT_PRIO_HIG, "\nSCDC_REWRITE");  
+						if(g_stHdmiEdidInfo.b1Scdc_Present == TRUE)
+						{
+							g_stHdmiTx.b1ScdcCheck_En = TRUE;
+							Drv_HdmiTx_WriteI2CByte(0xA820,0x03);
+						}
+						ucScdcCheckCnt = 0;
+						#if HDMITX_HDCP_ENC_MODE != NO_HDCP
+						Drv_Hdcp22Tx_Reset();
+						#endif
+						
+						Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+					}
+				}	
+				else if(g_stHdmiTx.ucHdmiVersion == HDMI14)//SCDC MODE
+				{
+					if(g_stHdmiTx.ucTxState >= STATE_HDMITX_VIDEO_OUT_7)//for hpd time  <100ms
+					{
+						printLT(PRINT_PRIO_HIG, "\nHDCP_Reset");  
+						#if HDMITX_HDCP_ENC_MODE != NO_HDCP
+						Drv_Hdcp22Tx_Reset();
+						#endif
+					}
+				}	
+			}
+			ucHpd_lowDet_Save = EVENT_CLEAR;
+		}
+		else
+		{
+			if(ucHpd_lowDet_Save == EVENT_HPDRSEN_LOW)
+			{
+				printLT(PRINT_PRIO_HIG, "\nHTX_OUT"); 
+				ucHpd_lowDet_Save = EVENT_CLEAR;
+				Mod_HdmiTx_SetState(STATE_HDMITX_UPSTREAM_DEVICE_READY_2);
+				Mod_HdmiTx_MsgNotify(HDMITX_SINK_UNPLUG_EVENT);
+				Mod_HdmiTx_HpdLowAction();  
+			}
+		}
+		if(g_stHdmiTx.b1ScdcCheck_En == TRUE)
+        {
+            if(Ocm_Timer_IsOverFlow(&ulCurrentTime,MS_120) == TRUE)
+            {
+                ucScdcCheckCnt++;           
+                if(ucScdcCheckCnt <= 5)
+                {                
+					printLT(PRINT_PRIO_HIG, "\nSCDC_REWRITE"); 
+                    Drv_HdmiScdc_Scan(g_stHdmiTx.ucHdmiVersion,TRUE,g_stHdmiEdidInfo.b1Scdc_Present);
+                    Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                }
+                else
+                {					
+                    ucScdcCheckCnt = 0;
+                    g_stHdmiTx.b1ScdcCheck_En = FALSE;		
+                }
+            }
+        }
+    } 	
+}
+
+
+#if HDMITX_CTS_SUPPORT == ENABLED
+void Mod_HdmiTx_ReadSinkErrorCnt(void)
+{
+    static u8 ucTemp[7];
+
+    if ((BKE9_94_REG & BIT4_1) && (BKE9_A3_REG & BIT1_1))
+    {
+        BKE9_A5_REG |= BIT3_1;//[3]a820 or a810 int clr en
+        BKE9_A5_REG &= BIT3_0;//[3]a820 or a810 int clr dis
+        Drv_HdmiTx_ReadI2CByteN(0x00,0xA850,ucTemp,7);
+    }
+}
+#endif
+
+void Mod_HdmiTx_GcpInfoSet(void)
+{
+    
+    if(g_stHdmiTx.ucHdmiVersion != HDMI21)
+    {
+        Drv_HdmiTx_Reset(HDMI_TX_20DC_RST,ENABLED);
+        Drv_HdmiTx_Reset(HDMI_TX_20DC_RST,DISABLED);
+        Drv_HdmiTx_Reset(HDMI_TX_20VID_RST,ENABLED);
+        Drv_HdmiTx_Reset(HDMI_TX_20VID_RST,DISABLED);
+    }
+    if (g_stHdmiTx.ucTxPixelEncoding == YCbCr422_1)
+    {
+        Drv_HdmiTx_GcpSet(DISABLED);
+    }
+    else
+    {
+		//philip monitor 10b-->8b black display,need to send GCP with all 0 when 8bit
+		Drv_HdmiTx_GcpSet(ENABLED);
+//		BKED_00_REG &= BIT5_0; //Deep color reset; CTS
+//		BKED_00_REG |= BIT5_1;
+//        switch(g_stHdmiTx.ucColorDepth)
+//        {
+//            case DEEP_10BIT:
+//            case DEEP_12BIT:
+//                BKEB_18_REG |= BIT4_1;// gcp pckt enable
+//                BKED_00_REG &= BIT5_0; //Deep color reset; CTS
+//                BKED_00_REG |= BIT5_1;
+//                break;
+//            case DEEP_8BIT:
+//            default:
+//                BKEB_18_REG &= BIT4_0;// gcp pckt disable
+//                break;
+//        }
+    }
+}
+
+
+#if 0
+void TEST_16B18B_ERROR_READ(void)//-wangtt- wait delete
+{
+    u8 ucErr0, ucErr1;
+
+    ucErr0 = Drv_HdmiTx_ReadI2CByte(0xa850);
+    ucErr1 = Drv_HdmiTx_ReadI2CByte(0xa851);
+    printLT(PRINT_PRIO_TEST, "\nSink rx 16/18b error: 0x%02bx 0x%02bx,  ", ucErr0, ucErr1);
+    Ocm_Delay1ms(1);
+    ucErr0 = Drv_HdmiTx_ReadI2CByte(0xa852);
+    ucErr1 = Drv_HdmiTx_ReadI2CByte(0xa853);
+    printLT(PRINT_PRIO_TEST, "0x%02bx 0x%02bx,  ", ucErr0, ucErr1);
+    Ocm_Delay1ms(1);
+    ucErr0 = Drv_HdmiTx_ReadI2CByte(0xa854);
+    ucErr1 = Drv_HdmiTx_ReadI2CByte(0xa855);
+    printLT(PRINT_PRIO_TEST, "0x%02bx 0x%02bx,  ", ucErr0, ucErr1);
+    Ocm_Delay1ms(1);
+    ucErr0 = Drv_HdmiTx_ReadI2CByte(0xa856);
+    printLT(PRINT_PRIO_TEST, "0x%02bx,  ", ucErr0, ucErr1);
+    Ocm_Delay1ms(1);
+    ucErr0 = Drv_HdmiTx_ReadI2CByte(0xa857);
+    ucErr1 = Drv_HdmiTx_ReadI2CByte(0xa858);
+    printLT(PRINT_PRIO_TEST, "0x%02bx 0x%02bx,  ", ucErr0, ucErr1);
+    Ocm_Delay1ms(1);
+    ucErr0 = Drv_HdmiTx_ReadI2CByte(0xa859);
+    ucErr1 = Drv_HdmiTx_ReadI2CByte(0xa85a);
+    printLT(PRINT_PRIO_TEST, "0x%02bx 0x%02bx, ", ucErr0, ucErr1);
+}
+#endif
+
+void Mod_HdmiTx_StateJudge(void)
+{
+    u8 IDATA ucAudioMute = 0x00;
+    u8 ucMinState     = 0xff;
+	#if HDMITX_HDCP_ENC_MODE != NO_HDCP
+	u8 ucHdcpRxVerTmp;
+	static u32 ulCurrentTime = 0x00;
+	#endif
+    //monitor upstream device stable.
+    if(g_stHdmiTx.ucTxState > STATE_HDMITX_UPSTREAM_DEVICE_READY_2)
+    {
+        if(g_stHdmiTx.b1UpstreamDeviceReady == FALSE)
+        {      
+            Mod_HdmiTx_HpdLowAction();
+            Mod_HdmiTx_MsgNotify(HDMITX_SINK_UNPLUG_EVENT);
+            ucMinState = MIN(ucMinState,STATE_HDMITX_UPSTREAM_DEVICE_READY_2);
+        }
+    }
+
+    //monitor upstream video stable.
+    if(g_stHdmiTx.ucTxState > STATE_HDMITX_UPSTREAM_VIDEO_READY_4)
+    {
+        if(g_stHdmiTx.b1UpstreamVideoReady == FALSE)
+        {
+            Mod_HdmiTx_HpdLowAction();
+            ucMinState = MIN(ucMinState,STATE_HDMITX_UPSTREAM_VIDEO_READY_4);
+        }
+    }
+
+    //monitor frl update status
+    if (g_stHdmiTx.ucTxState > STATE_HDMITX_FRL_TRAINING_6)
+    {
+        if (Drv_HdmiTx_FrlUpdateChg() == TRUE)
+        {
+            printLT(PRINT_PRIO_TEST, "\nHdmi tx frl update");
+            ucMinState = MIN(ucMinState,STATE_HDMITX_FRL_TRAINING_6);
+        }
+    }
+    #if HDMITX_VRR_SUPPORT == ENABLED
+    if((g_stHdmiTx.ucTxState > STATE_HDMITX_VIDEO_OUT_7)&&(ucMinState >STATE_HDMITX_VIDEO_OUT_7))      
+    {
+        //monitor dobly hdr flag
+        if(g_stHdmiTx.b1SrcVrrChg == TRUE)
+        {
+            g_stHdmiTx.b1SrcVrrChg = FALSE;
+            Mod_DpRx_FrameRate_Get(&stRxTimingInfo);
+            Drv_DpRx_RxTimingGet(&stRxTimingInfo);
+            Drv_HdmiTx_VrrSet(g_stHdmiTx.b1SrcVrrEn,&stRxTimingInfo);
+        }
+    }
+//    #if DPRX_ADAPTIVE_SYNC_WITHOUT_SDP == ENABLED
+//    Drv_HdmiTx_VrrEnable();
+//    #endif
+    #endif
+
+    #if 0
+    if(g_stHdmiTx.ucTxState > STATE_HDMITX_HDCP_ENABLE_9)
+    {
+        TEST_16B18B_ERROR_READ();
+    }
+    #endif
+
+    if(g_stHdmiTx.ucTxState > STATE_HDMITX_VIDEO_OUT_7)
+    {
+        //monitor dobly hdr flag
+        if((g_stHdmiTx.b1SrcDoblyHdrChg == TRUE)&&(g_stHdmiTx.b1SrcDoblyHdrEn  == ENABLED))
+        {
+            g_stHdmiTx.b1SrcDoblyHdrChg = FALSE;
+            Drv_HdmiTx_VicUD0Set(DISABLED);//for changhong TV issue, 杜比和VSIF包不能同时发，否则会造成花屏
+            Drv_HdmiTx_DoblyHdrEnable();
+        }
+        //monitor static hdr flag
+        if((g_stHdmiTx.b1SrcStaticHdrChg == TRUE)&&(g_stHdmiTx.b1SrcStaticHdrEn  == ENABLED))
+        {
+            g_stHdmiTx.b1SrcStaticHdrChg = FALSE;
+            Drv_HdmiTx_StaticHdrEnable();
+        }
+        //monitor dynamic hdr flag
+        if((g_stHdmiTx.b1SrcDynamicHdrChg == TRUE)&&(g_stHdmiTx.b1SrcDynamicHdrEn  == ENABLED))
+        {
+            g_stHdmiTx.b1SrcDynamicHdrChg = FALSE;
+            Drv_HdmiTx_DymicHdrEnable();
+        }
+	    ucAudioMute = Drv_Audio_StatusCheck();
+	    if (ucAudioMute == ENABLED)
+	    {
+            #if REMOVE_UART == DISABLED
+            printLT(PRINT_PRIO_HIG, "\nAudio Mute");
+            #endif
+	        Drv_Audio_OutEn(OFF);//audio mute enable
+	    }
+	    else if (ucAudioMute == DISABLED)
+	    {
+            #if REMOVE_UART == DISABLED
+            printLT(PRINT_PRIO_HIG, "\nAudio Enable");
+            #endif         
+	        Drv_Audio_OutEn(ON);//audio mute disable     
+	    }
+	    else
+	    {
+			;
+	    }
+    }
+
+    #if HDMITX_HDCP_ENC_MODE != NO_HDCP
+    if(g_stHdmiTx.ucTxState > STATE_HDMITX_HDCP_ENABLE_9)
+    {
+		ucHdcpRxVerTmp = Drv_HdcpRx_VerGet();//to do add hdcp event
+        if(g_stHdmiTx.ucHdcpRxVerRecord != ucHdcpRxVerTmp)
+        {
+            if(g_stHdmiTx.b1TxHdcpScanEn == ENABLED)
+            {
+                g_stHdmiTx.b1TxHdcpScanEn = DISABLED;
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+            }	
+            if(Ocm_Timer_IsOverFlow(&ulCurrentTime,SECOND_3) == TRUE)
+            {
+                g_stHdmiTx.ucHdcpRxVerRecord = ucHdcpRxVerTmp;
+                Drv_HdcpTx_Enable(ucHdcpRxVerTmp);
+                #if REMOVE_UART == DISABLED
+                printLT(PRINT_PRIO_HIG,"\nHDCP = 0x%02bx",ucHdcpRxVerTmp);//need update 
+                #endif
+
+            }
+        }
+        else
+        {		
+            g_stHdmiTx.b1TxHdcpScanEn = ENABLED;
+        }
+    }
+	else
+	{
+		g_stHdmiTx.b1TxHdcpScanEn = ENABLED;
+	}
+    #endif
+
+    if(g_stHdmiTx.ucTxState >= STATE_HDMITX_VIDEO_OUT_7)
+    {
+        if(g_stHdmiTx.b1AudioInfoChg == TRUE)
+        {
+            g_stHdmiTx.b1AudioInfoChg = FALSE;
+            Drv_HdmiTx_AudioInfoSet(g_stHdmiTx);
+            printLT(PRINT_PRIO_TEST, "\nAudio on");
+        }
+    }
+
+    if (ucMinState != 0xff)
+    {
+        Mod_HdmiTx_SetState(ucMinState); 
+    }
+}
+
+
+void Mod_HdmiTx_StateHandler(void)
+{
+    #if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT
+    u8 ucTrainResult;
+    #endif
+    u8 ucEdidValidGet;
+    static u32 ulCurrentTime = 0;
+
+    switch(g_stHdmiTx.ucTxState)
+    {
+        case STATE_HDMITX_POWER_ON_1:
+            Drv_HmdiTx_PowerOnInit();
+            Mod_HdmiTx_SetState(STATE_HDMITX_UPSTREAM_DEVICE_READY_2);
+            break;
+
+        case STATE_HDMITX_UPSTREAM_DEVICE_READY_2:
+            if(g_stHdmiTx.b1UpstreamDeviceReady == TRUE) //Typec Rx CC is done or dp is ok
+            {
+                Mod_HdmiTx_SetState(STATE_HDMITX_WAIT_HPD_3);
+            }
+            break;
+
+        case STATE_HDMITX_WAIT_HPD_3:
+            if((g_stHdmiTx.b1TxStateChanged == TRUE)&&(g_stHdmiTx.b1IsTxHpdDet == HIGH))//hdmi hpd is high.
+            {  
+                Mod_HmdiTx_EdidRead(szEdidData,ENABLED);
+                g_stHdmiTx.b1TxStateChanged = FALSE;
+                Drv_HdmiTx_DdcMstRst();
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+            }
+            if(g_stHdmiTx.b1IsTxHpdDet == HIGH)
+            {
+                if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_100) == TRUE)
+                {
+                    ucEdidValidGet = Mod_HmdiTx_EdidRead(szEdidData,DISABLED);
+                    if(ucEdidValidGet == HEADERERROR)
+                    {
+                        Mod_HdmiTx_MsgNotify(HDMITX_EDID_INVALID_EVENT);
+                        printLT(PRINT_PRIO_HIG,"\nEDIDHeader");  
+                        Mod_HdmiTx_SetState(STATE_HDMITX_UPSTREAM_VIDEO_READY_4);
+                    }
+                    else if(ucEdidValidGet == EDIDWAIT)
+                    {
+                        printLT(PRINT_PRIO_HIG,"\nEDIDWait===========================================");
+                        Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                    }
+                    else
+                    {
+                        if(ucEdidValidGet == CHECKSUMERROR)
+                        {
+                            printLT(PRINT_PRIO_TEST, "\nEDIDSumerr");
+                        }
+                        else
+                        {
+                            printLT(PRINT_PRIO_TEST, "\nEdid Valid");
+                        }
+                        Mod_HdmiTx_MsgNotify(HDMITX_EDID_VALID_EVENT);
+                        Mod_HdmiTx_SetState(STATE_HDMITX_UPSTREAM_VIDEO_READY_4);
+                    }                   
+                    
+                }
+            }
+			else
+            {
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+            }
+            break;
+
+        case STATE_HDMITX_UPSTREAM_VIDEO_READY_4:
+            if(g_stHdmiTx.b1UpstreamVideoReady == TRUE)
+            {
+                printLT(PRINT_PRIO_TEST, "\nUpstream video is ready");
+                #if HDMITX_DSC_ENC_SUPPORT == ENABLED
+                Drv_HdmiTxDscEnc_Init();
+                #endif
+                #if HDMITX_DSC_BYPASS_SUPPORT == ENABLED
+                Drv_HdmiTxDscBy_Init();
+                #endif
+                Drv_Sys_EncPowerDomain(TRUE);
+                Mod_HdmiTx_VarInit();
+                Mod_HdmiTx_HdmiVersionCal();// need for sel hdmi2.1 mode.
+                if(g_stHdmiTx.ucHdmiVersion == HDMI21)
+                {
+                    Drv_Sys_DhTxSrcSel(DHTX_SRC_SEL_HDMI21TX);
+                }
+                else
+                {
+                    Drv_Sys_DhTxSrcSel(DHTX_SRC_SEL_HDMI20TX);
+                }
+                Mod_HdmiTx_SetState(STATE_HDMITX_DSCENC_CONFIG_5);
+            }
+            break;
+
+        case STATE_HDMITX_DSCENC_CONFIG_5:
+            #if HDMITX_DSC_ENC_SUPPORT == ENABLED
+            if (g_stHdmiTx.b1EncodeEn == ENABLED)
+            {
+                Drv_Sys_EncPowerDomain(FALSE);
+                Drv_HdmiTxDscEnc_ParaInit();
+                Drv_HdmiTxDscEnc_InfoGet();
+                Drv_HdmiTxDscEnc_ModuleEnable();
+                g_stHdmiTx.ucColorDepth      = DEEP_8BIT;//force to RGB 8bpc
+                g_stHdmiTx.ucTxPixelEncoding = RGB_0; 
+            }
+            #endif
+            #if HDMITX_DSC_BYPASS_SUPPORT == ENABLED
+            if (g_stHdmiTx.b1SrcDscByEn == ENABLED)
+            {
+                Drv_HdmiTxDscBy_PktSet();
+                g_stHdmiTx.ucColorDepth      = DEEP_8BIT;//force to RGB 8bpc
+                g_stHdmiTx.ucTxPixelEncoding = RGB_0; 
+            }
+            #endif
+            Mod_HdmiTx_SetState(STATE_HDMITX_FRL_TRAINING_6);
+            break;
+
+        case STATE_HDMITX_FRL_TRAINING_6:
+            #if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT 
+            if(g_stHdmiTx.b1TxStateChanged == TRUE)
+            {
+                Drv_HdmiTx_Reset(HDMI_TX_20DC_RST,ENABLED);
+                Drv_HdmiTx_Reset(HDMI_TX_20DC_RST,DISABLED);
+                Mod_FrlTx_ParamInit();
+                g_stFrlTxInfo.ucFrlState = FRL_TRAIN_INIT_1;
+                g_stHdmiTx.b1TxStateChanged = FALSE;
+                
+            }
+            #if RX_PORT_SIGN == DP_PORT
+			//CTS use
+            if(((g_stHdmiEdidInfo.b1Yuv420Edid)==0x00)&&(g_stDpRx.ucPixelEncoding == YCbCr420_3))
+            {
+                return;
+            }
+            #endif
+            ucTrainResult = Mod_FrlTx_TrainingHdl();
+            if (ucTrainResult == TRAINING_SUCCESS)
+            {
+                Mod_HdmiTx_SetState(STATE_HDMITX_VIDEO_OUT_7);
+            }
+            else if (ucTrainResult == FAIL)
+            #endif
+            {
+                Mod_HdmiTx_SetState(STATE_HDMITX_VIDEO_OUT_7);
+            }
+            break;
+        case STATE_HDMITX_VIDEO_OUT_7://only for hdmi1.4 or hdmi2.0
+			if(g_stHdmiTx.b1TxStateChanged == TRUE)
+            {
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                Drv_Audio_AcrLogicRst();//in case of audio stable first,then reset acr logic
+                g_stHdmiTx.b1TxStateChanged = FALSE;
+            }
+            #if HDMITX_CTS_SUPPORT == ENABLED		
+			if((Drv_HdmiTx_HpdDet() == LOW)||(Drv_HdmiTx_ResenState() == LOW)) //hdmi hpd is low
+			{
+				Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+			}							
+            #endif
+			if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_20) == TRUE)
+			{
+				Drv_HdmiTx_AviInfoSet(g_stHdmiTx);
+				Mod_HdmiTx_GcpInfoSet();
+                if (g_stHdmiTx.ucHdmiVersion != HDMI21)//fix 
+                {
+                    printLT(PRINT_PRIO_TEST, "\nHD20 DCRST");
+                    Drv_HdmiTx_Reset(HDMI_TX_20DC_RST,ENABLED);
+                    Drv_HdmiTx_Reset(HDMI_TX_20DC_RST,DISABLED);
+                }
+				Drv_HdmiTx_TmdsVideoOn();
+				#if SPD_SUPPORT  == ENABLED
+				Drv_HdmiTx_SpdInfoSet();
+				#endif
+				Mod_HdmiTx_SetState(STATE_HDMITX_AUDIO_OUT_8);
+			}       
+            break;
+
+        case STATE_HDMITX_AUDIO_OUT_8:
+            if(g_stHdmiTx.b1TxStateChanged == TRUE)
+            {
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                g_stHdmiTx.b1TxStateChanged = FALSE;
+            }
+            if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_100) == TRUE)
+            {           
+                Drv_Audio_HdmiNctsValueSet(Mod_FrlTx_Hdmi21EnGet());
+                Mod_HdmiTx_SetState(STATE_HDMITX_HDCP_ENABLE_9);
+            }
+            break;
+
+        case STATE_HDMITX_HDCP_ENABLE_9: 
+            if(g_stHdmiTx.b1TxStateChanged == TRUE)
+            {
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                g_stHdmiTx.b1TxStateChanged = FALSE;
+            }
+            if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_500) == TRUE)
+            {
+                g_stHdmiTx.b1TxHdcpScanEn = ENABLED;
+			//8k30 10bit FRL10G , HDMITX Map Error
+				if(Drv_HdmiTx_FrlJitGet() >= 0xFFE)
+				{
+					Drv_HdmiTx_Reset(HDMI_TX_21PKT_RST,ENABLED);
+                    Drv_HdmiTx_Reset(HDMI_TX_21PKT_RST,DISABLED);
+					printLT(PRINT_PRIO_TEST, "\nFRLTX JIT Reset");
+				}
+				g_stHdmiTx.ucHdcpRxVerRecord = NO_HDCP;
+                Mod_HdmiTx_SetState(STATE_HDMITX_PLAY_BACK_10);
+            }
+            break;
+            
+        case STATE_HDMITX_PLAY_BACK_10:
+            break;
+
+        default:  
+            break;
+    }
+}
+
+void Mod_HdmiTx_Handler(void)
+{
+    Mod_HdmiTx_HpdDetProc();
+    Mod_HdmiTx_StateJudge();
+    Mod_HdmiTx_StateHandler();
+}
+
+#if HDMITX_VID_PATTERN_SEL != NO_PATTERN
+void Mod_HdmiTx_Pattern(void)
+{
+    Drv_System_VidPatternSet();
+    #if HDMITX_AUD_PATTERN_SEL != NO_PATTERN
+    Drv_System_AudioPatternSet();
+    #endif
+    //============hdmi tx stub function set================
+    memset(&g_stHdmiTx, 0, sizeof(HdmiTx_S));
+    g_stHdmiTx.ucTxState = STATE_HDMITX_POWER_ON_1;
+    g_stHdmiTx.b1UpstreamDeviceReady = TRUE;
+    g_stHdmiTx.b1UpstreamVideoReady  = TRUE; //rx video rdy
+    g_stHdmiTx.ucHdmiVersion     = HDMITX_VID_PATTERN_MODE;
+//    g_stHdmiTx.ucHdcpRxVerChg    = TRUE;
+//    g_stHdmiTx.ucHdcpRxVersion   = NO_HDCP;
+    g_stHdmiTx.b1AudioInfoChg    = FALSE;//
+    g_stHdmiTx.ucTxPixelEncoding = RGB_0;
+    g_stHdmiTx.ucColorDepth      = DEEP_8BIT;
+
+    g_stHdmiEdidInfo.ucMaxFrlDscRate = HDMITX_MAX_FRL_RATE;
+    g_stHdmiEdidInfo.ucMaxFrlRate    = HDMITX_MAX_FRL_RATE;
+    g_stHdmiTx.b1AudioInfoChg  = FALSE;//-wangtt- wait confirm
+    #if HDMITX_AUD_PATTERN_SEL != NO_PATTERN
+    g_stHdmiTx.b1AudioInfoChg  = TRUE;//-wangtt- wait confirm
+    g_stHdmiTx.ucChannel = 0x01;
+    g_stHdmiTx.szAudioInfo[0] = 0x84;//hb1
+    g_stHdmiTx.szAudioInfo[1] = 0x01;//hb2
+    g_stHdmiTx.szAudioInfo[2] = 0x0a;//hb3
+    g_stHdmiTx.szAudioInfo[3] = 0x70;//checksum
+    g_stHdmiTx.szAudioInfo[4] = 0x01;//pb0
+    g_stHdmiTx.szAudioInfo[5] = 0x00;//pb1
+    g_stHdmiTx.szAudioInfo[6] = 0x00;//pb2
+    g_stHdmiTx.szAudioInfo[7] = 0x00;//pb3
+    g_stHdmiTx.szAudioInfo[8] = 0x00;//pb4
+    #endif
+
+    Drv_System_FmSet(TOP_FM,TOPFM_PCRPLL_PCR_CLK);
+    Ocm_Delay1ms(10);
+    g_stHdmiTx.ulTxPixelClk  = Drv_System_FmGet(TOP_FM,HALF_PIX_CLK);
+    g_stHdmiTx.ulTxPixelClk<<= 1;
+    g_stHdmiTx.ulTxTmdsClk   = g_stHdmiTx.ulTxPixelClk ;
+    g_stHdmiTx.ucszAviPkt[0] = 0x00;//rgb
+    g_stHdmiTx.ucszAviPkt[1] = 0xe8;//rgb
+    g_stHdmiTx.ucszAviPkt[2] = 0x44;//rgb
+    g_stHdmiTx.ucszAviPkt[3] = 0x00;//rgb
+    g_stHdmiTx.ucszAviPkt[4] = 0x00;//rgb
+    
+    #if HDMITX_VID_PATTERN_SEL == PTN480P
+    g_stHdmiTx.ucszAviPkt[3] = 1;//rgb
+    #elif HDMITX_VID_PATTERN_SEL == PTN720P
+    g_stHdmiTx.ucszAviPkt[3] = 4;//rgb
+    #elif HDMITX_VID_PATTERN_SEL == PTN1080P
+    g_stHdmiTx.ucszAviPkt[3] = 16;//rgb
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K30
+    g_stHdmiTx.ucszAviPkt[3] = 95;//rgb
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K60
+    g_stHdmiTx.ucszAviPkt[3] = 97;//rgb
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K120
+    g_stHdmiTx.ucszAviPkt[3] = 120;//rgb
+    #elif HDMITX_VID_PATTERN_SEL == PTN8K30
+    g_stHdmiTx.ucszAviPkt[3] = 196;//rgb
+    #else
+    
+    #endif
+    //============hdmi tx stub function set================
+    while(1)
+    {
+        if(g_stHdmiTx.ucHdmiVersion != HDMI21)
+        {
+             g_stHdmiEdidInfo.ucMaxFrlRate = 0;
+        }
+        #if HDMITX_DSC_ENC_SUPPORT == ENABLED
+        g_stHdmiTx.b1EncodeEn = TRUE ;
+        #endif
+        
+        #if HDMITX_AUD_PATTERN_SEL != NO_PATTERN
+        BKC6_2E_REG  = 0x03;// BIT7 DP ptn en, sel dp audio ptn
+        BKC6_37_REG |= BIT0_1;  //rgd-aud-ptn-sel
+        BKC9_20_REG |= BIT4_1;  //PTN_SEL CLOCK SEL
+        BKED_10_REG = 0x14;     //DPTX fs64 clock source select
+        if(g_stHdmiTx.ucHdmiVersion != HDMI21)
+        {
+            BKED_11_REG = 0x00;     //DPTX audio mux clock source select
+            BKEB_11_REG = 0xd9;//N/CTS
+        }
+        else
+        {
+            BKEB_11_REG = 0x02;//N/CTS
+            BKEB_11_REG = 0xda;//N/CTS
+        }
+        #endif
+        Mod_HdmiTx_Handler();
+    }
+}
+#endif
+#endif

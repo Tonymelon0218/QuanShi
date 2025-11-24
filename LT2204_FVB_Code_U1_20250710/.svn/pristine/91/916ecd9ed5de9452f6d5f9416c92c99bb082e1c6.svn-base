@@ -1,0 +1,757 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: DrvLvds.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.05.26
+/******************************************************************************/
+#include "include.h"
+
+#if TX_PORT_SIGN == LVDS_PORT
+
+void Drv_LvdxTx_VideoSet(u8 ucVideoOpt)
+{
+    if(ENABLED == ucVideoOpt)
+    {
+        SET_BIT(BKF9_10_REG, BIT7);
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_10_REG, BIT7);
+    }
+}
+
+void Drv_LvdsTx_PllSrcSet()
+{
+// LVDS PLL  Clk Path Select
+    SET_BITS(BKA2_00_REG, 1, 0); //RG_LMTXPLL_REF_SEL sel  Aa_lmtxpll_ref_clk3 [Refer rg_clkgen_lmtxpll_refsel[2:0] ]
+    LET_BITS(BKA3_44_REG, 6, 4, 0x3); //rg_clkgen_lmtxpll_refsel  sel aa_dsctx_dsc_out_clk
+}
+
+u8 Drv_LvdsTx_DivCal(u8 ucDivPara)
+{
+    int ucTmpDiv =0;
+    switch(ucDivPara)
+    {
+        case 1:
+            ucTmpDiv = 0;
+            break;
+        case 2:
+            ucTmpDiv = 1;
+            break;
+        case 4:
+            ucTmpDiv = 2;
+            break;
+        case 8:
+            ucTmpDiv = 3;
+            break; 
+        case 16:
+            ucTmpDiv = 4;
+            break;
+        case 32:
+            ucTmpDiv = 5;
+            break; 
+        default:
+            ucTmpDiv = 0;
+            break;
+    }
+    return ucTmpDiv;
+
+}
+
+void Drv_LvdsTx_PllPreDivAndMValCal(u32 ulRefClk, u8 *pPllPreDiv, u8 *pPllMVal)
+{
+    if(ulRefClk > 688000)
+    {
+    }
+    else if(ulRefClk > 344000)
+    {
+        *pPllPreDiv = 16;
+        *pPllMVal = 4;
+    }
+    else if(ulRefClk > 172000)
+    {
+        *pPllPreDiv = 8;
+        *pPllMVal = 4;
+    }
+    else if(ulRefClk > 86000)
+    {
+         *pPllPreDiv = 4;
+         *pPllMVal = 4;
+    }
+    else if(ulRefClk > 43000)
+    {
+         *pPllPreDiv = 2;
+         *pPllMVal = 4;
+    }
+    else if(ulRefClk > 21500)
+    {
+        *pPllPreDiv = 1;
+        *pPllMVal = 4;
+    }
+    else
+    {
+        *pPllPreDiv = 1;
+        *pPllMVal = 8;
+    }
+    
+}
+
+void Drv_LvdsTx_PllDivSet(u32 ulInputClk, u8 ucLvdsPortcnt , u8 ucLvdsDatamap) // TODO:
+{
+    u8 ucPllPreDiv = 0; 
+    u8 ucPostdiv = 0;
+    u8 ucPllMVal = 0;
+    u8 ucTdmsDiv = 0;
+    u8 ucSeriTmp = 0;
+    u8 ucSeriDiv = 0;
+    LTLog(LOG_INFO, "LMTXPLL Input Clk : %ld",ulInputClk);
+
+    ucPostdiv = 2;// 防止M太大
+    SET_BIT(BKA2_00_REG, BIT2);
+    
+    Drv_LvdsTx_PllPreDivAndMValCal(ulInputClk,&ucPllPreDiv,&ucPllMVal);
+    //Mval set 
+    SET_BIT(BKA2_0A_REG, BIT7);
+    LET_BITS(BKA2_0A_REG, 6, 0, ucPllMVal*7);
+    LTLog(LOG_INFO, "PLL Prediv = 0x%02bx, Mval=0x%02bx, post=0x%02bx ,port=0x%02bx,", ucPllPreDiv, ucPllMVal, ucPostdiv,ucLvdsPortcnt);
+    
+    //PLL_TMDS_CLK Path :0xA206 rg_lmtxpll_tmds_freq_set,     0xA204 lmtxpll_fecref_divsel &g_lmtxpll_fecref_muxsel
+    LET_BITS(BKA2_04_REG, 5, 4, 0x1); //ssc half pix clock source sel TDMS clk
+    if(ucPllPreDiv <=  ucPllMVal * ucPostdiv)
+    {
+        LET_BITS(BKA2_04_REG,5,0, 0x16);
+    }
+     else
+    {
+        LET_BITS(BKA2_04_REG,5,0,0x1F); 
+    }
+
+    LTLog(LOG_DEBUG, "FEC ref REG= 0x%02bx ", BKA2_04_REG);
+
+    ucTdmsDiv = Drv_LvdsTx_DivCal((ucPllMVal * ucPostdiv) / ucPllPreDiv);
+    LTLog(LOG_DEBUG, "Tdms Div div= 0x%02bx ", ucTdmsDiv);
+    LET_BITS(BKA2_06_REG, 6, 4, ucTdmsDiv);
+
+    //set pre div
+    LET_BITS(BKA2_01_REG, 4, 0, ucPllPreDiv-1);
+    
+    //Sericlk path :
+    //ucSeriTmp = (ucPllMVal * ucPostdiv* ucLvdsPortcnt) / ucPllPreDiv;
+    ucSeriTmp = (ucPllMVal * ucLvdsPortcnt) / ucPllPreDiv; //(postdiv*mvalue*l_LvdsPortNum)/prediv/2
+    // TODO: 如果是sony 422 速率还要/2
+    if(SONY_YUV422_8Bit == ucLvdsDatamap )
+    {
+        ucSeriTmp *= 2;
+    }
+
+    if(SUB_LVDS_MODE == ucLvdsDatamap )
+    {
+        ucSeriTmp /= 2;
+    }
+
+    
+    if((0 < ucSeriTmp) && (16 >= ucSeriTmp))
+    {
+        ucSeriDiv = Drv_LvdsTx_DivCal(ucSeriTmp);
+    }
+    else
+    {
+        ucSeriDiv = 4;
+        LTLog(LOG_ERROR, "SeriClk div= 0x%02bx ,check port num ", ucSeriTmp);
+    }
+    
+    LET_BITS(BKA2_07_REG, 2, 0, ucSeriDiv);
+    LTLog(LOG_INFO,"TdmsDiv=0x%02bx, SeriDiv= 0x%02bx" ,ucTdmsDiv, ucSeriTmp);
+
+}
+
+
+u8 Drv_LvdsTx_PllCali()
+{
+    //1.配置相关模式以及分档
+    //2.配置开启rg_xxxpll_pd=0              0xA200 Bit7
+    //3.复位操作 rgd_xxxpll_rst_n=0 rgd_xxxpll_rst_n=1     0xE10FBIT4
+
+    //4.校准使能 rgd_xxxpll_cal_en=0 rgd_xxxpll_cal_en=1       0xE263 bit3
+
+    //5.判断 cal done 和 pll lock out    
+    //RGOD_LMTXPLL_PLL_CAL_DONE 0xE26D bit1:calidone bit0 pll cail fail
+    //RGOD_LMTXPLL_PLL_LOCK_OUT 0xE228 bit2
+
+    //pll div rest 0xA210 bit7
+
+    u8 ucCaliCnt = 0;
+    CLEAR_BIT(BKA2_00_REG, BIT4); //Lmtxpll power Normal Work
+    CLEAR_BITS(BKE1_07_REG, 3, 0);
+    CLEAR_BIT(BKE1_0F_REG, BIT4);//Software control for LMTXPLL reset
+    CLEAR_BIT(BKE2_63_REG, BIT3);//LMTXPLL PLL calibration enable.
+    Ocm_Delay1ms(1);
+    
+    LET_BITS(BKE1_07_REG, 3, 0, 0xF);
+    SET_BIT(BKE1_0F_REG, BIT4);//Software control for LMTXPLL reset
+    
+    Ocm_Delay1ms(1);
+    SET_BIT(BKE2_63_REG, BIT3);//LMTXPLL PLL calibration enable.
+    Ocm_Delay1ms(2);
+
+
+    
+    do
+    {
+        ucCaliCnt ++;
+        Ocm_Delay1ms(5);
+    }while((ucCaliCnt < 3) && (GET_BIT(BKE2_6D_REG, BIT1)));
+
+    if(0x02 != GET_BITS(BKE2_6D_REG, BIT1, BIT0))
+    {
+        LTLog(LOG_ERROR, "LMTXPLL cali fail");
+        return FALSE;
+    }
+
+    if(!GET_BIT(BKE2_28_REG, BIT2))
+    {
+        LTLog(LOG_ERROR, "LMTXPLL unlock");
+        return FALSE;
+    }
+
+    LTLog(LOG_DEBUG, "LMTXPLL calibration bandout: 0x%02bx 0x%02bx", BKE2_74_REG, BKE2_75_REG);
+
+    CLEAR_BIT(BKA2_10_REG, BIT7);
+    SET_BIT(BKA2_10_REG, BIT7);
+
+    return TRUE;
+}
+
+void Drv_LvdsTx_HtotalAdjust(StructTiming *stVideoTiming, u8 ucLvdsDatamap, u8 ucPort)
+{
+    //ad_lmtx_write_clk = (1/2) * ad_lmtxpll_ssc_half_pix_clk  htotal 至少能被 4 整除，若输入分辨率 htotal 不能被 4 整除，则 rg_dp_sync_adj_en1（F911[4]）需要置 1
+    // RGB6/8/10bpc、YUV422-8bpc 内同步模式 4port模式
+    //YCbCr422-8bpc-5    2Port 模式
+    //SUB-LVDSTX 8lane 模式
+    
+    //ad_lmtx_write_clk = (1/4) * ad_lmtxpll_ssc_half_pix_clk  htotal 至少能被 8 整除，若输入分辨率 htotal 不能被 8 整除，则 rg_dp_sync_adj_en2（F929[2]）需要置 1
+    //sony 4port
+    CLEAR_BIT(BKF9_11_REG, BIT4);
+    CLEAR_BIT(BKF9_29_REG, BIT2);
+    
+    if(SUB_LVDS_MODE == ucLvdsDatamap)
+    {
+        if(LVDSTX_8LANE == ucPort )//内同步 8lane 模式下，存在1/2 关系
+        {
+            if( 0 != stVideoTiming->Htotal % 4)
+            {
+                SET_BIT(BKF9_11_REG, BIT4);
+            }
+        }
+    }
+    else if(SONY_YUV422_8Bit == ucLvdsDatamap) 
+    {
+        if( LVDS_2PORT == ucPort) //sony 2port 存在1/2 关系
+        {
+            if( 0 != stVideoTiming->Htotal % 4)
+            {
+                SET_BIT(BKF9_11_REG, BIT4);
+            }
+        }
+        
+        if(LVDS_4PORT == ucPort)//sony 4port 存在1/4 关系
+        {
+            if( 0 != stVideoTiming->Htotal % 8)
+            {
+                SET_BIT(BKF9_29_REG, BIT2);
+            }
+        }
+    }
+    else
+    {
+        if(LVDS_4PORT == ucPort) //存在1/2  关系
+        {
+            if( 0 != stVideoTiming->Htotal % 4)
+            {
+                SET_BIT(BKF9_11_REG, BIT4);
+            }
+        }
+    }
+}
+
+void Drv_LvdsTx_HactiveAdjust(StructTiming *stVideoTiming, u8 ucLvdsDatamap, u8 ucPort)
+{
+    //ad_lmtx_write_clk = (1/2) * ad_lmtxpll_ssc_half_pix_clk  hactive 至少能被 4 整除，若输入分辨率 hactive 不能被 4 整除，则 rg_de_ext1（F9f0[0]）需要置 1
+    //ad_lmtx_write_clk = (1/4) * ad_lmtxpll_ssc_half_pix_clk  hactive 至少能被 8 整除，若输入分辨率 hactive %8 = 6  rg_de_ext1（F9f0[0]）需要置 1， 
+    //hactive %8 = 4，rg_de_ext2（F9f0[1]）需要置 1,hactive %8 = 2,则 rg_de_ext3（F9f0[2]）需要置 1；
+    
+    //先清除 hactive adjust
+    CLEAR_BITS(BKF9_F0_REG, 2, 0);
+    
+    if(SUB_LVDS_MODE == ucLvdsDatamap)
+    {
+        if(LVDSTX_8LANE == ucPort )//ad_lmtx_write_clk = (1/2) * ad_lmtxpll_ssc_half_pix_clk  hactive 内同步 8lane 模式下，存在1/2 关系
+        {
+            if( 0 != stVideoTiming->Hactive % 4)
+            {
+                SET_BIT(BKF9_F0_REG, BIT0);
+            }
+        }
+    }
+    else if(SONY_YUV422_8Bit == ucLvdsDatamap) 
+    {
+        if( LVDS_2PORT == ucPort) //ad_lmtx_write_clk = (1/2) * ad_lmtxpll_ssc_half_pix_clk  hactive  sony 2port 存在1/2 关系
+        {
+            if( 0 != stVideoTiming->Hactive % 4)
+            {
+                SET_BIT(BKF9_F0_REG, BIT0);
+            }
+        }
+        
+        if(LVDS_4PORT == ucPort)//ad_lmtx_write_clk = (1/4) * ad_lmtxpll_ssc_half_pix_clk  , sony 4port 存在1/4 关系
+        {
+            if( 6 == stVideoTiming->Hactive % 8)
+            {
+                SET_BIT(BKF9_F0_REG, BIT0);
+            }
+            
+            if( 4 == stVideoTiming->Hactive % 8)
+            {
+                SET_BIT(BKF9_F0_REG, BIT1);
+            }
+            
+            if( 2 == stVideoTiming->Hactive % 8)
+            {
+                SET_BIT(BKF9_F0_REG, BIT2);
+            }
+            
+        }
+    }
+    else
+    {
+        if(LVDS_4PORT == ucPort) //ad_lmtx_write_clk = (1/2) * ad_lmtxpll_ssc_half_pix_clk  hactive 存在1/2  关系
+        {
+            if( 0 != stVideoTiming->Hactive % 4)
+            {
+                SET_BIT(BKF9_F0_REG, BIT0);
+            }
+        }
+    }
+}
+
+void Drv_LvdsTx_InVSyncPol_Sel(u8 b1SyncPol)
+{
+    (b1SyncPol)?(BKF9_10_REG &= BIT2_0):(BKF9_10_REG |= BIT2_1);//LVDS need postive
+}
+
+void Drv_LvdsTx_InHSyncPol_Sel(u8 b1SyncPol)
+{
+    (b1SyncPol)?(BKF9_10_REG &= BIT3_0):(BKF9_10_REG |= BIT3_1);//RG_HS_POL LVDS need postive
+}
+
+void Drv_LvdsTx_TimingSet(StructTiming *stVideoTiming,u8 ucLvds3d ,u8 ucLvdsDatamap)
+{
+    /*
+      0xF923 -24  寄存器，如果开启自动模式（0xf9Ef bit1)可以不配置,0xF925-0xF928  与Frame packing 模式3D设置有关
+      打开LVDSTX_SETTING_AUTO_EN 模式
+      bit0: hactive/hwidth/hbp的参数自动模式 
+      bit1: Sram read delay的参数自动模式
+      bit2: 串行数据流中同步码自动配置模式
+      bit3: vwidth/vbp 的参数自动模式
+    */
+    SET_BITS(BKF9_EF_REG, 3, 0);
+    
+    /*如果是3D模式，或者是内同步模式、sub-LVDS 模式，都需要进行timing设置*/
+    
+    if((INTERNAL_SYNC_MODE == ucLvdsDatamap) || (SUB_LVDS_MODE == ucLvdsDatamap))
+    {
+        BKF9_19_REG = (stVideoTiming->Vactive)/256;
+        BKF9_1A_REG = (stVideoTiming->Vactive)%256;
+        BKF9_1B_REG = (stVideoTiming->Vsw)%256;
+        BKF9_1C_REG = (stVideoTiming->Vbp)%256;
+
+        BKF9_D0_REG = (stVideoTiming->Htotal/2)/256;
+        BKF9_D1_REG = (stVideoTiming->Htotal/2)%256;
+        BKF9_1D_REG = (stVideoTiming->Hactive/2)/256;
+        BKF9_1E_REG = (stVideoTiming->Hactive/2)%256;
+        BKF9_1F_REG = (stVideoTiming->Hsw/2)/256;
+        BKF9_20_REG = (stVideoTiming->Hsw/2)%256;
+        BKF9_21_REG = (stVideoTiming->Hbp/2)/256;
+        BKF9_22_REG = (stVideoTiming->Hbp/2)%256;
+        }
+    if(NO_3D_MODE != ucLvds3d )
+    {
+        //设置Timing信息0xF917 -0xF922 + 0xF9D0、 0xF9D1
+
+        if(SIDE_BY_SIDE == ucLvds3d)
+        {
+            // 3D 左右模式，2port 输出，V方向和原来一样
+            BKF9_19_REG = (stVideoTiming->Vactive)/256;
+            BKF9_1A_REG = (stVideoTiming->Vactive)%256;//Vactive
+        }
+
+        if(LINE_ALTER == ucLvds3d )
+        {
+            //3D 隔行模式，2port 输出 需要是原来的一半
+            CLEAR_BIT(BKF9_EF_REG,BIT3);
+            BKF9_19_REG = (stVideoTiming->Vactive/2)/256;
+            BKF9_1A_REG = (stVideoTiming->Vactive/2)%256;//Vactive
+            BKF9_1B_REG = (stVideoTiming->Vsw/2)%256;
+            BKF9_1C_REG = (stVideoTiming->Vbp/2)%256;
+        }
+
+        if(FRAME_PACKING == ucLvds3d )
+        {
+            BKF9_17_REG = (stVideoTiming->Vtotal/2)/256;
+            BKF9_18_REG = (stVideoTiming->Vtotal/2)%256;
+            BKF9_19_REG = ((stVideoTiming->Vactive - stVideoTiming->Vsw - stVideoTiming->Vbp -stVideoTiming->Vfp)/2)/256;
+            BKF9_1A_REG = ((stVideoTiming->Vactive - stVideoTiming->Vsw - stVideoTiming->Vbp -stVideoTiming->Vfp)/2)%256;
+            BKF9_1B_REG = (stVideoTiming->Vsw)%256;
+            BKF9_1C_REG = (stVideoTiming->Vbp)%256;
+        }
+
+//3D 左右模式，2port 输出，H方向为原来一半
+        BKF9_1D_REG = (stVideoTiming->Hactive/2)/256;
+        BKF9_1E_REG = (stVideoTiming->Hactive/2)%256;//Hactive
+        
+        if(SIDE_BY_SIDE == ucLvds3d )
+        {
+            //BKF9_23_REG =  (stVideoTiming->Hactive/2 + 3)/256;
+            //BKF9_24_REG = (stVideoTiming->Hactive/2 + 3)%256;
+        }
+        else if(LINE_ALTER == ucLvds3d )
+        {
+            BKF9_23_REG = 0x00;
+            BKF9_24_REG = 0x03;
+        }
+    }
+
+    if((INTERNAL_SYNC_MODE == ucLvdsDatamap) || (SUB_LVDS_MODE == ucLvdsDatamap))
+    {
+        BKF9_17_REG = (stVideoTiming->Vtotal)/256;
+        BKF9_18_REG = (stVideoTiming->Vtotal)%256;
+        BKF9_19_REG = (stVideoTiming->Vactive)/256;
+        BKF9_1A_REG = (stVideoTiming->Vactive)%256;
+        BKF9_1B_REG = (stVideoTiming->Vsw)%256;
+        BKF9_1C_REG = (stVideoTiming->Vbp)%256;
+
+        BKF9_D0_REG = (stVideoTiming->Htotal/2)/256;
+        BKF9_D1_REG = (stVideoTiming->Htotal/2)%256;
+        BKF9_1D_REG = (stVideoTiming->Hactive/2)/256;
+        BKF9_1E_REG = (stVideoTiming->Hactive/2)%256;
+        BKF9_1F_REG = (stVideoTiming->Hsw/2)/256;
+        BKF9_20_REG = (stVideoTiming->Hsw/2)%256;
+        BKF9_21_REG = (stVideoTiming->Hbp/2)/256;
+        BKF9_22_REG = (stVideoTiming->Hbp/2)%256;
+    }
+
+}
+
+void Drv_LvdsTx_Port0Setting(u8 ucP0En)
+{
+    BKA2_12_REG = (ENABLED == ucP0En)? 0x90 : 0x10;   //lmtx port0 enable 
+    BKA2_13_REG = 0x20;                             //lmtx port0 p2s enable: rg_en
+    BKA2_17_REG = (ENABLED == ucP0En)? 0x00 : 0x00;   //lvds swing
+    BKA2_22_REG = (ENABLED == ucP0En)? 0x3F : 0x00;   //Lmtx port0 channel lvds  lane0~5enable control
+    BKA2_23_REG = 0x00;                             //lmtx port0 lvds_dphy_cphy tap0 enable control
+}
+void Drv_LvdsTx_Port1Setting(u8 ucP1En)
+{
+    BKA2_27_REG = (ENABLED == ucP1En)? 0x90 : 0x10;   //lmtx port0 enable 
+    BKA2_28_REG = 0x20;                             //lmtx port0 p2s enable: rg_en
+    BKA2_2C_REG = (ENABLED == ucP1En)? 0x00 : 0x00;   //lvds swing
+    BKA2_37_REG = (ENABLED == ucP1En)? 0x3F : 0x00;   //Lmtx port0 channel lvds  lane0~5enable control
+    BKA2_38_REG = 0x00;                             //lmtx port0 lvds_dphy_cphy tap0 enable control
+}
+
+void Drv_LvdsTx_Port2Setting(u8 ucP2En)
+{
+    BKA2_3C_REG = (ENABLED == ucP2En)? 0x90 : 0x10;   //lmtx port0 enable 
+    BKA2_3D_REG = 0x20;                             //lmtx port0 p2s enable: rg_en
+    BKA2_41_REG = (ENABLED == ucP2En)? 0x00 : 0x00;   //lvds swing
+    BKA2_4C_REG = (ENABLED == ucP2En)? 0x3F : 0x00;   //Lmtx port0 channel lvds  lane0~5enable control
+    BKA2_4D_REG = 0x00;                             //lmtx port0 lvds_dphy_cphy tap0 enable control
+}
+
+void Drv_LvdsTx_Port3Setting(u8 ucP3En)
+{
+    BKA2_51_REG = (ENABLED == ucP3En)? 0x90 : 0x10;   //lmtx port0 enable 
+    BKA2_52_REG = 0x20;                             //lmtx port0 p2s enable: rg_en
+    BKA2_56_REG = (ENABLED == ucP3En)? 0x00 : 0x00;   //lvds swing
+    BKA2_61_REG = (ENABLED == ucP3En)? 0x3F : 0x00;   //Lmtx port0 channel lvds  lane0~5enable control
+    BKA2_62_REG = 0x00;                             //lmtx port0 lvds_dphy_cphy tap0 enable control
+
+}
+
+void Drv_LvdsTx_PhyPortSet(u8 ucP0En, u8 ucP1En, u8 ucP2En, u8 ucP3En)
+{
+    Drv_LvdsTx_Port0Setting(ucP0En);
+    Drv_LvdsTx_Port1Setting(ucP1En);
+    Drv_LvdsTx_Port2Setting(ucP2En);
+    Drv_LvdsTx_Port3Setting(ucP3En);
+}
+
+void Drv_LvdsTx_PortSwap(u8 PortNum)
+{
+  
+	switch ( PortNum )
+	{
+	    case LVDS_1PORT :
+	        BKF9_6C_REG = 0x00;
+	        break;
+	    case LVDS_2PORT :
+	        BKF9_6C_REG = 0x44;
+	        break;
+	    case LVDS_4PORT :
+	        BKF9_6C_REG = 0xD8;
+	        break;
+	    default:
+	        break;
+	}
+	
+	if(g_stLvdsTx.ucLMTXPortSel != 0)
+	{
+	BKF9_6C_REG = g_stLvdsTx.ucLMTXPortSel;
+	}		
+}
+
+void Drv_LvdsTx_LaneSwap()
+{
+    /*
+     example:
+     lane0 lane1 lane2 laneC lane3 lane4
+    */
+
+		/********EVB LVDS default********/
+    //port0
+    BKF9_60_REG = 0x01;
+    BKF9_61_REG = 0x25;
+    BKF9_62_REG = 0x34;
+    //port1
+    BKF9_63_REG = 0x01;
+    BKF9_64_REG = 0x25;
+    BKF9_65_REG = 0x34;
+
+    //port2
+    BKF9_66_REG = 0x01;
+    BKF9_67_REG = 0x25;
+    BKF9_68_REG = 0x34;
+    
+    //port3
+    BKF9_69_REG = 0x01;
+    BKF9_6A_REG = 0x25;
+    BKF9_6B_REG = 0x34;
+
+
+    //Sony YUV422 8bpc mode
+    //port0
+//    BKF9_60_REG = 0x01;
+//    BKF9_61_REG = 0x25;
+//    BKF9_62_REG = 0x34;
+//    //port1
+//    BKF9_63_REG = 0x00;
+//    BKF9_64_REG = 0x12;
+//    BKF9_65_REG = 0x34;
+
+}
+
+void Drv_LvdsTx_PortSet(u8 ucPortNum)
+{
+    LET_BITS(BKF9_10_REG, 1, 0, ucPortNum - 1);
+}
+
+void Drv_LvdsTx_LaneNumSet(u8 ucLaneNum)
+{
+    
+    switch (ucLaneNum)
+    {
+        case 1:
+            LET_BITS(BKF9_10_REG, 1, 0, 0);
+            break;
+        case 2:
+            LET_BITS(BKF9_10_REG, 1, 0, 1);
+            break;
+        case 4:
+            LET_BITS(BKF9_10_REG, 1, 0, 2);
+            break;
+        case 8:
+            LET_BITS(BKF9_10_REG, 1, 0, 3);
+            break;
+        default:
+            LET_BITS(BKF9_10_REG, 1, 0, 3);
+            break;
+    }
+}
+
+void Drv_LvdsTx_SscSet(u8 b1LvdsTxSscEn)
+{
+    if(b1LvdsTxSscEn)
+    {
+        SET_BIT(BKF9_11_REG, BIT0); 
+        SET_BIT(BKF9_F0_REG, BIT3);
+		if(g_stLvdsTx.b1LvdsTxSscSel != NO_SSC)
+			{
+        CLEAR_BIT(BKA2_0A_REG, BIT7); //select hardmode
+        CLEAR_BIT(BKE2_C1_REG, BIT1); //disable ssc
+        LET_BITS(BKE2_B7_REG,5,4,0x2); //set 2ndorder
+
+				if(g_stLvdsTx.b1LvdsTxSscSel == SSC_1920x1080_30k5)
+				{
+						LET_BITS(BKE2_B8_REG,7,0,0x00); // the value of PRD is cal by excel
+						LET_BITS(BKE2_B9_REG,7,0,0x04);
+						LET_BITS(BKE2_BA_REG,7,0,0xD5);
+
+						LET_BITS(BKE2_BB_REG,7,0,0x00); // the value of DELTA1 is cal by excel
+						LET_BITS(BKE2_BC_REG,7,0,0x4A);
+						LET_BITS(BKE2_BD_REG,7,0,0x25);
+						
+						LET_BITS(BKE2_BE_REG,7,0,0x00); // the value of DELTA is cal by excel
+						LET_BITS(BKE2_BF_REG,7,0,0x94);
+						LET_BITS(BKE2_C0_REG,7,0,0x4B);
+				}
+
+        LET_BITS(BKE2_C2_REG,7,0,0x1C); // the value of M is cal by excel
+
+        SET_BIT(BKE2_C1_REG, BIT1); //enable ssc
+        
+        CLEAR_BIT(BKA2_10_REG, BIT7);//reset pll
+        
+        SET_BIT(BKA2_10_REG, BIT7);
+			}        
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_11_REG, BIT0);
+        CLEAR_BIT(BKF9_F0_REG, BIT3);
+    }
+}
+
+void Drv_LvdsTx_SyncCodeVblankSet(u8 ucSCBlankSendEn)
+{
+    if(ENABLED== ucSCBlankSendEn)
+    {
+        CLEAR_BIT(BKF9_F0_REG, BIT6);
+    }
+    else
+    {
+        SET_BIT(BKF9_F0_REG, BIT6);
+    }
+}
+
+void Drv_LvdsTx_SCSendMethodSel(u8 ucLvdsSCSendIndependent)
+{
+    if(ENABLED== ucLvdsSCSendIndependent)
+    {
+        SET_BIT(BKF9_F1_REG, BIT6);
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_F1_REG, BIT6);
+    }
+}
+
+void Drv_LvdsTx_PIFormatSet(u8 ucLvdsTxVidFmt)
+{
+    if(I_VIDEO_FMT == ucLvdsTxVidFmt)
+    {
+        SET_BIT(BKF9_29_REG, BIT5);
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_29_REG, BIT5);
+    }
+}
+
+void Drv_LvdsTx_3DModeSet(u8 ucLvdsTx3DMode)
+{
+   CLEAR_BITS(BKF9_11_REG, 3, 1); 
+    switch ( ucLvdsTx3DMode )
+    {
+        case SIDE_BY_SIDE :
+            SET_BIT(BKF9_11_REG, BIT3);
+            SET_BIT(BKF9_F0_REG, BIT3); //sram select set to 1,this bit must be set to 1 when f911[3] or f911[1] or f911[0] is set to 1.
+            CLEAR_BIT(BKF9_11_REG, BIT0); //3D模式下，SSC需要 set 0
+            break;
+        case FRAME_PACKING :
+            SET_BIT(BKF9_11_REG, BIT2);
+            CLEAR_BIT(BKF9_11_REG, BIT0); //3D模式下，SSC需要 set 0
+            break;
+        case LINE_ALTER :
+            SET_BIT(BKF9_11_REG, BIT1);
+            SET_BIT(BKF9_F0_REG, BIT3); //sram select set to 1
+            CLEAR_BIT(BKF9_11_REG, BIT0); //3D模式下，SSC需要 set 0
+            break;
+        default:
+            break;
+    }
+}
+
+void Drv_LvdsTx_Sony422_DataSet(u8 ucSonyYuvDataSel)
+{
+    LET_BITS(BKF9_2A_REG, 7, 0,ucSonyYuvDataSel);
+}
+
+void Drv_LvdsTx_DataMapSet(u8 ucLvdsTxDataMap)
+{
+    switch(ucLvdsTxDataMap)
+    {
+        case VESA_RGB_6Bit:
+            CLEAR_BIT(BKF9_10_REG, BIT5); // 0 vesa 1:jeda 
+            LET_BITS(BKF9_16_REG, 7, 6, 0x0);//RGB6bpc
+            LET_BITS(BKF9_29_REG, 1, 0, 0x0); //RGB
+            LTLog(LOG_DEBUG, "DataMap is VESA_RGB_6Bit\n");
+            break;
+        case VESA_RGB_8Bit:
+            CLEAR_BIT(BKF9_10_REG, BIT5);// 0 vesa 1:jeda 
+            LET_BITS(BKF9_16_REG, 7, 6, 0x1);//RGB8bpc
+            LET_BITS(BKF9_29_REG, 1, 0, 0x0);
+            LTLog(LOG_DEBUG, "DataMap is VESA_RGB_8Bit\n");
+            break;
+        case JEIDA_RGB_8Bit:
+            SET_BIT(BKF9_10_REG, BIT5);// 0 vesa 1:jeda 
+            LET_BITS(BKF9_16_REG, 7, 6, 0x1);//RGB8bpc
+            LET_BITS(BKF9_29_REG, 1, 0, 0x0);
+            LTLog(LOG_DEBUG, "DataMap is JEIDA_RGB_8Bit\n");
+            break;
+        case VESA_RGB_10Bit:
+            CLEAR_BIT(BKF9_10_REG, BIT5);// 0 vesa 1:jeda 
+            LET_BITS(BKF9_16_REG, 7, 6, 0x3);//RGB10bpc
+            LET_BITS(BKF9_29_REG, 1, 0, 0x0);
+            LTLog(LOG_DEBUG, "DataMap is VESA_RGB_10Bit\n");
+            break;
+        case JEIDA_RGB_10Bit:
+            SET_BIT(BKF9_10_REG, BIT5);// 0 vesa 1:jeda 
+            LET_BITS(BKF9_16_REG, 7, 6, 0x3);//RGB10bpc
+            LET_BITS(BKF9_29_REG, 1, 0, 0x0);
+            LTLog(LOG_DEBUG, "DataMap is JEIDA_RGB_10Bit\n");
+            break;
+        case SONY_YUV422_8Bit:
+            CLEAR_BIT(BKF9_10_REG, BIT5);// 0 vesa 1:jeda  ref appnote 
+            LET_BITS(BKF9_29_REG, 1, 0, 0x1);
+            LTLog(LOG_DEBUG, "DataMap is SONY_YUV422_8Bit\n");
+            break;
+        case INTERNAL_SYNC_MODE: // TODO:
+            CLEAR_BIT(BKF9_10_REG, BIT5);// 0 vesa 1:jeda  ref appnote
+            LET_BITS(BKF9_29_REG, 1, 0, 0x2);
+            LTLog(LOG_DEBUG, "DataMap is INTERNAL_SYNC_MODE\n");
+            break;
+        case SUB_LVDS_MODE:
+            LET_BITS(BKF9_29_REG, 1, 0, 0x3);
+            LTLog(LOG_DEBUG, "DataMap is SUB_LVDS_MODE\n");
+            break;
+        
+        default:
+            break;
+    }
+}
+
+void Drv_LvdsTx_DEModeSet(u8 b1LVDSTXDEMode)
+{
+    if(b1LVDSTXDEMode)
+    {
+        SET_BIT(BKF9_10_REG, BIT4); //De mode 
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_10_REG, BIT4); //Sync mode 
+    }
+}
+
+
+#endif

@@ -1,0 +1,101 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: DrvDscEnc.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.06.01
+/******************************************************************************/
+#include "include.h"
+
+#if TX_PORT_SIGN == DP_PORT
+
+#if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+void Drv_DpTxDscBy_Init(void)
+{
+    Drv_System_SramPathSet(DPTX_INIT_SET_PATH);
+    
+    BKF6_0E_REG &= BIT4_0;//pps pkt dis
+    BKF6_ED_REG = 0x08;//timer to gate BS period, default
+    BKF7_1A_REG &= BIT4_0;//The mode of total_byte_line value select: 0-hw
+    BKF7_26_REG = 0x00;
+    BKF7_2A_REG &= BIT4_0;//[4]rgd_msa_soft_en: 0-from video check
+    BKF7_2A_REG &= BIT5_0;//[5]rgd_rgd_swap: 0-dis;
+
+    BKF7_24_REG = 0x00;
+    BKF7_25_REG = 0x00;
+    BKF7_2E_REG &= BIT0_0;
+    g_stDpTx.b1TxDscByEn = DISABLED;
+}
+
+void Drv_DpTxDscBy_ClkMux(void)
+{
+    BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-link_clk
+    BKE1_41_REG |= BIT0_1;//[0]rgd_dptx_rx_pix_clk_src_sel: 1-ad_secpcrpll_pcr_clk
+}
+
+void Drv_DpTxDscBy_PktSet(void)
+{
+    LtTiming_S stTiming;
+    u8 ucSliceNum;
+    u16 usTemp;
+
+    memcpy(&stTiming,&g_stDpTxTiming,sizeof(LtTiming_S));
+    #if RX_PORT_SIGN == HDMI_PORT
+    //get H timing by EMP pkt
+    stTiming.usHbp   = PACK_16_BIT(BKCB_3F_REG, BKCB_40_REG);
+    stTiming.usHsync = PACK_16_BIT(BKCB_3D_REG, BKCB_3E_REG);
+    stTiming.usHfp   = PACK_16_BIT(BKCB_3B_REG, BKCB_3C_REG);
+    stTiming.usHact  = PACK_16_BIT(BKCB_42_REG, BKCB_43_REG);
+    stTiming.usHtol  = PACK_16_BIT(BKCB_44_REG, BKCB_45_REG);
+    #endif
+    ucSliceNum = g_stHdmiRxDscByInfo.ucSliceNum;
+
+    Drv_System_SramPathSet(DPTX_DSCBYPASS_PPS_PATH);
+
+    BKE6_EE_REG &= BIT7_0;//[7]pps_upd_sel: 1 = dsc_encode, 0 = dhrx
+    BKF6_ED_REG = 0x10;//Timer to gate BS period
+    BKF6_EF_REG &= BIT5_0;//[5]dp tx pps update: 0-hdmi rx
+    BKF6_EF_REG &= BIT6_0;//[6]rg_pps_upd_dis: 0-pps update en
+
+//    BKF7_03_REG = 0x04;//important, must be 0x04, must msa first, msa start the number of line in vblanking 
+    BKF7_26_REG = (BIT5_1 | (ucSliceNum - 1));//[5]rgd_dsc_en, [4:0]number of chunks per line = slice number
+
+    //soft msa H set
+    BKF7_05_REG = stTiming.usHtol >> 8;
+    BKF7_06_REG = stTiming.usHtol & 0xff;
+    BKF7_07_REG = (stTiming.usHsync + stTiming.usHbp) >> 8;
+    BKF7_08_REG = (stTiming.usHsync + stTiming.usHbp) & 0xff;
+    BKF7_09_REG &= 0x80;//[6:0]hsync width, [7]hsync polarity
+    BKF7_09_REG |= ((stTiming.usHsync >> 8) & 0x7f);//[6:0]hsync width
+    BKF7_0A_REG = stTiming.usHsync & 0xff;
+    BKF7_0B_REG = stTiming.usHact >> 8;
+    BKF7_0C_REG = stTiming.usHact & 0xff;
+    //soft msa V set
+    BKF7_0D_REG = stTiming.usVtol >> 8;
+    BKF7_0E_REG = stTiming.usVtol & 0xff;
+    BKF7_11_REG = (stTiming.usVsync + stTiming.usVbp) >> 8;
+    BKF7_12_REG = (stTiming.usVsync + stTiming.usVbp) & 0xff;
+    BKF7_13_REG &= 0x80;//[6:0]vsync width, [7]vsync polarity
+    BKF7_13_REG |= ((stTiming.usVsync >> 8) & 0x7f);//[6:0]vsync width
+    BKF7_14_REG = stTiming.usVsync & 0xff;
+    BKF7_15_REG = stTiming.usVact >> 8;
+    BKF7_16_REG = stTiming.usVact & 0xff;
+    BKF7_2A_REG |= BIT4_1;//[4]msa soft en, video timing setting soft mode: from registers
+    BKF7_2A_REG |= BIT5_1;//[5]rgb swap enable: 1-en, 0-dis
+    BKF7_2E_REG |= BIT0_1;
+    usTemp = g_stHdmiRxDscByInfo.usChunkSize;
+    BKF7_24_REG = usTemp >> 8;//chunk size [15:8]
+    BKF7_25_REG = usTemp & 0xff;//chunk size [7:0]
+
+    BKF6_10_REG = 0x00;//pps hb0
+    BKF6_11_REG = 0x10;//pps hb1
+    BKF6_12_REG = 0x7f;//pps hb2, length
+    BKF6_13_REG = 0x00;//pps hb3
+    BKF6_0E_REG |= BIT4_1;//[4]pps en
+    g_stDpTx.b1SoftMsaEn = TRUE;
+    g_stDpTx.b1TxDscByEn = ENABLED;
+}
+
+#endif
+
+#endif

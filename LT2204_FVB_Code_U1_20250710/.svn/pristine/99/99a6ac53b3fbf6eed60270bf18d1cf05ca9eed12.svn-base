@@ -1,0 +1,775 @@
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODDPRXMST
+OBJECT MODULE PLACED IN .\Objects\ModDpRxMst.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModDpRxMst.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE
+                    -) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PR
+                    -INT(.\Listings\ModDpRxMst.lst) OBJECT(.\Objects\ModDpRxMst.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: ChipDpMst.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.06.07
+   7          /******************************************************************************/
+   8          
+   9          #include "include.h"
+  10          
+  11          #if RX_PORT_SIGN == DP_PORT
+              
+              #if DPRX_MST_MODE_EN == ENABLED
+              
+              MstRxStatus_S g_stMstRxStatus ;
+              
+              u8 code Guid_Table[16]= {0x10,0xde,0x90,0x70,0x00,0x00,0x00,0x05,0x0D,0xA0,0xA2,0x04,0x00,0x00,0x00,0x66};
+              
+              u8 CrcCal(u8 * data1, u8 NumberOfBytes,u8 ByteNo)//ByteNo 4 or 8
+              {
+                  u8 BitMask = 0x80;
+                  u8 BitShift = 7;
+                  u8 ArrayIndex = 0;
+                  u16 NumberOfBits =NumberOfBytes * ByteNo;
+                  u16 Remainder = 0;
+              
+                  while (NumberOfBits != 0)
+                  {
+                      NumberOfBits--;
+                      Remainder <<= 1;
+                      Remainder |= ((data1[ArrayIndex] & BitMask) >> BitShift);
+                      BitMask >>= 1;
+                      BitShift--;
+                      if (BitMask == 0)
+                      {
+                          BitMask = 0x80;
+                          BitShift = 7;
+                          ArrayIndex++;
+                      }
+                      if ((Remainder & 0x100)&&(ByteNo==8))
+                      {
+                          Remainder ^= 0xd5;
+                      }
+                      else if ((Remainder & 0x10)&&(ByteNo==4))
+                      {
+                          Remainder ^= 0x13;
+                      }
+                  }
+                  NumberOfBits = ByteNo;
+                  while (NumberOfBits != 0)
+                  {
+                      NumberOfBits--;
+                      Remainder <<= 1;
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 2   
+
+                      if ((Remainder & 0x100)&&(ByteNo==8))
+                      {
+                          Remainder ^= 0xD5;
+                      }
+                      else if((Remainder & 0x10)&&(ByteNo==4))
+                      {
+                          Remainder ^= 0x13;
+                      }
+                  }
+                  return (Remainder & 0xFF);
+              }
+              
+              void Mod_DpRx_TimeSlotUpdate(void)
+              {
+                  IDATA u8 *p_TableAddr;
+                  IDATA u8 *p_AddrSaved;//p_TableAddr point to D259
+                  IDATA u8 ucIndex;
+              
+                  if(g_stMstRxStatus.payload_update==1)//write 01c0
+                  {
+                      p_TableAddr =  &BKF3_90_REG;
+                      p_AddrSaved =  &BKF3_90_REG;//vc payload time slot1
+                      if(((g_stMstRxStatus.payload_table[0]==0x00)&&(g_stMstRxStatus.payload_table[1]==0x00)&&( g_stMstR
+             -xStatus.payload_table[2]==0x3F))||(g_stMstRxStatus.payload_clear))//
+                      {
+                          while((p_TableAddr <= &BKF3_CE_REG)&&(p_TableAddr >= &BKF3_90_REG ))//tume slot 1-63
+                          {
+                              *p_TableAddr=0x00;
+                               p_TableAddr++;
+                          }
+                          g_stMstRxStatus.payload_clear = 0x00;
+                      }
+                      else
+                      {
+                          p_TableAddr += (g_stMstRxStatus.payload_table[1]-1);//p initial the adress
+                           p_AddrSaved = p_TableAddr;
+                          if((g_stMstRxStatus.payload_table[0] > 0)&&(g_stMstRxStatus.payload_table[1] > 0)&&(g_stMstRxS
+             -tatus.payload_table[2] == 0))//clear the table
+                          {
+                              while(*p_TableAddr == g_stMstRxStatus.payload_table[0])//clear ID
+                              {
+                                  *p_TableAddr = 0;
+                                  p_TableAddr++;
+                              }
+                              while((*p_TableAddr) != 0) //
+                              {
+                                  *p_AddrSaved = *p_TableAddr;
+                                  *p_TableAddr = 0;
+                                  p_TableAddr++;
+                                  p_AddrSaved++;
+                              }
+                          }
+                          else if((g_stMstRxStatus.payload_table[0]>0) && (g_stMstRxStatus.payload_table[1]>0)&&(g_stMst
+             -RxStatus.payload_table[2]>0))//add  the table
+                          {
+                              for(ucIndex = 0 ; ucIndex < g_stMstRxStatus.payload_table[2] ; ucIndex++)
+                              {
+                                  *p_TableAddr = g_stMstRxStatus.payload_table[0];
+                                  p_TableAddr++;
+                              }
+                          }
+                      }
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 3   
+
+              
+                      BKF1_00_REG &= BIT3_0;//bi0=0;
+                      Ocm_Delay1us(5);
+                      BKF1_00_REG |= BIT3_1;//bi0=1;
+              
+                      g_stMstRxStatus.payload_update = 0;
+                  }
+              }
+              
+              void GUID(u8 number)
+              {
+                  memcpy(&g_stMstRxStatus.reply_buf[4+number],&Guid_Table[0],16);
+              }
+              
+              void Mod_DpRxMst_Init(void)
+              {
+                  memset(&g_stMstRxStatus.pbn_flag[0],0x00,4);
+                  g_stMstRxStatus.payload_flag = 0;
+                  g_stMstRxStatus.payload_done_flag = 0;
+                  g_stMstRxStatus.payload_cnt  = 0;
+                  g_stMstRxStatus.pbn_update  = 0;
+              }
+              
+              void Mod_DpRxMst_MsgCalc(void)//this function used to compute the message need to reply in MST mode
+              {
+                  u8 ki;
+                  u8 i2c_addr,i2c_write_lenth[2];
+                  u16 read_cnt,data_dump;
+                  u16 pbn_Capacity_total;
+                  if(g_stMstRxStatus.calc_flag == 1)
+                  {
+                      Ocm_Delay1ms(1);
+                      g_stMstRxStatus.reply_buf[0]= 0x10;
+                      memset(&g_stMstRxStatus.reply_buf[1], 0x00, 47);
+                      g_stMstRxStatus.reply_body_lenth  = 0;
+                      g_stMstRxStatus.reply_total_lenth = 0;
+                      g_stMstRxStatus.port_num = (g_stMstRxStatus.MsgRxData[4] & 0xf0);
+                      g_stMstRxStatus.port_num >>=4;
+              
+                      switch(g_stMstRxStatus.MsgRxData[3])
+                      {
+                          case MST_MSG_VERSION :
+                              g_stMstRxStatus.reply_buf[1]=0x13;
+                              g_stMstRxStatus.reply_buf[2]=0xc0;
+                              g_stMstRxStatus.reply_buf[3]=0x80;
+                              GUID(0);
+                              g_stMstRxStatus.reply_buf[20]=0x04;
+                              g_stMstRxStatus.reply_buf[21]=0x15;
+                              g_stMstRxStatus.reply_body_lenth=19;
+                              g_stMstRxStatus.reply_total_lenth=19;
+                              break;
+              
+                          case MST_CLR_PAYLOAD_ID_TAB:
+                              g_stMstRxStatus.reply_buf[1] = 0xc2;
+                              g_stMstRxStatus.reply_buf[2] = 0xc0;
+                              g_stMstRxStatus.reply_buf[3] = 0x14;
+                              g_stMstRxStatus.reply_buf[4] = 0xac;
+                              g_stMstRxStatus.pbn_update = 1;
+                              g_stMstRxStatus.reply_body_lenth  = 2;
+                              g_stMstRxStatus.reply_total_lenth = 2;
+                              break;
+              
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 4   
+
+                                      case MST_LINK_ADDR:    //port number  3,4,5,6
+                              printLT(PRINT_PRIO_HIG, "\nLink Addr");
+                              Mod_DpRxMst_Init();
+                              g_stMstRxStatus.reply_buf[1] = 0x15;//lenth
+                              switch(g_stMstRxStatus.count1400)
+                              {
+                                  case 0x00:
+                                      g_stMstRxStatus.reply_buf[2]=0x80;
+                                      g_stMstRxStatus.reply_buf[3]=0x01;//link address
+                                      GUID(0);
+                                      g_stMstRxStatus.reply_buf[20] = g_stMstRxStatus.sink_cnt+1;//input port number    
+             -0
+                                      g_stMstRxStatus.reply_buf[21] = 0x90;
+                                      g_stMstRxStatus.reply_buf[22] = 0xc0;//input
+                                      break;
+                                  case 0x01:
+                                      g_stMstRxStatus.reply_buf[2] = (g_stMstRxStatus.sink_cnt ==1)?(0x40):(0x00);
+                                      g_stMstRxStatus.reply_buf[3] = 0x33; //port number
+                                      g_stMstRxStatus.reply_buf[4] = 0x40;//DisplayPort_Device_Plug_Status
+                                      g_stMstRxStatus.reply_buf[5] = 0x14; //DPCD
+                                      GUID(2);
+                                      g_stMstRxStatus.reply_buf[22]=0x11;    //SDP4:4
+                                      break;
+                                  case 0x02:
+                                      g_stMstRxStatus.reply_buf[2]= (g_stMstRxStatus.sink_cnt ==2)?(0x40):(0x00);; //sto
+             -p flag
+                                      g_stMstRxStatus.reply_buf[3]= 0x34; //PORT NUMBER
+                                      g_stMstRxStatus.reply_buf[4]= 0x40; //DisplayPort_Device_Plug_Status
+                                      g_stMstRxStatus.reply_buf[5]= 0x14; //DPCD 11
+                                      GUID(2);
+                                      g_stMstRxStatus.reply_buf[22]= 0x11;    //SDP4:4
+                                      break;
+                                  case 0x03:
+                                      g_stMstRxStatus.reply_buf[2] = (g_stMstRxStatus.sink_cnt ==3)?(0x40):(0x00);; //st
+             -op flag
+                                      g_stMstRxStatus.reply_buf[3] = 0x35; //PORT NUMBER
+                                      g_stMstRxStatus.reply_buf[4] = 0x40; //DisplayPort_Device_Plug_Status
+                                      g_stMstRxStatus.reply_buf[5] = 0x14; //DPCD 11
+                                      GUID(2);
+                                      g_stMstRxStatus.reply_buf[22] = 0x11;    //SDP4:4
+                                      break;
+                                  case 0x04:
+                                      g_stMstRxStatus.reply_buf[2] = 0x40; //stop flag
+                                      g_stMstRxStatus.reply_buf[3] = 0x36; //PORT NUMBER
+                                      g_stMstRxStatus.reply_buf[4] = 0x40; //DisplayPort_Device_Plug_Status
+                                      g_stMstRxStatus.reply_buf[5] = 0x14; //DPCD 11
+                                      GUID(2);
+                                      g_stMstRxStatus.reply_buf[22] = 0x11;    //SDP4:4
+                                      break;
+                                  default:
+                                      break;
+                              }
+                              g_stMstRxStatus.reply_buf[23] = CrcCal(g_stMstRxStatus.reply_buf+3,20,8);
+                              g_stMstRxStatus.reply_body_lenth  = 21;
+                              g_stMstRxStatus.reply_total_lenth = g_stMstRxStatus.sink_cnt * 21+21;
+                              break;
+              
+                          case MST_REMOTE_I2C_READ:
+                              i2c_addr  = 0x00;
+                              data_dump = 0x00;
+                              i2c_write_lenth[0] = 0x00;
+                              i2c_write_lenth[1] = 0x00;
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 5   
+
+                              switch(g_stMstRxStatus.MsgRxData[4]&0x03)//Number_Of_I2C_Write_Transactions
+                              {
+                                  case 0x00:
+                                      data_dump = 0x80;
+                                      i2c_addr  = 0x50;
+                                      g_stMstRxStatus.i2c_read_cnt = 0x80;//necessary for Macbook Pro as it doesn't writ
+             -e 0x50 in the second
+                                      break;
+                                  case 0x01:
+                                      i2c_write_lenth[0] = g_stMstRxStatus.MsgRxData[6];
+                                      if(g_stMstRxStatus.MsgRxData[5] == 0x50)// [5] write identify
+                                      {
+                                          if(i2c_write_lenth[0] >= 0x01)
+                                          {
+                                              data_dump = g_stMstRxStatus.MsgRxData[7];
+                                          }
+                                      }
+                                      i2c_addr                     = g_stMstRxStatus.MsgRxData[8+i2c_write_lenth[0]];
+                                      g_stMstRxStatus.i2c_read_cnt = g_stMstRxStatus.MsgRxData[9+i2c_write_lenth[0]];
+                                      break;
+                                  case 0x02:
+                                      for(ucLoop_cnt = 5;ucLoop_cnt < (11+i2c_write_lenth[0]+i2c_write_lenth[1]);)
+                                      {
+                                          if(g_stMstRxStatus.MsgRxData[ucLoop_cnt] == 0x30)//[5] write identify
+                                          {
+                                              i2c_write_lenth[0] = g_stMstRxStatus.MsgRxData[ucLoop_cnt+1];
+                                              if((i2c_write_lenth[0] >= 0x01)&&(g_stMstRxStatus.MsgRxData[ucLoop_cnt+2] 
+             -== 0x01))
+                                              {
+                                                  data_dump = 0x100;//offset edid
+                                              }
+                                              ucLoop_cnt += i2c_write_lenth[0] +3; 
+                                          }
+                                          else if(g_stMstRxStatus.MsgRxData[ucLoop_cnt] == 0x50)//[5] write identify
+                                          {
+                                              i2c_write_lenth[1] = g_stMstRxStatus.MsgRxData[ucLoop_cnt+1];
+                                              if(i2c_write_lenth[1] >= 0x01)
+                                              {
+                                                  data_dump += g_stMstRxStatus.MsgRxData[ucLoop_cnt+2];
+                                              }
+                                              ucLoop_cnt += i2c_write_lenth[1] +3; 
+                                          }
+                                      }
+                                      i2c_addr                     = g_stMstRxStatus.MsgRxData[11+i2c_write_lenth[0]+i2c
+             -_write_lenth[1]];
+                                      g_stMstRxStatus.i2c_read_cnt = g_stMstRxStatus.MsgRxData[12+i2c_write_lenth[0]+i2c
+             -_write_lenth[1]];
+                                      break;
+                                  default:
+                                      break;
+                              }
+                              if((g_stMstRxStatus.i2c_read_cnt < 0x80)||\
+                                ((g_stMstRxStatus.i2c_read_cnt == 0x80)&&(g_stMstRxStatus.count1400 == 0x00))) //read ed
+             -id 128 or read edid less < 32
+                              {
+                                  g_stMstRxStatus.i2c_read_lenth = (g_stMstRxStatus.i2c_read_cnt == 0x80)?(32):(g_stMstR
+             -xStatus.i2c_read_cnt);
+                                  
+                                  g_stMstRxStatus.reply_buf[1]= g_stMstRxStatus.i2c_read_lenth + 4;// read data lenth
+                                  g_stMstRxStatus.reply_buf[2]= (g_stMstRxStatus.i2c_read_cnt == 0x80)?(0x80):(0xc0);
+                                  g_stMstRxStatus.reply_buf[3]= 0x22;
+                                  g_stMstRxStatus.reply_buf[4]= g_stMstRxStatus.port_num; // Port Number
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 6   
+
+                                  g_stMstRxStatus.reply_buf[5]=(g_stMstRxStatus.i2c_read_cnt == 0x80)?(128):(g_stMstRxSt
+             -atus.i2c_read_lenth);
+                                  read_cnt = data_dump;
+                                  if(i2c_addr == 0x50)
+                                  {
+                                      switch(g_stMstRxStatus.port_num)
+                                      {
+                                          case 0x03:
+                                              memcpy(&g_stMstRxStatus.reply_buf[6],&szEdidData[read_cnt],g_stMstRxStatus
+             -.i2c_read_lenth);
+                                              break;
+                                          case 0x04:
+                                              memcpy(&g_stMstRxStatus.reply_buf[6],&szEdidData[read_cnt],g_stMstRxStatus
+             -.i2c_read_lenth);
+                                              break;
+                                          case 0x05:
+                                              memcpy(&g_stMstRxStatus.reply_buf[6],&szEdidData[read_cnt],g_stMstRxStatus
+             -.i2c_read_lenth);
+                                              break;
+                                          case 0x06:
+                                              memcpy(&g_stMstRxStatus.reply_buf[6],&szEdidData[read_cnt],g_stMstRxStatus
+             -.i2c_read_lenth);
+                                              break;
+                                          default:
+                                              break;
+                                      }
+                                  }
+                                  g_stMstRxStatus.reply_buf[6+g_stMstRxStatus.i2c_read_lenth] = CrcCal(g_stMstRxStatus.r
+             -eply_buf+3,g_stMstRxStatus.i2c_read_lenth +3,8);
+                                  g_stMstRxStatus.reply_body_lenth  = g_stMstRxStatus.i2c_read_lenth +4 ;
+                                  g_stMstRxStatus.reply_total_lenth = (g_stMstRxStatus.i2c_read_cnt == 0x80)?(135):(g_st
+             -MstRxStatus.i2c_read_lenth+4);
+                              }
+                              else if((g_stMstRxStatus.i2c_read_cnt == 0x80)&&(g_stMstRxStatus.count1400 > 0x00)) //
+                              {
+                                  g_stMstRxStatus.reply_buf[1]=0x21;
+                                  switch(g_stMstRxStatus.count1400)
+                                  {
+                                      case 0x01:
+                                          g_stMstRxStatus.reply_buf[2]=0x00;
+                                          read_cnt = data_dump+32;
+                                          break;
+                                      case 0x02:
+                                          g_stMstRxStatus.reply_buf[2]=0x00;
+                                          read_cnt = data_dump+64;
+                                          break;
+                                      case 0x03:
+                                          g_stMstRxStatus.reply_buf[2]=0x40;
+                                          read_cnt = data_dump+96;
+                                          break;
+                                      default:
+                                          break;
+                                  }
+                                  if(i2c_addr == 0x50)
+                                  {
+                                      switch(g_stMstRxStatus.port_num)
+                                      {
+                                          case 0x03:
+                                              memcpy(&g_stMstRxStatus.reply_buf[3],&szEdidData[read_cnt],32);
+                                              break;
+                                          case 0x04:
+                                              memcpy(&g_stMstRxStatus.reply_buf[3],&szEdidData[read_cnt],32);
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 7   
+
+                                              break;
+                                          case 0x05:
+                                              memcpy(&g_stMstRxStatus.reply_buf[3],&szEdidData[read_cnt],32);
+                                              break;
+                                          case 0x06:
+                                              memcpy(&g_stMstRxStatus.reply_buf[3],&szEdidData[read_cnt],32);
+                                              break;
+                                          default:
+                                              break;
+                                      }
+                                  }
+                                  g_stMstRxStatus.reply_buf[35] = CrcCal(g_stMstRxStatus.reply_buf+3,32,8);
+                                  g_stMstRxStatus.reply_body_lenth  = 33;
+                                  g_stMstRxStatus.reply_total_lenth = 135;
+                              }  
+                              break;
+              
+                          case MST_REMOTE_I2C_WRITE:
+                              g_stMstRxStatus.reply_buf[1] = 0x03;
+                              g_stMstRxStatus.reply_buf[2] = 0xC0;
+                              g_stMstRxStatus.reply_buf[3] = 0x23;
+                              g_stMstRxStatus.reply_buf[4] = g_stMstRxStatus.port_num;
+                              g_stMstRxStatus.reply_buf[5] = CrcCal(g_stMstRxStatus.reply_buf+0x03,2,8);
+                              g_stMstRxStatus.reply_body_lenth  = 3;
+                              g_stMstRxStatus.reply_total_lenth = 3;
+                              break;
+              
+                          case MST_REMOTE_DPCD_WRITE:
+                              g_stMstRxStatus.reply_buf[1] = 0x03;
+                              g_stMstRxStatus.reply_buf[2] = 0xc0;
+                              g_stMstRxStatus.reply_buf[3] = 0x21;
+                              g_stMstRxStatus.reply_buf[4] = g_stMstRxStatus.port_num;
+                              g_stMstRxStatus.reply_buf[5] = CrcCal(g_stMstRxStatus.reply_buf+0x03,2,8);
+                              g_stMstRxStatus.MsgRxData[4] &= 0x0f;
+                              BKF1_03_REG = g_stMstRxStatus.MsgRxData[4];//address
+                              BKF1_04_REG = g_stMstRxStatus.MsgRxData[5];
+                              BKF1_05_REG = g_stMstRxStatus.MsgRxData[6];
+              
+                              for(ki = 0; ki < g_stMstRxStatus.MsgRxData[7]; ki++)
+                              {
+                                  if(ki)// FOR µØÖ·Òç³ö
+                                  {
+                                      if(BKF1_05_REG == 0xff)
+                                      {
+                                          BKF1_04_REG++;
+                                      }
+                                      BKF1_05_REG ++;
+                                  }
+                                  BKF1_53_REG = g_stMstRxStatus.MsgRxData[ki + 8];//Write DPCD data  
+                              }
+                              if((g_stMstRxStatus.MsgRxData[4] == 0x00)&&(g_stMstRxStatus.MsgRxData[5] == 0x01))
+                              {
+                                  ki = 0;
+                                  switch(g_stMstRxStatus.MsgRxData[6])
+                                  {
+                                      case 0x60:
+                                          #if ((DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+                                          if((g_stMstRxStatus.port_num >= 3)&&(g_stMstRxStatus.port_num < (3+ DPRX_MST_D
+             -SC_NUM)))
+                                          {
+                                              if(g_stMstRxStatus.port_num == 3)
+                                              {
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 8   
+
+                                                  g_stAuxStatus.DscFlag = (g_stMstRxStatus.MsgRxData[8]&0x01)?(1):(0);
+                                              }
+                                          }
+                                          #endif
+                                          break;
+                                      default:
+                                          break;
+                                  }
+                              }
+                              g_stMstRxStatus.reply_body_lenth  = 3;
+                              g_stMstRxStatus.reply_total_lenth = 3;
+                              break;
+              
+                          case MST_POWER_UP_PHY:
+                              g_stMstRxStatus.reply_buf[1] = 0x03;
+                              g_stMstRxStatus.reply_buf[2] = 0xc0;
+                              g_stMstRxStatus.reply_buf[3] = 0x24;
+                              g_stMstRxStatus.reply_buf[4] = g_stMstRxStatus.port_num<<4;
+                              g_stMstRxStatus.reply_buf[5] = CrcCal(g_stMstRxStatus.reply_buf+0x03,2,8);
+                              g_stMstRxStatus.reply_body_lenth  = 3;
+                              g_stMstRxStatus.reply_total_lenth = 3;
+                              break;
+              
+                          case MST_POWER_DOWN_PHY:
+                              g_stMstRxStatus.reply_buf[1] = 0x03;
+                              g_stMstRxStatus.reply_buf[2] = 0xC0;
+                              g_stMstRxStatus.reply_buf[3] = 0x25;
+                              g_stMstRxStatus.reply_buf[4] = g_stMstRxStatus.port_num<<4;
+                              g_stMstRxStatus.reply_buf[5] = CrcCal(g_stMstRxStatus.reply_buf+0x03,2,8);
+                              g_stMstRxStatus.reply_body_lenth  = 3;
+                              g_stMstRxStatus.reply_total_lenth = 3;
+                              break;
+              
+                          case MST_REMOTE_DPCD_READ:
+                              read_cnt = g_stMstRxStatus.MsgRxData[7];
+                              g_stMstRxStatus.reply_buf[1] = read_cnt + 4;
+                              g_stMstRxStatus.reply_buf[2] = 0xC0;
+                              g_stMstRxStatus.reply_buf[3] = 0x20;
+                              g_stMstRxStatus.reply_buf[4] = g_stMstRxStatus.port_num;
+                              g_stMstRxStatus.reply_buf[5]= read_cnt;
+                              g_stMstRxStatus.MsgRxData[4] &= 0x0f;
+                          if(((g_stMstRxStatus.MsgRxData[4] == 0x06)&&(g_stMstRxStatus.MsgRxData[5] == 0x80) && (g_stMst
+             -RxStatus.MsgRxData[6] == 0x28))||
+                             ((g_stMstRxStatus.MsgRxData[4] == 0x06)&&(g_stMstRxStatus.MsgRxData[5] == 0x92) && (g_stMst
+             -RxStatus.MsgRxData[6] == 0x1d)) )//068028  
+                              {
+                                  #if DPRX_HDCP_DEC_MODE != NO_HDCP
+                                  g_stMstRxStatus.reply_buf[6] = 0x03;//03 ok 00 GTX 970 ÏÔ¿¨À¶ÆÁ
+                                  #else
+                                  g_stMstRxStatus.reply_buf[6] = 0x00;//03 ok 00 GTX 970 ÏÔ¿¨À¶ÆÁ
+                                  #endif
+                              }
+                              else if((g_stMstRxStatus.MsgRxData[4] == 0x06)&&(g_stMstRxStatus.MsgRxData[5] == 0x80) && 
+             -(g_stMstRxStatus.MsgRxData[6] == 0x00)) //068000
+                              {
+                                  g_stMstRxStatus.reply_buf[6] = 0xcf;
+                                  g_stMstRxStatus.reply_buf[7] = 0x18;
+                                  g_stMstRxStatus.reply_buf[8] = 0xa0;
+                                  g_stMstRxStatus.reply_buf[9] = 0x94;
+                                  g_stMstRxStatus.reply_buf[10] =0xfd;
+                              }
+                              else
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 9   
+
+                              {
+                                  BKF1_03_REG = g_stMstRxStatus.MsgRxData[4];//address
+                                  BKF1_04_REG = g_stMstRxStatus.MsgRxData[5];
+                                  BKF1_05_REG = g_stMstRxStatus.MsgRxData[6];
+                                  for(ki = 0; ki < g_stMstRxStatus.MsgRxData[7]; ki++)
+                                  {
+                                      if(ki)// FOR µØÖ·Òç³ö
+                                      {
+                                          if(BKF1_05_REG == 0xff)
+                                          {
+                                              BKF1_04_REG++;
+                                          }
+                                          BKF1_05_REG ++;
+                                      }
+                                      g_stMstRxStatus.reply_buf[ki+6] = BKF1_54_REG;
+                                  }
+                                  if((g_stMstRxStatus.MsgRxData[4] == 0x00)&&(g_stMstRxStatus.MsgRxData[5] == 0x00))
+                                  {
+                                      ki = 0;
+                                      switch(g_stMstRxStatus.MsgRxData[6])
+                                      {
+                                          case 0x00  ://dpcd0000
+                                              g_stMstRxStatus.reply_buf[ki+6] = 0x12;//
+                                              break;      
+                                          default:
+                                              break;
+                                      }
+                                      #if ((DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+                                      if((g_stMstRxStatus.port_num >= (3+ DPRX_MST_DSC_NUM)))
+                                      {
+                                          if(((g_stMstRxStatus.MsgRxData[6]&0xf0)==0x60)||((g_stMstRxStatus.MsgRxData[6]
+             -&0xf0)==0x90))//dsc dpcd or fec dpcd
+                                          {
+                                              memset(&g_stMstRxStatus.reply_buf[ki+6],0x00,g_stMstRxStatus.MsgRxData[7])
+             -;
+                                          }
+                                      }
+                                      #endif
+                                  }
+                                  if((g_stMstRxStatus.MsgRxData[4] == 0x00)&&(g_stMstRxStatus.MsgRxData[5] == 0x22))
+                                  {
+                                      ki = 0;
+                                      switch(g_stMstRxStatus.MsgRxData[6])
+                                      { 
+                                           case 0x00  ://dpcd02200
+                                              g_stMstRxStatus.reply_buf[ki+6] = 0x14;
+                                              if(++ki == g_stMstRxStatus.MsgRxData[7])
+                                              {
+                                                  break;
+                                              }   
+                                           case 0x01 ://dpcd02201
+                                              g_stMstRxStatus.reply_buf[ki+6] = DPRX_LINK_RATE;        
+                                              break;
+                                           case 0x10 ://dpcd02210
+                                              g_stMstRxStatus.reply_buf[ki+6] = 0x08; //vsc support
+                                              break;
+                                            default:
+                                              break;
+                                       }
+                                  }
+                                  else if((g_stMstRxStatus.MsgRxData[4] ==0x00)&&((g_stMstRxStatus.MsgRxData[5]==0x04)||
+             -(g_stMstRxStatus.MsgRxData[5]==0x05))&&(g_stMstRxStatus.MsgRxData[6]==0x00))
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 10  
+
+                                  {
+                                      g_stMstRxStatus.reply_buf[6]  = 0x90;
+                                      g_stMstRxStatus.reply_buf[7]  = 0xcc;
+                                      g_stMstRxStatus.reply_buf[8]  = 0x24;
+                                      g_stMstRxStatus.reply_buf[9]  = 0x53;
+                                      g_stMstRxStatus.reply_buf[10] = 0x59;
+                                      g_stMstRxStatus.reply_buf[11] = 0x4e;
+                                      g_stMstRxStatus.reply_buf[12] = 0x41;
+                                      g_stMstRxStatus.reply_buf[13] = 0x53;
+                                      g_stMstRxStatus.reply_buf[14] = 0x20;//very important for mst + dsc             
+                                  }
+                              }
+                              g_stMstRxStatus.reply_buf[read_cnt+0x06] = CrcCal(g_stMstRxStatus.reply_buf+0x03,read_cnt+
+             -0x03,8);
+                              g_stMstRxStatus.reply_body_lenth  = read_cnt + 4;
+                              g_stMstRxStatus.reply_total_lenth = read_cnt + 4;
+                              break;
+              
+                          case MST_ENUM_PATH_RESRC:
+                              printLT(PRINT_PRIO_HIG, "\nEnum path");
+                              g_stMstRxStatus.reply_buf[1] = 0x47;
+                              g_stMstRxStatus.reply_buf[2] = 0xc0;
+                              g_stMstRxStatus.reply_buf[3] = 0x10;
+                              g_stMstRxStatus.reply_buf[4] = g_stMstRxStatus.port_num <<4 ;
+                              #if ((DPRX_FEC_SUPPORT == ENABLED)||(DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SU
+             -PPORT == ENABLED))
+                              if((g_stMstRxStatus.port_num >= 3)&&(g_stMstRxStatus.port_num < (3+ DPRX_MST_DSC_NUM)))
+                              {
+                                  g_stMstRxStatus.reply_buf[4] |= 0x01;//FEC_Capability
+                              }
+                              #endif
+                              if((g_stAuxStatus.ucLink_Rate)&&(g_stAuxStatus.ucLink_Count))
+                              {
+                                  g_stMstRxStatus.linkwidth = g_stAuxStatus.ucLink_Rate;
+                                  g_stMstRxStatus.linkcount = g_stAuxStatus.ucLink_Count;
+                              }
+                              else
+                              {
+                                  g_stMstRxStatus.linkwidth = DPRX_LINK_RATE;
+                                  g_stMstRxStatus.linkcount = DPRX_LANE_COUNT;                    
+                              }
+                              switch(g_stMstRxStatus.linkwidth)
+                              {
+                                  case HBR3:
+                                      pbn_Capacity_total = 0x03c0<<(g_stMstRxStatus.linkcount>>1);
+                                      break;
+                                  case HBR2:
+                                      pbn_Capacity_total = 0x0280<<(g_stMstRxStatus.linkcount>>1);
+                                      break;
+                                  case HBR:
+                                      pbn_Capacity_total = 0x0140<<(g_stMstRxStatus.linkcount>>1);
+                                      break;
+                                  case RBR:
+                                      pbn_Capacity_total = 0x00c0<<(g_stMstRxStatus.linkcount>>1);
+                                      break;
+                                  default:
+                                      break;
+                              }
+                              pbn_Capacity_total =  pbn_Capacity_total/g_stMstRxStatus.sink_cnt;
+                              #if ((DPRX_DSC_DEC_SUPPORT == ENABLED)||(DPRX_DSC_BYPASS_SUPPORT == ENABLED))
+                              if((g_stMstRxStatus.port_num >= 3)&&(g_stMstRxStatus.port_num < (3+ DPRX_MST_DSC_NUM)))//s
+             -upport dsc /fec 
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 11  
+
+                              {
+                                  pbn_Capacity_total = pbn_Capacity_total*g_stMstRxStatus.sink_cnt*3;//amd 6800/6900 sup
+             -port dsc+mst
+                              }
+                              #endif
+                              g_stMstRxStatus.reply_buf[5] = pbn_Capacity_total>>8;
+                              g_stMstRxStatus.reply_buf[6] = pbn_Capacity_total;
+                              if(g_stMstRxStatus.pbn_flag[g_stMstRxStatus.port_num-3] == 1)
+                              {
+                                  g_stMstRxStatus.reply_buf[7] = 0x00;
+                                  g_stMstRxStatus.reply_buf[8] = 0x00;
+                                  g_stMstRxStatus.pbn_flag[g_stMstRxStatus.port_num-3] = 0;
+                              }
+                              else
+                              {
+                                  g_stMstRxStatus.reply_buf[7] = pbn_Capacity_total>>8;
+                                  g_stMstRxStatus.reply_buf[8] = pbn_Capacity_total;
+                              }
+                              g_stMstRxStatus.reply_buf[9] = CrcCal(g_stMstRxStatus.reply_buf+3,6,8);
+                              g_stMstRxStatus.reply_body_lenth  = 7;
+                              g_stMstRxStatus.reply_total_lenth = 7;
+                              break;
+              
+                          case MST_ALLOCATE_PAYLOAD:
+                              printLT(PRINT_PRIO_HIG, "\nAllocate payload");
+                              g_stMstRxStatus.payload_flag = 1;
+                              g_stMstRxStatus.reply_buf[1] = 0x46;
+                              g_stMstRxStatus.reply_buf[2] = 0xC0;
+                              g_stMstRxStatus.reply_buf[3] = 0x11;
+                              g_stMstRxStatus.reply_buf[4] = g_stMstRxStatus.port_num<<4 ;
+                              if(g_stMstRxStatus.port_num == 3)
+                              {
+                                  BKF1_07_REG = g_stMstRxStatus.MsgRxData[5];//stream1 vcpayload id
+                              }
+                              else if(g_stMstRxStatus.port_num == 4)
+                              {
+                                  ;
+                              }
+                              else if(g_stMstRxStatus.port_num == 5)
+                              {
+                                  ;
+                              }
+                              if((g_stMstRxStatus.MsgRxData[6])||(g_stMstRxStatus.MsgRxData[7])) //ID
+                              {
+                                  g_stMstRxStatus.pbn_flag[g_stMstRxStatus.port_num-3] = 1;     //
+                                  g_stMstRxStatus.payload_cnt++ ;
+                                  g_stMstRxStatus.pbn_update     = 0;
+                              }
+                              else
+                              {
+                                  g_stMstRxStatus.pbn_flag[g_stMstRxStatus.port_num-3] = 0;
+                                  g_stMstRxStatus.payload_cnt-- ;
+                                  g_stMstRxStatus.pbn_update  = 1;
+                              }
+                              if(g_stMstRxStatus.payload_cnt >= g_stMstRxStatus.sink_cnt)
+                              {
+                                  g_stMstRxStatus.payload_done_flag = 1;
+                              }
+                              else
+                              {
+                                  g_stMstRxStatus.payload_done_flag = 0;
+                              }
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 12  
+
+                              g_stMstRxStatus.reply_buf[5] = g_stMstRxStatus.MsgRxData[5];    //id
+                              g_stMstRxStatus.reply_buf[6] = g_stMstRxStatus.MsgRxData[6];
+                              g_stMstRxStatus.reply_buf[7] = g_stMstRxStatus.MsgRxData[7];
+                              g_stMstRxStatus.reply_buf[8] = CrcCal(g_stMstRxStatus.reply_buf+3,5,8);
+                              g_stMstRxStatus.reply_body_lenth  = 6;
+                              g_stMstRxStatus.reply_total_lenth = 6;
+                              break;
+              
+                          default:
+                              break;
+                      }
+                      g_stMstRxStatus.reply_buf[2]= (g_stMstRxStatus.reply_buf[2]&0xe0) | (g_stMstRxStatus.MsgRxData[2]&
+             -0x10);
+                      g_stMstRxStatus.reply_buf[2]=((CrcCal(g_stMstRxStatus.reply_buf,5,4)) &0x0f) | (g_stMstRxStatus.re
+             -ply_buf[2]&0xf0);//4bit CRC  
+                      memcpy(&g_stMstRxStatus.reply_buf_last[0],&g_stMstRxStatus.reply_buf[0],48);       
+                      g_stMstRxStatus.calc_flag    = 0;
+                      g_stMstRxStatus.reply_rdy    = 1;
+                      g_stMstRxStatus.request_flag = 1;
+                      Mod_DpRx_HpdIrq();
+                  }
+              }
+              
+              void Mod_Mst_MsgHandle(void)
+              {
+                  Mod_DpRx_TimeSlotUpdate();
+                  Mod_DpRxMst_MsgCalc();
+              }
+              
+              bool Mod_DpRxMst_PayloadDone(void)
+              {
+                  if(g_stAuxStatus.b1MstFlag == 0)
+                  {
+                      return 0;
+                  }
+                  return g_stMstRxStatus.payload_done_flag;
+              }
+              
+              bool Mod_DpRxMst_PayloadUpdate(void)
+              {
+                  if(g_stAuxStatus.b1MstFlag == 0)
+                  {
+                      return 0;
+                  }
+                  return g_stMstRxStatus.pbn_update;
+              }
+              #endif
+              
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+C51 COMPILER V9.53.0.0   MODDPRXMST                                                        02/13/2025 10:14:04 PAGE 13  
+
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

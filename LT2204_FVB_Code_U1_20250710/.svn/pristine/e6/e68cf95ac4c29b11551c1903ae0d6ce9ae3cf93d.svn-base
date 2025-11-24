@@ -1,0 +1,469 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: DrvDscDec.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.05.31
+/******************************************************************************/
+#include "include.h"
+
+#if RX_PORT_SIGN == DP_PORT
+
+#if DPRX_DSC_BYPASS_SUPPORT == ENABLED
+
+LtTiming_S g_stDpRxDscByTiming;
+DscDecInfo_S g_stDpRxDscByInfo;
+
+void Drv_DpRxDscBy_ParaInit(void)
+{
+    memset(&g_stDpRxDscByInfo, 0, sizeof(DscDecInfo_S));
+    memset(&g_stDpRxDscByTiming, 0, sizeof(LtTiming_S));
+}
+
+void Drv_DpRxDscBy_RxInit(void)
+{
+    Drv_System_SramPathSet(DPRX_INIT_SET_PATH);
+
+    Drv_System_IntSet(IRQ_DPRX_PPS_PKT_INT,ON);
+//    Drv_System_IntClr(IRQ_DPRX_PPS_PKT_INT);
+		//if 0x80, huawei 800*600 NG
+	BKF3_00_REG = 0x40;//pixel count save for fifo for dsc
+    //color depth force to 8bit for dsc mode
+    BKF3_0A_REG |= BIT7_1;//[7]rg_depth_soft_mode, 1-soft mode
+    BKF3_16_REG &= 0xe3;
+    BKF3_16_REG |= BIT2_1;//[4:2]the value of pixel_depth in soft mode
+    //color space force to RGB for dsc mode
+    BKF3_05_REG |= BIT7_1;//[7]rg_format_soft_mode, 1-soft mode
+    BKF3_16_REG &= 0xfc;//[1:0]the value of pixel_format in soft mode
+
+    //[7]dp dsc stream
+    BKF3_82_REG = 0x20;//hsync delay
+    BKF3_69_REG = 0x08;//hsync width
+    //[7]dsc data swap enable: 1-en; [6]Dsc enable select: 1-software en;
+    BKF3_63_REG |= 0xd0;//[4]software dsc enable
+
+//    BKF3_77_REG &= BIT0_0;//[0]rg_pcr_restart_mode: 0-sram fifo overflow
+    BKF3_83_REG &= BIT7_0;//[7]rg_dsc_bypass: 1-not bypass
+}
+
+void Drv_DpRxDscBy_TimingGet(void)
+{
+    Drv_DpRx_RxTimingGet(&g_stDpRxDscByTiming);//-wangtt- wait update
+
+    #if 1
+    printLT(PRINT_PRIO_TEST, "\n=============DscBypass Info=============");
+    printLT(PRINT_PRIO_TEST, "\nHbp   : %-4d  Vbp   : %-4d", g_stDpRxDscByTiming.usHbp,g_stDpRxDscByTiming.usVbp);
+    printLT(PRINT_PRIO_TEST, "\nHfp   : %-4d  Vfp   : %-4d", g_stDpRxDscByTiming.usHfp,g_stDpRxDscByTiming.usVfp);
+    printLT(PRINT_PRIO_TEST, "\nHsync : %-4d  Vsync : %-4d", g_stDpRxDscByTiming.usHsync,g_stDpRxDscByTiming.usVsync);
+    printLT(PRINT_PRIO_TEST, "\nHact  : %-4d  Vact  : %-4d", g_stDpRxDscByTiming.usHact,g_stDpRxDscByTiming.usVact);
+    printLT(PRINT_PRIO_TEST, "\nHtol  : %-4d  Vtol  : %-4d", g_stDpRxDscByTiming.usHtol,g_stDpRxDscByTiming.usVtol);
+    #endif
+}
+
+//u8 Drv_DpRxDscByTiming_Scan(LtTiming_S *p_DpRxDscByTiming,DscDecInfo_S *p_DpRxDscBy)
+//{
+//	u8 ucSpecialCase = 0x00;
+//	if(p_DpRxDscBy->usBpp == 159)
+//	{
+//		if((p_DpRxDscByTiming->usHact==7680)&&(p_DpRxDscByTiming->usVact==4320)&&(p_DpRxDscByTiming->usHtol==9000))
+//		{
+//			ucSpecialCase = 199;//VIC
+//		}
+//	}
+//	else if(p_DpRxDscBy->usBpp == 157)
+//	{
+//		if((p_DpRxDscByTiming->usHact==7680)&&(p_DpRxDscByTiming->usVact==4320)&&(p_DpRxDscByTiming->usHtol==10800))
+//		{
+//			ucSpecialCase = 198;//VIC
+//		}
+//	}
+//	printLT(PRINT_PRIO_TEST, "\nSpecialCase = 0x%02bx",ucSpecialCase);
+//	return ucSpecialCase;
+//} 
+
+u8 Drv_DpRxDscBy_DscInfoGet(void)
+{
+    u8 ucTemp0, ucTemp1;
+    u16 usTemp0, usTemp1;
+
+		#if 0
+    u8 loop;
+    printLT(PRINT_PRIO_TEST,"\n////DPRX PPS table:");
+    Ocm_Delay1ms(10);
+    for(loop=0;loop<32;loop++)
+    {
+        BKF2_05_REG = loop;
+        Ocm_Delay1ms(1);
+        printLT(PRINT_PRIO_TEST,"\n0x%bx,0x%bx,0x%bx,0x%bx,",BKF2_32_REG,BKF2_33_REG,BKF2_34_REG,BKF2_35_REG);
+    }
+		#endif		
+
+    //color space and depth get
+    BKF2_05_REG = 0x00;//pps0~pps3
+    Ocm_Delay1ms(1);
+  	if ((BKF2_32_REG >= 0x11) && (BKF2_32_REG <= 0x13))
+	{
+		printLT(PRINT_PRIO_HIG, "\nPPs LOAD SUCCEED");
+	}
+	else
+	{
+		return NOT_SUPPORT;
+	}
+    g_stDpRxDscByInfo.ucColorDepth = (BKF2_35_REG >> 5);//8 bit = 0x04, so >> 4 and /2¡ê?is >> 5
+    
+    BKF2_05_REG = 0x01;//pps4~pps7
+    Ocm_Delay1ms(1);
+    ucTemp0 = BKF2_32_REG;//pps4
+    BKF2_05_REG = 0x16;
+    Ocm_Delay1ms(1);
+    ucTemp1 = BKF2_32_REG;//pps88
+
+    if (ucTemp1 & BIT0_1)
+        g_stDpRxDscByInfo.ucColorSpace = YCbCr422_1;
+    else if (ucTemp1 & BIT1_1)
+        g_stDpRxDscByInfo.ucColorSpace = YCbCr420_3;
+    else if (ucTemp0 & BIT3_1)
+        g_stDpRxDscByInfo.ucColorSpace = SIMPLE422_5;
+    else if (ucTemp0 & BIT4_1)//pps4[4]: 1-RGB, 0-nonRGB
+        g_stDpRxDscByInfo.ucColorSpace = RGB_0;
+    else
+        g_stDpRxDscByInfo.ucColorSpace = YCbCr444_2;
+
+    BKF2_05_REG = 0x01;//pps4~pps7
+    Ocm_Delay1ms(1);
+    g_stDpRxDscByInfo.usBpp = ((u16)(BKF2_32_REG & 0x03) << 8) + BKF2_33_REG;
+    usTemp1 = g_stDpRxDscByInfo.usBpp >> 4;
+
+    BKF2_05_REG = 0x00;//pps0~pps3
+    Ocm_Delay1ms(1);
+    usTemp0 = (BKF2_35_REG >> 4) * 3;//bpc * 3
+    if ((g_stDpRxDscByInfo.ucColorSpace == YCbCr422_1) || (g_stDpRxDscByInfo.ucColorSpace == YCbCr420_3))
+        usTemp1 >>= 1;
+    
+    g_stDpRxDscByInfo.ucCompressRatio = (u8)(usTemp0 / usTemp1);
+
+    BKF2_05_REG = 0x02;//pps8~pps11
+    Ocm_Delay1ms(1);
+    usTemp0 = ((u16)BKF2_32_REG << 8) + BKF2_33_REG;
+
+    BKF2_05_REG = 0x03;//pps12~pps15
+    Ocm_Delay1ms(1);
+    usTemp1 = ((u16)BKF2_32_REG << 8) + BKF2_33_REG;
+    g_stDpRxDscByInfo.ucSliceNum = usTemp0 / usTemp1;
+    
+    BKF2_05_REG = 0x02;//pps8~pps11
+    Ocm_Delay1ms(1);
+    g_stDpRxDscByInfo.usSliceHeight = ((u16)BKF2_34_REG << 8) + BKF2_35_REG;
+    BKF2_05_REG = 0x03;//pps12~pps15
+    Ocm_Delay1ms(1);
+    g_stDpRxDscByInfo.usSliceWidth  = ((u16)BKF2_32_REG << 8) + BKF2_33_REG;
+
+    if ((g_stDpRxDscByInfo.ucColorSpace == YCbCr422_1) || (g_stDpRxDscByInfo.ucColorSpace == YCbCr420_3))//420 or 422 or simple_422
+    {
+        g_stDpRxDscByInfo.usSliceWidth >>= 1;
+    }
+    if (g_stDpRxDscByInfo.ucColorSpace == YCbCr420_3)
+    {
+        g_stDpRxDscByInfo.usSliceHeight >>= 1;
+    }
+
+    BKF2_05_REG = 0x03;//pps12~pps15
+    Ocm_Delay1ms(1);
+    g_stDpRxDscByInfo.usChunkSize = ((u16)BKF2_34_REG << 8) + BKF2_35_REG;
+    g_stDpRxDscByInfo.ucCoreNum = g_stDpRxDscByInfo.ucSliceNum;
+
+    if (g_stDpRxDscByInfo.ucColorSpace == YCbCr420_3)
+    {
+        BKF3_62_REG |= BIT7_1;//[7]rgd_420_sw_en: 1-from register f386 bit7
+    }
+    else
+    {
+        BKF3_62_REG &= BIT7_0;//[7]rgd_420_sw_en: 0-from vsc
+    }
+
+    #if 1
+    printLT(PRINT_PRIO_TEST, "\nSliceNumber   : %-4bd  DscNumber    : %-4bd", g_stDpRxDscByInfo.ucSliceNum, g_stDpRxDscByInfo.ucCoreNum);
+    printLT(PRINT_PRIO_TEST, "\nCompressRatio : %-4bd  Bpp          : %-4d", g_stDpRxDscByInfo.ucCompressRatio, g_stDpRxDscByInfo.usBpp);
+    printLT(PRINT_PRIO_TEST, "\nColorSpace    : %-4bd  ColorDepth   : %-4bd", g_stDpRxDscByInfo.ucColorSpace, g_stDpRxDscByInfo.ucColorDepth << 1);
+    printLT(PRINT_PRIO_TEST, "\nGroupUnit     : %-4bd  ChunkSize    : %-4d", g_stDpRxDscByInfo.ucGroupUnit, g_stDpRxDscByInfo.usChunkSize);
+    printLT(PRINT_PRIO_TEST, "\nSliceHeight   : %-4d  SliceWidth   : %-4d", g_stDpRxDscByInfo.usSliceHeight, g_stDpRxDscByInfo.usSliceWidth);
+    printLT(PRINT_PRIO_TEST, "\n========================================");
+    #endif
+
+    return CAN_RUNNING;  
+}
+
+void Drv_DpRxDscBy_DummySet(void)
+{
+    u16 temp0;
+    u8 ucLaneCnt;
+    u8 bIsDummyData = TRUE;
+
+    //dp rx chunk size set
+    BKF3_63_REG &= BIT5_0;//[5]dsc data number of line is odd, 0-even
+    #if DPRX_MST_MODE_EN == ENABLED
+    ucLaneCnt = 4;//-wangtt- add judge, if rx is not mst mode when mst mode en is ENABLED
+    #else
+    ucLaneCnt = Mod_Aux_LinkCntGet();
+    #endif
+    switch(ucLaneCnt)
+    {
+        case 4://4lane
+            temp0 = g_stDpRxDscByInfo.usChunkSize % 12;
+            if ((temp0 > 8) || (temp0 == 0))
+                bIsDummyData = FALSE;
+
+            if ((temp0 < 7) && (temp0 >= 1))
+                BKF3_63_REG |= BIT5_1;//[5]dsc data number of line is odd, 1-odd
+            break;
+
+        case 2://2lane
+            temp0 = g_stDpRxDscByInfo.usChunkSize % 6;
+            if ((temp0 == 0) || (temp0 == 5))
+                bIsDummyData = FALSE;
+            break;
+
+        case 1://1lane
+            temp0 = g_stDpRxDscByInfo.usChunkSize % 3;
+            if (temp0 == 0)
+                bIsDummyData = FALSE;
+            break;
+
+        default:
+            break;
+    }
+
+    if (bIsDummyData == FALSE)
+    {
+        BKF3_02_REG |= BIT6_1;//[6]no dummy in dsc mode: 1-is no dummy, 0-is dummy
+        printLT(PRINT_PRIO_TEST, "\nDpRx is no dummy data");
+    }
+    else
+    {
+        BKF3_02_REG &= BIT6_0;//[6]no dummy in dsc mode: 1-is no dummy, 0-is dummy
+        printLT(PRINT_PRIO_TEST, "\nDpRx have dummy data");
+    }
+
+    //chunk size
+    BKF3_88_REG = g_stDpRxDscByInfo.usChunkSize >> 8;
+    BKF3_89_REG = g_stDpRxDscByInfo.usChunkSize & 0xff;
+
+    temp0 = g_stDpRxDscByInfo.usChunkSize % 6;
+    if (temp0 != 0)
+    {
+        BKF3_3E_REG &= 0x8f;
+        BKF3_3E_REG |= (6 - temp0) << 4;//[6:4]dsc byte dummy number set of last data every chunk.
+    }
+    else
+    {
+        BKF3_3E_REG &= 0x8f;
+    }
+    if ((g_stDpRxDscByInfo.usChunkSize % 6) != 0)//[6]no dummy in dsc mode: 1-is no dummy, 0-is dummy
+        BKF3_8F_REG |= 0xc0;//[7:6]11-remove dummy data, 00-do not
+    else
+        BKF3_8F_REG &= 0x3f;//[7:6]11-remove dummy data, 00-do not
+
+    BKF3_8F_REG &= 0xc0;
+    BKF3_8F_REG |= g_stDpRxDscByInfo.ucSliceNum;//[5:0]slice number per line in dsc mode
+}
+
+void Drv_DpRxDscBy_PcrParaSet(void)
+{
+    u8 ucDummyNum;
+    u16 usTemp, usMsaHact;
+    u16 usBypassHtol, usBypassHact;
+    u16 usBypassHsync, usBypassHstart;
+    u16 usBypassHblk;
+
+    usBypassHact  = ceil((double)g_stDpRxDscByInfo.usChunkSize / 6);
+    usBypassHact *= (g_stDpRxDscByInfo.ucSliceNum << 1);
+    usMsaHact     = g_stDpRxDscByTiming.usHact;
+
+//    printLT(PRINT_PRIO_TEST, "\n=usBypassHact %d, usMsaHact %d=", usBypassHact, usMsaHact);
+
+    usBypassHtol   = g_stDpRxDscByTiming.usHtol;
+    usBypassHsync  = g_stDpRxDscByTiming.usHsync;
+    usBypassHstart = g_stDpRxDscByTiming.usHsync + g_stDpRxDscByTiming.usHbp;
+
+//    printLT(PRINT_PRIO_TEST, "\n=usBypassHtol %d, usBypassHsync %d usBypassHstart %d=", usBypassHtol, usBypassHsync, usBypassHstart);
+
+    usBypassHtol   = ceil(((double)usBypassHtol * usBypassHact) / usMsaHact);
+    usBypassHstart = ceil(((double)usBypassHstart * usBypassHact) / usMsaHact);
+    usBypassHsync  = ceil(((double)usBypassHsync * usBypassHact) / usMsaHact);
+//    printLT(PRINT_PRIO_TEST, "\n=usBypassHtol %d, usBypassHstart %d=", usBypassHtol, usBypassHstart);
+//    printLT(PRINT_PRIO_TEST, "\n=usBypassHsync %d, usBypassHblk %d=", usBypassHsync, usBypassHblk);
+
+//	if(Drv_DpRxDscByTiming_Scan(&g_stDpRxDscByTiming,&g_stDpRxDscByInfo) == 199)
+//	{
+//		usBypassHact = 3184;
+//		usBypassHtol = 3324;
+//	}
+//	else if(Drv_DpRxDscByTiming_Scan(&g_stDpRxDscByTiming,&g_stDpRxDscByInfo) == 198)
+//	{
+//		usBypassHact = 3152; 
+//		usBypassHtol = 3522;
+//	}
+	
+    if((usBypassHtol % 2) == 1)
+    {
+        usBypassHtol += 1;//htotal is odd
+    }
+    if((usBypassHact % 2) == 1)
+    {
+        usBypassHact += 1;//Hactive is odd
+    }
+    usBypassHblk = usBypassHtol - usBypassHact;
+	
+	
+//    if(usBypassHblk < 160)
+//    {
+//        usBypassHtol += (160 - usBypassHblk);
+//        usBypassHblk = usBypassHtol - usBypassHact;
+//        usBypassHstart = 0x70;
+//        usBypassHsync = 0x20;
+//    }
+
+    ucDummyNum = (BKF3_3E_REG & 0x70) >> 4;
+    usBypassHsync = 8;
+	printLT(PRINT_PRIO_TEST, "\nucDummyNum 0x%02bx, usBypassHblk %d=", ucDummyNum, usBypassHblk);
+    if(ucDummyNum != 0)
+    {
+        //there is dummy:
+        //the number of pixel that need to be delayed is:
+        //(62 - DummyNum * SliceNum * 2 / 6) is needed pixel for dummy
+		if(usBypassHblk <= 116)
+		{
+			//for huawei Mate40Pro, 4096*2160 DSC Bypass,124 is the less value
+			usBypassHblk = 124;//
+			usBypassHtol = usBypassHblk + usBypassHact;
+			printLT(PRINT_PRIO_TEST, "\nLESS");
+		}
+        usBypassHstart = (usBypassHblk - (44 + 62 - floor(ucDummyNum*g_stDpRxDscByInfo.ucSliceNum/6)*2));
+    }
+    else
+    {
+		if (usBypassHblk <= 54)
+		{
+			usBypassHblk = 64;//for acer ,64 is the least value
+			usBypassHtol = usBypassHblk + usBypassHact;			
+		}
+        usBypassHstart = (usBypassHblk - 44);//without dummy, there is no delay between de and hsync
+    }
+
+//    if ((usBypassHstart > usBypassHblk) || (usBypassHstart < 10))
+//    {
+//        printLT(PRINT_PRIO_HIG, "\nERROR: hblank not support");
+//    }
+
+//    printLT(PRINT_PRIO_TEST, "\n=usBypassHstart %d, usBypassHblk %d=", usBypassHstart, usBypassHblk);
+
+    //use soft msa, the timing sync pulse must +
+    BKF3_05_REG |= BIT6_1;//[6]dp rx soft msa en: 1-en
+
+    //soft msa H timing set
+    BKF3_06_REG = (usBypassHtol >> 8);//Htol[15:8]
+    BKF3_07_REG = usBypassHtol;//Htol[7:0]
+    BKF3_08_REG = (usBypassHstart >> 8);//Hstart[15:8]
+    BKF3_09_REG = usBypassHstart;//Hstart[7:0]
+    BKF3_0A_REG &= 0x80;
+    BKF3_0A_REG |= (usBypassHsync >> 8);//Hsync[15:8]
+    BKF3_0B_REG = usBypassHsync;//Hsync[7:0]
+    BKF3_0C_REG = (usBypassHact >> 8);//Hact[15:8]
+    BKF3_0D_REG = usBypassHact;//Hact[7:0]
+
+    //soft msa V timing set
+    BKF3_0E_REG = g_stDpRxDscByTiming.usVtol >> 8;//Vtol[15:8]
+    BKF3_0F_REG = g_stDpRxDscByTiming.usVtol;//Vtol[ 7:0]
+
+    usTemp = g_stDpRxDscByTiming.usVbp + g_stDpRxDscByTiming.usVsync;
+    BKF3_10_REG = usTemp >> 8;//Vstart[15:8]
+    BKF3_11_REG = usTemp;//Vstart[ 7:0]
+
+    BKF3_12_REG &= 0x80;//[6:0]clr
+    BKF3_12_REG |= ((g_stDpRxDscByTiming.usVsync >> 8) & 0x7f);//Vsync[14:8]
+    BKF3_13_REG = g_stDpRxDscByTiming.usVsync;//Vsync[7:0]
+
+    BKF3_14_REG = g_stDpRxDscByTiming.usVact >> 8;//Vact[15:8]
+    BKF3_15_REG = g_stDpRxDscByTiming.usVact;//Vact[ 7:0]
+
+    //video soft reset
+    BKF1_B5_REG &= BIT6_0;//DPRX Video All Logic Reset
+    Ocm_Delay1ms(1);
+    BKF1_B5_REG |= BIT6_1;
+
+//    BKF1_B4_REG = 0xfd;
+//    Ocm_Delay1ms(1);
+//    BKF1_B4_REG = 0xff;//pcr resert
+}
+
+void Drv_DpRxDscBy_DataClkMuxSet(void)
+{
+    BKEA_18_REG |= BIT0_1;//[0]rgd_pps_dp_in: 1-dp in, 0-hdmi in 
+    Drv_System_SramPathSet(DPRX_DSCBYPASS_PPS_PATH);
+}
+
+void Drv_DpRxDscBy_ModuleEnable(void)
+{
+// must be placed at the front
+    Drv_DpRxDscBy_DataClkMuxSet();
+
+    Drv_DpRxDscBy_DummySet();
+    Drv_DpRxDscBy_PcrParaSet();
+
+    g_stDpRxDscByInfo.ucDscByEn = ENABLED;
+}
+
+void Drv_DpRxDscBy_Set(u8 ucState)
+{
+    g_stDpRxDscByInfo.ucDscByEn = ucState;
+}
+
+void Drv_DpRxDscBy_Init(void)//recover to no dsc configure
+{
+    BKF3_00_REG = 0x40;//pixel count save for fifo for dsc
+//    BKF3_03_REG = 0x02;
+    BKF3_05_REG &= 0x03;//[7]rg_format_soft_mode, 0-hw mode
+                        //[6]dp rx soft msa en: 0-dis
+                        //[5:4]Vpol default
+                        //[3:2]Hpol default
+    BKF3_0A_REG &= BIT7_0;//[7]rg_depth_soft_mode, 0-hw modes
+    BKF3_16_REG &= 0xe0;
+    //dsc module disable
+    BKEE_80_REG = 0x00;//dsc dec disable
+    BKF3_62_REG &= BIT7_0;//[7]rgd_420_sw_en: 0-from vsc
+    BKF3_86_REG &= BIT7_0;//[7]rgd_420_en: 0-disable 420
+    //[7]dsc data swap enable: 1-en; [6]Dsc enable select: 1-software en;
+    BKF3_63_REG = 0x06;//[4]software dsc enable
+    BKF3_8F_REG &= 0x3f;//[7:6]11-remove dummy data, 00-do not
+
+    g_stDpRxDscByInfo.ucDscByEn = DISABLED;
+}
+
+void Drv_DpRxDscBy_ColorInfoGet(ColorInfo_S *pstInfo)
+{
+    pstInfo->ucPixelEncoding = g_stDpRxDscByInfo.ucColorSpace;
+    switch(g_stDpRxDscByInfo.ucColorDepth)
+    {
+        case BPC10:
+            pstInfo->ucBitDepth = DPRX_10BIT_2;
+            break;
+        case BPC12:
+            pstInfo->ucBitDepth = DPRX_12BIT_3;
+            break;        
+        default:
+            pstInfo->ucBitDepth = DPRX_8BIT_1;
+            break;
+    }
+    if(g_stDpRxDscByInfo.ucColorSpace == SIMPLE422_5)
+    {
+        pstInfo->ucPixelEncoding = YCbCr444_2;
+    }
+}
+
+u8 Drv_DpRxDscBy_SwitchGet(void)
+{
+    return g_stDpRxDscByInfo.ucDscByEn;
+}
+#endif
+
+#endif

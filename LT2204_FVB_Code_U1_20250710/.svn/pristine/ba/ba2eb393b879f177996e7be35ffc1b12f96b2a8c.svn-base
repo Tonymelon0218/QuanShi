@@ -1,0 +1,74 @@
+C51 COMPILER V9.53.0.0   DRVTYPECCC1                                                       02/13/2025 10:14:23 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVTYPECCC1
+OBJECT MODULE PLACED IN .\Objects\DrvTypecCc1.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvTypecCc1.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE
+                    -) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PR
+                    -INT(.\Listings\DrvTypecCc1.lst) OBJECT(.\Objects\DrvTypecCc1.obj)
+
+line level    source
+
+   1          #include "include.h"
+   2          
+   3          //===========================================
+   4          //func  :Drvtypec
+   5          //input :N/A
+   6          //output:N/A
+   7          //return:void
+   8          //Info  :N/A
+   9          //===========================================
+  10          
+  11          // this TypecRx It means Typec DCC 
+  12          #if TYPECTX_EN == ENABLED
+              
+              void Drv_Cc1Sw_Ctrl(u8 b1IsEn)
+              {
+                  (b1IsEn == ENABLED)?(BKA2_A9_REG |= BIT1_1):(BKA2_A9_REG &= BIT1_0);
+              }
+              
+              void Drv_CC1Ra_Det(void)
+              {
+                  if(Drv_CC1RpOn_Scan() == 1)//Rp Online
+                  {
+                      //0x60 Normal Emark;0x90 Flip Emark
+                      if((BKFC_30_REG&0xA0) == 0x20)//Normal Emark
+                      {
+                          VCONN2_GPIO_CTRL(HIGH);
+                      }
+                      else if((BKFC_30_REG&0xA0) == 0x80)//Flip Emark
+                      {
+                          VCONN1_GPIO_CTRL(HIGH);
+                      }
+                      else//No Ra or Audio online
+                      {
+                          ;
+                      }
+                  }
+                  else
+                  {
+                      ;
+                  }
+              }
+              
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+C51 COMPILER V9.53.0.0   DRVTYPECCC1                                                       02/13/2025 10:14:23 PAGE 2   
+
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

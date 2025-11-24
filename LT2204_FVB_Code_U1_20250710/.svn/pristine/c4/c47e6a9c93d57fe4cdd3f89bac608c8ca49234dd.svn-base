@@ -1,0 +1,343 @@
+C51 COMPILER V9.53.0.0   DRVHDMIRXDSCBYPASS                                                02/13/2025 10:14:19 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVHDMIRXDSCBYPASS
+OBJECT MODULE PLACED IN .\Objects\DrvHdmiRXDscByPass.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvHdmiRXDscByPass.c LARGE OBJECTADVANCED OPTIMIZE(
+                    -11,SIZE) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) D
+                    -EBUG PRINT(.\Listings\DrvHdmiRXDscByPass.lst) OBJECT(.\Objects\DrvHdmiRXDscByPass.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: DrvDscDec.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.05.31
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          #if RX_PORT_SIGN == HDMI_PORT
+  11          
+  12          #if ((HDMIRX_DSC_BYPASS_SUPPORT == ENABLED)||(HDMIRX_DSC_DEC_SUPPORT == ENABLED))
+  13          LtTiming_S g_stHdmiRxDscByTiming;
+  14          DscDecInfo_S g_stHdmiRxDscByInfo;
+  15          
+  16          void Drv_HdmiRxDscBy_ParaInit(void)
+  17          {
+  18   1          memset(&g_stHdmiRxDscByInfo, 0, sizeof(DscDecInfo_S));
+  19   1          memset(&g_stHdmiRxDscByTiming, 0, sizeof(LtTiming_S));
+  20   1      }
+  21          
+  22          void Drv_HdmiRxDscBy_RxInit(void)
+  23          {
+  24   1          #if HDMIRX_DSC_BYPASS_HALFPIX_EN == ENABLED
+  25   1          u16 usHact,usHtotal;
+  26   1          #endif
+  27   1      
+  28   1          Drv_System_SramPathSet(HDMIRX_INIT_SET_PATH);
+  29   1      
+  30   1          #if HDMIRX_DSC_BYPASS_HALFPIX_EN == ENABLED
+  31   1          usHact = PACK_16_BIT(BKCB_42_REG, BKCB_43_REG);
+  32   1          usHtotal = PACK_16_BIT(BKCB_44_REG, BKCB_45_REG);  
+  33   1          usHact = usHact/2;
+  34   1          usHtotal = usHtotal/2;
+  35   1          
+  36   1          BKCE_4B_REG = 0x0a;
+  37   1          BKCE_40_REG = usHact >>8; //hact[15:8]
+  38   1          BKCE_41_REG = usHact; //hact[7:0]
+  39   1          
+  40   1          BKCE_32_REG = 0x7d;
+  41   1          BKCE_42_REG = usHtotal >>8; //htotal[15:8]
+  42   1          BKCE_43_REG = usHtotal; //htotal[7:0]
+  43   1          
+  44   1          printLT(PRINT_PRIO_TEST, "\nhalf Hact  : %-4d  half Htol  : %-4d", usHact,usHtotal);
+  45   1          //printLT(PRINT_PRIO_TEST, "\nce40=%02bx ce41=%02bx ce42=%02bx ce43=%02bx", BKCE_40_REG,BKCE_41_REG,BK
+             -CE_42_REG,BKCE_43_REG);
+  46   1          #endif
+  47   1      }
+  48          
+  49          void Drv_HdmiRxDscBy_TimingGet(void)
+  50          {
+  51   1          u8 ucCnt, ucNum;
+  52   1          u16 usCrt = 0, usLast = 0;
+C51 COMPILER V9.53.0.0   DRVHDMIRXDSCBYPASS                                                02/13/2025 10:14:19 PAGE 2   
+
+  53   1      
+  54   1          //=================wait video check stable=====================
+  55   1          ucCnt = 0;
+  56   1          ucNum = 150;
+  57   1          while(ucNum--)
+  58   1          {
+  59   2              Ocm_Delay1ms(2);
+  60   2              usCrt = PACK_16_BIT(BKC8_56_REG, BKC8_57_REG);
+  61   2              if (usLast == usCrt)
+  62   2              {
+  63   3                  ucCnt++;
+  64   3                  if (ucCnt > 10)
+  65   3                  {
+  66   4                      break;
+  67   4                  }
+  68   3              }
+  69   2              else
+  70   2              {
+  71   3                  ucCnt = 0;
+  72   3                  usLast = usCrt;
+  73   3              }
+  74   2          }
+  75   1          //=================wait video check stable=====================
+  76   1      
+  77   1          //get V timing by VideoCheck
+  78   1          Drv_HdmiRx_RxTimingGet(&g_stHdmiRxDscByTiming);
+  79   1          //get H timing by EMP pkt
+  80   1          g_stHdmiRxDscByTiming.usHbp   = PACK_16_BIT(BKCB_3F_REG, BKCB_40_REG);
+  81   1          g_stHdmiRxDscByTiming.usHsync = PACK_16_BIT(BKCB_3D_REG, BKCB_3E_REG);
+  82   1          g_stHdmiRxDscByTiming.usHfp   = PACK_16_BIT(BKCB_3B_REG, BKCB_3C_REG);
+  83   1          g_stHdmiRxDscByTiming.usHact  = PACK_16_BIT(BKCB_42_REG, BKCB_43_REG);
+  84   1          g_stHdmiRxDscByTiming.usHtol  = PACK_16_BIT(BKCB_44_REG, BKCB_45_REG);
+  85   1      
+  86   1          #if 1
+  87   1          printLT(PRINT_PRIO_TEST, "\n==============DscBy Info==============");
+  88   1          printLT(PRINT_PRIO_TEST, "\nHbp   : %-4d  Vbp   : %-4d", g_stHdmiRxDscByTiming.usHbp,g_stHdmiRxDscByTi
+             -ming.usVbp);
+  89   1          printLT(PRINT_PRIO_TEST, "\nHfp   : %-4d  Vfp   : %-4d", g_stHdmiRxDscByTiming.usHfp,g_stHdmiRxDscByTi
+             -ming.usVfp);
+  90   1          printLT(PRINT_PRIO_TEST, "\nHsync : %-4d  Vsync : %-4d", g_stHdmiRxDscByTiming.usHsync,g_stHdmiRxDscBy
+             -Timing.usVsync);
+  91   1          printLT(PRINT_PRIO_TEST, "\nHact  : %-4d  Vact  : %-4d", g_stHdmiRxDscByTiming.usHact,g_stHdmiRxDscByT
+             -iming.usVact);
+  92   1          printLT(PRINT_PRIO_TEST, "\nHtol  : %-4d  Vtol  : %-4d", g_stHdmiRxDscByTiming.usHtol,g_stHdmiRxDscByT
+             -iming.usVtol);
+  93   1          #endif
+  94   1      }
+  95          
+  96          //========================================================================
+  97          // Func Name   : Drv_HdmiRxDscBy_DscInfoGet
+  98          // Description : dsc pps info get
+  99          // Input       : void  
+ 100          // Output      : None
+ 101          // Return      : void
+ 102          //========================================================================
+ 103          void Drv_HdmiRxDscBy_DscInfoGet(void)
+ 104          {
+ 105   1          u8 usPpsDetCnt;
+ 106   1          u16 temp0, temp1;
+ 107   1          u8 pps3, pps4, pps5, pps8, pps9, pps10, pps11, pps12, pps13, pps14, pps15, pps88;
+ 108   1      
+ 109   1          //packet mode set to RGB
+C51 COMPILER V9.53.0.0   DRVHDMIRXDSCBYPASS                                                02/13/2025 10:14:19 PAGE 3   
+
+ 110   1          BKCC_10_REG |= BIT0_1;//[0]color space en
+ 111   1          BKCC_10_REG &= 0x8f;//[6:4]color space value: 0-RGB, 1-YUV422, 2-YUV444, 3-YUV420
+ 112   1          BKCC_0F_REG |= BIT2_1;//[2]rgd_audc_cd_sel: 1-software configure color depth value
+ 113   1          BKCC_0F_REG &= 0x0f;//[7:4]color depth value: 4-8bit
+ 114   1          BKCC_0F_REG |= 0x40;
+ 115   1      
+ 116   1      //    Ocm_Delay1us(2);//must be wait load success
+ 117   1              usPpsDetCnt = 0;
+ 118   1          Drv_System_IntClr(IRQ_HDMIRX_PPS_LOAD_SUCC_INT);
+ 119   1          while(usPpsDetCnt < 500)
+ 120   1          {
+ 121   2              usPpsDetCnt++;
+ 122   2              Ocm_Delay1us(100);
+ 123   2              if (Drv_System_IntFlagGet(IRQ_HDMIRX_PPS_LOAD_SUCC_INT) == TRUE)//[3]pps packet interrupt flag
+ 124   2              {
+ 125   3                  Ocm_Delay1us(10);//must be wait load success
+ 126   3                  Drv_System_SramPathSet(HDMIRX_DSCBYPASS_PPS_PATH);
+ 127   3                  break;
+ 128   3              }
+ 129   2          }
+ 130   1          //////////////////////////////////////////pps sram start
+ 131   1          Drv_System_SramPathSet(HDMIRX_DSCBYPASS_PPS_PATH);
+ 132   1          
+ 133   1          BKE5_6A_REG = 0x00; //sram address num = 0   pps0/1/2/3 <- e683/e682/e681/e680
+ 134   1          Ocm_Delay1us(2);
+ 135   1          pps3 = BKE6_80_REG;
+ 136   1          BKE5_6A_REG = 0x01; //sram address num = 1   pps4/5/6/7 <- e683/e682/e681/e680
+ 137   1          Ocm_Delay1us(2);
+ 138   1          pps4 = BKE6_83_REG;
+ 139   1          pps5 = BKE6_82_REG;
+ 140   1          BKE5_6A_REG = 0x02; //sram address num = 2   pps8/9/10/11 <- e683/e682/e681/e680
+ 141   1          Ocm_Delay1us(2);
+ 142   1          pps8 = BKE6_83_REG;
+ 143   1          pps9 = BKE6_82_REG;
+ 144   1          pps10 = BKE6_81_REG;
+ 145   1          pps11 = BKE6_80_REG;
+ 146   1          BKE5_6A_REG = 0x03; //sram address num = 3   pps12/13/14/15 <- e683/e682/e681/e680
+ 147   1          Ocm_Delay1us(2);
+ 148   1          pps12 = BKE6_83_REG;
+ 149   1          pps13 = BKE6_82_REG;
+ 150   1          pps14 = BKE6_81_REG;
+ 151   1          pps15 = BKE6_80_REG;
+ 152   1          BKE5_6A_REG = 0x16; //sram address num = 22   pps88/89/90/91 <- e683/e682/e681/e680
+ 153   1          Ocm_Delay1us(2);
+ 154   1          pps88 = BKE6_83_REG;
+ 155   1          //////////////////////////////////////////pps sram end
+ 156   1      
+ 157   1           //color space and depth get
+ 158   1          g_stHdmiRxDscByInfo.ucColorDepth = (pps3 >> 5);//8 bit = 0x04, so >> 4 and /2, is >> 5
+ 159   1          if (pps88 & BIT0_1)
+ 160   1              g_stHdmiRxDscByInfo.ucColorSpace = YCbCr422_1;
+ 161   1          else if (pps88 & BIT1_1)
+ 162   1              g_stHdmiRxDscByInfo.ucColorSpace = YCbCr420_3;
+ 163   1          else if (pps4 & BIT3_1)
+ 164   1              g_stHdmiRxDscByInfo.ucColorSpace = SIMPLE422_5;
+ 165   1          else if (pps4 & BIT4_1)//pps4[4]: 1-RGB, 0-nonRGB
+ 166   1              g_stHdmiRxDscByInfo.ucColorSpace = RGB_0;
+ 167   1          else
+ 168   1              g_stHdmiRxDscByInfo.ucColorSpace = YCbCr444_2;
+ 169   1      
+ 170   1          g_stHdmiRxDscByInfo.usBpp = ((u16)(pps4 & 0x03) << 8) + pps5;
+ 171   1          temp1 = g_stHdmiRxDscByInfo.usBpp;
+C51 COMPILER V9.53.0.0   DRVHDMIRXDSCBYPASS                                                02/13/2025 10:14:19 PAGE 4   
+
+ 172   1          if (g_stHdmiRxDscByInfo.ucColorSpace == YCbCr422_1)
+ 173   1          {
+ 174   2               temp0 = 24;//24/bpp
+ 175   2               temp1 >>= 1;
+ 176   2          }
+ 177   1          else if(g_stHdmiRxDscByInfo.ucColorSpace == YCbCr420_3)
+ 178   1          {
+ 179   2               temp0 = 12;
+ 180   2               temp1 >>= 1;
+ 181   2          }
+ 182   1          else
+ 183   1          {
+ 184   2               temp0 = 24;
+ 185   2          }
+ 186   1          temp0 *= 160;
+ 187   1          g_stHdmiRxDscByInfo.ucCompressRatio = (u8)(temp0 / temp1);
+ 188   1      
+ 189   1          temp0 = ((u16)pps8 << 8) + pps9;
+ 190   1          temp1 = ((u16)pps12 << 8) + pps13;
+ 191   1          g_stHdmiRxDscByInfo.ucSliceNum = temp0 / temp1;
+ 192   1      
+ 193   1          g_stHdmiRxDscByInfo.usSliceHeight = ((u16)pps10 << 8) + pps11;
+ 194   1          g_stHdmiRxDscByInfo.usSliceWidth  = ((u16)pps12 << 8) + pps13;
+ 195   1          if ((g_stHdmiRxDscByInfo.ucColorSpace == YCbCr422_1) || (g_stHdmiRxDscByInfo.ucColorSpace == YCbCr420_
+             -3))//420 or 422 or simple_422
+ 196   1          {
+ 197   2              g_stHdmiRxDscByInfo.usSliceWidth >>= 1;
+ 198   2          }
+ 199   1          if (g_stHdmiRxDscByInfo.ucColorSpace == YCbCr420_3)
+ 200   1          {
+ 201   2              g_stHdmiRxDscByInfo.usSliceHeight >>= 1;
+ 202   2          }
+ 203   1      
+ 204   1          g_stHdmiRxDscByInfo.usChunkSize = ((u16)pps14 << 8) + pps15;
+ 205   1          g_stHdmiRxDscByInfo.ucCoreNum = g_stHdmiRxDscByInfo.ucSliceNum;
+ 206   1          return;
+ 207   1      }
+ 208          
+ 209          void Drv_HdmiRxDscBy_InfoDisplay(void)
+ 210          {
+ 211   1          #if 1
+ 212   1          printLT(PRINT_PRIO_TEST, "\n==============DscBy Info==============");
+ 213   1          printLT(PRINT_PRIO_TEST, "\nHbp   : %-4d  Vbp   : %-4d", g_stHdmiRxDscByTiming.usHbp,g_stHdmiRxDscByTi
+             -ming.usVbp);
+ 214   1          printLT(PRINT_PRIO_TEST, "\nHfp   : %-4d  Vfp   : %-4d", g_stHdmiRxDscByTiming.usHfp,g_stHdmiRxDscByTi
+             -ming.usVfp);
+ 215   1          printLT(PRINT_PRIO_TEST, "\nHsync : %-4d  Vsync : %-4d", g_stHdmiRxDscByTiming.usHsync,g_stHdmiRxDscBy
+             -Timing.usVsync);
+ 216   1          printLT(PRINT_PRIO_TEST, "\nHact  : %-4d  Vact  : %-4d", g_stHdmiRxDscByTiming.usHact,g_stHdmiRxDscByT
+             -iming.usVact);
+ 217   1          printLT(PRINT_PRIO_TEST, "\nHtol  : %-4d  Vtol  : %-4d", g_stHdmiRxDscByTiming.usHtol,g_stHdmiRxDscByT
+             -iming.usVtol);
+ 218   1          printLT(PRINT_PRIO_TEST, "\nSliceNumber   : %-4bd  DscNumber    : %-4bd", g_stHdmiRxDscByInfo.ucSliceN
+             -um, g_stHdmiRxDscByInfo.ucCoreNum);
+ 219   1          printLT(PRINT_PRIO_TEST, "\nCompressRatio : %-4bd  Bpp          : %-4d", g_stHdmiRxDscByInfo.ucCompres
+             -sRatio, g_stHdmiRxDscByInfo.usBpp);
+ 220   1          printLT(PRINT_PRIO_TEST, "\nColorSpace    : %-4bd  ColorDepth   : %-4bd", g_stHdmiRxDscByInfo.ucColorS
+             -pace, g_stHdmiRxDscByInfo.ucColorDepth << 1);
+ 221   1          printLT(PRINT_PRIO_TEST, "\nGroupUnit     : %-4bd  ChunkSize    : %-4d", g_stHdmiRxDscByInfo.ucGroupUn
+             -it, g_stHdmiRxDscByInfo.usChunkSize);
+ 222   1          printLT(PRINT_PRIO_TEST, "\nSliceHeight   : %-4d  SliceWidth   : %-4d", g_stHdmiRxDscByInfo.usSliceHei
+             -ght, g_stHdmiRxDscByInfo.usSliceWidth);
+C51 COMPILER V9.53.0.0   DRVHDMIRXDSCBYPASS                                                02/13/2025 10:14:19 PAGE 5   
+
+ 223   1          printLT(PRINT_PRIO_TEST, "\n======================================");
+ 224   1          #endif
+ 225   1      }
+ 226          
+ 227          void Drv_HdmiRxDscBy_RxSet(void)
+ 228          {
+ 229   1          #if RX_PORT_SIGN == HDMI_PORT
+ 230   1          BKEA_18_REG &= BIT0_0;//[0]rgd_pps_dp_in: 1-dp in, 0-hdmi in
+ 231   1          #endif
+ 232   1      }
+ 233          
+ 234          void Drv_HdmiRxDscBy_DataClkMuxSet(void)
+ 235          {
+ 236   1          BKA3_32_REG = 0x01;//[6:4]rg_secpcrpll_half_pcrck_muxsel: 000-aa_pll_pix_clk
+ 237   1      }
+ 238          
+ 239          void Drv_HdmiRxDscBy_ModuleEnable(void)
+ 240          {
+ 241   1          Drv_HdmiRxDscBy_InfoDisplay();
+ 242   1          Drv_HdmiRxDscBy_RxSet();
+ 243   1          Drv_HdmiRxDscBy_DataClkMuxSet();
+ 244   1      
+ 245   1          g_stHdmiRxDscByInfo.ucDscByEn = ENABLED;
+ 246   1      }
+ 247          
+ 248          void Drv_HdmiRxDscBy_Init(void)//recover to no dsc configure
+ 249          { 
+ 250   1          BKCC_0F_REG &= BIT2_0;//[2]rgd_audc_cd_sel: 0-logic generate from rx depkt
+ 251   1          BKCC_10_REG &= BIT0_0;//[0]color space en: 0-logic generate from rx depkt
+ 252   1      
+ 253   1          BKCE_32_REG = 0x7b; //secpcr mode
+ 254   1          BKCE_4B_REG |= BIT4_1; //[4]rgd_dsc_pcr_hact_set_sel: 1-hactive used from pps detection
+ 255   1          BKCE_40_REG = 0x00; //hact[15:8]
+ 256   1          BKCE_41_REG = 0x00; //hact[7:0]
+ 257   1          BKCE_42_REG = 0x00; //htotal[15:8]
+ 258   1          BKCE_43_REG = 0x00; //htotal[7:0]
+ 259   1          
+ 260   1          g_stHdmiRxDscByInfo.ucDscByEn = DISABLED;
+ 261   1          printLT(PRINT_PRIO_TEST, "\nHdmi rx dsc bypass init");
+ 262   1      }
+ 263          
+ 264          void Drv_HdmiRxDscBy_ColorInfoGet(ColorInfo_S *pstInfo)
+ 265          {
+ 266   1          pstInfo->ucBitDepth      = g_stHdmiRxDscByInfo.ucColorDepth;
+ 267   1          pstInfo->ucPixelEncoding = g_stHdmiRxDscByInfo.ucColorSpace;
+ 268   1      }
+ 269          
+ 270          u8 Drv_HdmiRxDscBy_SwitchGet(void)
+ 271          {
+ 272   1          return g_stHdmiRxDscByInfo.ucDscByEn;
+ 273   1      }
+ 274          u16 Drv_HdmiRxDscBy_BppGet(void)
+ 275          {   
+ 276   1          if(g_stHdmiRxDscByInfo.usBpp & 0x0f)
+ 277   1          {
+ 278   2             return  1;
+ 279   2          }
+ 280   1          else
+ 281   1          {
+ 282   2            return  0;
+ 283   2          }
+ 284   1      }
+C51 COMPILER V9.53.0.0   DRVHDMIRXDSCBYPASS                                                02/13/2025 10:14:19 PAGE 6   
+
+ 285          
+ 286          #endif
+ 287          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1742    ----
+   CONSTANT SIZE    =    504    ----
+   XDATA SIZE       =     48      16
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

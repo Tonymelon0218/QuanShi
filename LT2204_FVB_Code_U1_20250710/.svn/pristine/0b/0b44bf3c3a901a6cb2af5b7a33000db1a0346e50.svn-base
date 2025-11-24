@@ -1,0 +1,266 @@
+#include "main.h"
+#include "stdio.h"
+#include "string.h"
+#include "register.h"
+#include "LtType.h"
+#include "OcmPrint.h"
+#include "OcmTimer.h"
+//////////////////////////
+#include "DrvFlash.h"
+
+#if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD) || (CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP))
+
+#define FIFO_MAX	32
+//////////////////////////////////////
+void Drv_Sector_Erease(u32 Add)
+{
+	UN32 UAdd;
+	UAdd.ulData=Add;
+	
+	BKE0_5E_REG = 0xC1;			
+	BKE0_58_REG = 0x00; 
+	BKE0_59_REG = 0x50;  
+	BKE0_5A_REG = 0x10;
+	BKE0_5A_REG = 0x00; 
+	//BKE0_58_REG = 0x21; 
+	//sector erase 4K
+  	//////////////////////////////////
+	BKE0_5A_REG = 0x04; 
+	BKE0_5A_REG = 0x00;				//flash wren
+	
+	BKE0_5B_REG = UAdd.ucBuff[1];			//ADDR
+	BKE0_5C_REG = UAdd.ucBuff[2];			//ADDR
+	BKE0_5D_REG = UAdd.ucBuff[3];			//ADDR
+
+	BKE0_5A_REG = 0x02;
+	BKE0_5A_REG = 0x00;
+}
+
+//max 32 byte 
+void FlashByte_Wr(u8 Add[],u8 *source,u8 length)
+{
+	u8 i;
+	if(length==0)
+	{
+		return;
+	}
+	BKE1_03_REG = 0x3F;     
+	BKE1_03_REG = 0xFF;     
+	
+	BKE0_5A_REG = 0x04;
+	BKE0_5A_REG = 0x00;
+	//data to fifo	
+	BKE0_5E_REG = 0xC0|(length-1);	//0xc0 bytelen 每次连续读写字节数-1
+	BKE0_5A_REG = 0x20;	
+	BKE0_5A_REG = 0x00;
+	BKE0_58_REG = 0x21;				//spi_addr_freeze_en
+	for(i=0;i<length;i++)
+	{
+		BKE0_59_REG = *source;
+		source++;
+	}
+	//fifo to flash
+	BKE0_5B_REG = Add[0];//ADDR
+	BKE0_5C_REG = Add[1];//ADDR
+	BKE0_5D_REG = Add[2];//ADDR
+	BKE0_5A_REG = 0x10; 
+	BKE0_5A_REG = 0x00;	
+}
+
+//max 32 byte 
+void FlashByte_Rd(u8 Add[],u8 *target,u8 length)
+{
+	u8 i;
+	if(length==0)
+	{
+		return;
+	}
+	//fifo rst_n
+	BKE1_03_REG = 0x3F;     
+	BKE1_03_REG = 0xFF; 
+	//fifo to flash
+	BKE0_5E_REG = 0x40|(length-1);//0x40 | bytelen
+	BKE0_5A_REG = 0x20;//spi_len_en
+	BKE0_5A_REG = 0x00; 
+	/////////////////////////////
+	BKE0_5B_REG = Add[0];//ADDR
+	BKE0_5C_REG = Add[1];//ADDR
+	BKE0_5D_REG = Add[2];//ADDR   
+	BKE0_5A_REG = 0x10; 
+	BKE0_5A_REG = 0x00; 
+	//fifo to buffer	
+	BKE0_58_REG = 0x21;
+	Ocm_Delay1us(10);
+	for( i = 0; i < length; i++ )
+	{
+		*target = BKE0_5F_REG;
+		target++;
+	}
+}
+
+//max 32 byte 
+void WriteFlashByte(u32 Add,u8 *source,u8 length)
+{
+	u8 i;
+	if(length==0)
+	{
+		return;
+	}
+	BKE1_03_REG = 0x3F;     
+	BKE1_03_REG = 0xFF;     
+	
+	BKE0_5A_REG = 0x04;
+	BKE0_5A_REG = 0x00;
+	//data to fifo	
+	BKE0_5E_REG = 0xC0|(length-1);	//0xc0 bytelen 每次连续读写字节数-1
+	BKE0_5A_REG = 0x20;	
+	BKE0_5A_REG = 0x00;
+	BKE0_58_REG = 0x21;				//spi_addr_freeze_en
+	for(i=0;i<length;i++)
+	{
+		BKE0_59_REG = *source;
+		source++;
+	}
+	//fifo to flash
+	BKE0_5B_REG = ((Add & 0xFF0000) >> 16);			//ADDR
+	BKE0_5C_REG = ((Add & 0xFF00) >> 8);			//ADDR
+	BKE0_5D_REG = (Add & 0xFF);			            //ADDR
+	BKE0_5A_REG = 0x10; 
+	BKE0_5A_REG = 0x00;	
+}
+
+void Drv_Flash_Wr(u32 Add,u8 *buff,u16 length)
+{
+    #if 0
+	u8 j;
+	u8 time,remainder;
+	u16 OverFlow;
+	u8  Byte0,Byte1;
+	UN32 UAdd;
+	UAdd.ulData=Add;
+	
+	time=(length/(FIFO_MAX));
+	remainder=(length%(FIFO_MAX));
+	//////////////////////////////////
+	for(j=0;j<time+1;j++)
+	{
+		if(j<time)
+		{
+			length=FIFO_MAX;
+		}
+		else
+		{
+			length=remainder;
+		}
+		OverFlow=UAdd.ucBuff[3]+length;
+		if(OverFlow>256)
+		{
+			Byte0=256-UAdd.ucBuff[3];
+			Byte1=length-Byte0;
+		}
+		else
+		{
+			Byte0=length;
+			Byte1=0;
+		}
+		FlashByte_Wr(&UAdd.ucBuff[1],buff,Byte0);
+		buff=buff+Byte0;
+		UAdd.ulData=UAdd.ulData+Byte0;
+		if(Byte1>0)
+		{
+			FlashByte_Wr(&UAdd.ucBuff[1],buff,Byte1);
+			buff=buff+Byte1;
+			UAdd.ulData=UAdd.ulData+Byte1;
+		}
+	}
+    #else
+	u8 j;
+    u8 time,remainder;
+	if(length==0)
+	{
+		return;
+	}
+    BKE0_5E_REG = 0xC1;
+    BKE0_58_REG = 0x00;
+    BKE0_59_REG = 0x50;
+    BKE0_5A_REG = 0x10;
+    Ocm_Delay1ms(1);
+    BKE0_5A_REG = 0x00;
+    BKE0_58_REG = 0x21;  
+	time=(length/(FIFO_MAX));
+	remainder=(length%(FIFO_MAX));
+    //outDrv_Print(1,"\ntime  %x  %x", time, remainder);
+
+	for(j=0;j<time+1;j++)
+	{
+		if(j<time)
+		{
+			length=FIFO_MAX;
+		}
+		else
+		{
+			length=remainder;
+		}
+        
+        WriteFlashByte(Add,buff,length);
+        buff = buff + length;
+        Add = Add + length;
+        Ocm_Delay1ms(1);
+    }    
+    #endif
+}
+
+void Drv_Flash_Rd(u32 Add,u8 *buff,u16 length)
+{
+	u8 j;
+	u8 time,remainder;
+	u16 OverFlow;
+	u8  Byte0,Byte1;
+	
+	UN32 UAdd;
+	UAdd.ulData=Add;
+	
+    BKE0_5E_REG = 0xC1;
+    BKE0_58_REG = 0x00;
+    BKE0_59_REG = 0x50;
+    BKE0_5A_REG = 0x10;
+    Ocm_Delay1ms(1);
+    BKE0_5A_REG = 0x00;
+    BKE0_58_REG = 0x21;    
+    
+	time=(length/FIFO_MAX);
+	remainder=(length%FIFO_MAX);
+	for(j=0;j<time+1;j++)
+	{
+		if(j<time)
+		{
+			length=FIFO_MAX;
+		}
+		else
+		{
+			length=remainder;
+		}
+		OverFlow=UAdd.ucBuff[3]+length;
+		if(OverFlow>256)
+		{
+			Byte0=256-UAdd.ucBuff[3];
+			Byte1=length-Byte0;
+		}
+		else
+		{
+			Byte0=length;
+			Byte1=0;
+		}
+		FlashByte_Rd(&UAdd.ucBuff[1],buff,Byte0);
+		buff=buff+Byte0;
+		UAdd.ulData=UAdd.ulData+Byte0;
+		if(Byte1>0)
+		{
+			FlashByte_Rd(&UAdd.ucBuff[1],buff,Byte1);
+			buff=buff+Byte1;
+			UAdd.ulData=UAdd.ulData+Byte1;
+		}
+	}
+}
+
+#endif

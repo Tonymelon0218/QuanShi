@@ -1,0 +1,2882 @@
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODCC1TYPEC
+OBJECT MODULE PLACED IN .\Objects\ModCC1Typec.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModCC1Typec.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZ
+                    -E) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG P
+                    -RINT(.\Listings\ModCC1Typec.lst) OBJECT(.\Objects\ModCC1Typec.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  I2CMast.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          #include "Include.h"
+   8          
+   9          #if ((CHIP_SEL == LT8711GXE)||(CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP)||(CHIP_SEL == LT6711G
+             -XE))
+  10          #if TYPECRX_EN == ENABLED
+              #define         VID_L8                          0x00
+              #define         VID_H8                          0x00
+              #define         PID_L8                          0x00
+              #define         PID_H8                          0x00
+              #define         XID_B0                          0x00
+              #define         XID_B1                          0x00
+              #define         XID_B2                          0x00
+              #define         XID_B3                          0x00
+              #define         FWVER                           0x00
+              #define         HWVER                           0x00
+              #define         SKEDBVER                        0x01
+              
+              ////====================================
+              //NOTE:BKFC_AF_REG--BKE5_D2_REG BIT4
+              //BKFC_2F_REG--BKE5_D4_REG BIT4
+              //Dvbus on:E5D4 bit4
+              //Dvbus off:E5D4 bit5  D02F:bit5
+              //Uvbus on:E5D2 bit4
+              //Uvbus off:E5D2 bit5  D0AF:bit5
+              
+              //=======================================
+              u8 code szCC_CtrlMsg[][2]= {
+              {0x4A,0x0A},//PR_SWAP           0
+              {0x46,0x0F},//PS_RDY            1
+              {0x43,0x02},//ACCEPT  UFP SINK  2
+              {0x44,0x02},//reject upf sink   3
+              {0x4b,0x0f},//Vconn Swap        4
+              {0x49,0x03},//DR_Swap           5
+              {0x90,0x0f},//not support       6
+              {0x4d,0x01},//soft reset        7
+              //{0x42,0x00},//gotomin           8
+              //{0x45,0x00},//ping              9
+              //{0x47,0x00},//get_source_cap
+              //{0x48,0x00},//get_sink_cap
+              //{0x4c,0x00},//wait
+              //{0x4e,0x00},//data_reset
+              //{0x4f,0x00},//data_reset_complete
+              //{0x51,0x00},//get_source_cap_extended
+              //{0x52,0x00},//get_status
+              //{0x53,0x00},//fr_swap
+              //{0x54,0x00},//get_pps_status
+              //{0x55,0x00},//get_country_codes
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 2   
+
+              //{0x56,0x00},//get_sink_cap_extended
+              //{0x57,0x00},//get_source_info
+              //{0x58,0x00},//get_version
+              };
+              
+              u8 code szCC_DataMsg[][10]={
+              //{0x41,0x11,0x96,0x90,0x01,0x3e},//0 Source Capabilities Message
+              //3E fixed to 2E,对于华为matepad pro10.8，如果这个值为3E，USB suspend为1，会导致USB不识别
+              {0x41,0x11,0x96,0x90,0x01,0x2e},//0 Source Capabilities Message    
+              {0x42,0x10,0x5a,0x68,0x01,0x13},//1  Request Message    
+              {0x4F,0x26,0x42,0x80,0x00,0xFF,0x00,0x00,0x01,0xFF},//2 Discover SVID Responder ACK 2
+              //{0x4F,0x28,0x43,0x80,0x01,0xFF,0X05,0x14,0X00,0x00},//3 Discover Modes Responder ACK    3 4lane
+              //{0x4F,0x28,0x43,0x80,0x01,0xFF,0X05,0x1c,0X00,0x00},//4 Discover Modes Responder ACK    4    2lane
+              //set to female to solve CVTE mini PC issue
+              {0x4F,0x28,0x43,0x80,0x01,0xFF,0X45,0x00,0x14,0x00},//3 Discover Modes Responder ACK    3 4lane
+              {0x4F,0x28,0x43,0x80,0x01,0xFF,0X45,0x00,0x1C,0x00},//4 Discover Modes Responder ACK    4    2lane
+              {0x4F,0x1A,0x44,0x81,0x01,0xFF},// Enter Mode  5
+              {0x4F,0x1A,0x45,0x81,0x01,0xFF},// Exit Mode   6
+              {0x4F,0x2C,0x50,0x81,0x01,0xFF,0x0a,0x00,0x00,0x00},//7 DP Status Updata  HPD Low ,No IRQ_HPD      7
+              {0x4F,0x2C,0x50,0x81,0x01,0xFF,0x8a,0x00,0x00,0x00},//8 DP Status Updata  HPD HIGH ,No IRQ_HPD  8
+              {0x4F,0x1E,0x51,0x81,0x01,0xFF},                    //9 0x11 DP Config   9
+              {0x4F,0x22,0x06,0x81,0x01,0xFF,0x0a,0x00,0x00,0x00},//10 Attention HPD LOW,No IRQ_HPD       10
+              {0x4F,0x22,0x06,0x81,0x01,0xFF,0x8a,0x00,0x00,0x00},//11 Attention HPD High,No IRQ_HPD      11
+              {0x4F,0x22,0x06,0x81,0x01,0xFF,0x8a,0x01,0x00,0x00},//12 Attention HPD HIGH,IRQ_HPD   12
+              {0x44,0x12,0x2c,0x91,0x01,0x2e},                   // 13 get sink cap     13
+              {0x4F,0x24,0x43,0x80,0x61,0x2f,0x00,0x00,0x00,0x00}, //14 0x612f
+              {0x4F,0x16,0x44,0x82,0x61,0x2f}, // 15 0x612f
+              {0x44,0x12,0x2c,0x91,0x81,0x2f}, //get sink cap    16 
+              {0x4F,0x1A,0x45,0x81,0x81,0x2f},// Exit Mode   17
+              {0x44,0x12,0x2c,0x91,0x01,0x06}, // 18 get sink cap     18
+              {0x44,0x12,0x2c,0x91,0x81,0x27}, //19 get sink cap    19 
+              //{0x4F,0x28,0x83,0x80,0x01,0xFF,0X05,0x14,0X00,0x00},// Discover Modes Responder ACK    20 4lane
+              //{0x4F,0x28,0x83,0x80,0x01,0xFF,0X05,0x1c,0X00,0x00},// Discover Modes Responder ACK 212lane
+              #if UCC_EMARK_SUPPORT == ENABLED
+              {0x4f,0x10,0x01,0x80,0x00,0xff},//SOP1 Discover_ID
+              #endif
+              };
+              #if NINTENDO_SWITCH == ENABLED
+              u8 code szCC_Nintendo_DataMsg[][14]={
+              {0x4F,0x34,0x42,0x80,0x00,0xFF,0x01,0xFF,0x7E,0x05,0x00,0x00,0x00,0x00},//0
+              {0x4F,0x28,0x43,0x80,0x01,0xFF,0X05,0X08,0X08,0x00},//1
+              {0x4F,0x1a,0x44,0x81,0x7E,0x05},                                        //2
+              {0x4f,0x35,0x40,0x00,0x7e,0x05,0x01,0x02,0x02,0x00,0x00,0x00,0x00,0x00},  //3
+              {0x4f,0x25,0x40,0x00,0x7e,0x05,0x01,0x02,0x1d,0x00},  //4
+              {0x4f,0x25,0x40,0x00,0x7e,0x05,0x00,0x02,0x1d,0x00},  //5
+              {0x4f,0x35,0x40,0x00,0x7e,0x05,0x00,0x02,0x17,0x00,0x00,0x00,0x00,0x00},  //6
+              {0x4f,0x35,0x40,0x00,0x7e,0x05,0x00,0x02,0x0c,0x00,0x9a,0x0c,0x00,0x00},  //7
+              {0x4f,0x35,0x40,0x00,0x7e,0x05,0x00,0x02,0x19,0x00,0x10,0x0b,0x6b,0x02},  //8
+              {0x4f,0x35,0x40,0x00,0x7e,0x05,0x01,0x02,0x02,0x00,0x00,0x00,0x14,0x80},  //9
+              {0x4f,0x35,0x40,0x00,0x7e,0x05,0x00,0x02,0x11,0x00,0x9a,0x0c,0x00,0x00},  //10
+              {0x4f,0x35,0x40,0x00,0x7e,0x05,0x00,0x02,0x07,0x00,0x02,0x10,0x18,0x00},  //11
+              {0x4f,0x25,0x40,0x00,0x7e,0x05,0x00,0x02,0x21,0x00},                                      //12    
+              };
+              u8 szNintendo_DisC_ID[22]={0x4f,0x52,0x41,0x80,0x00,0xff,0x7E,0x05,0x00,0x6c,
+              0x00,0x00,0x00,0x00,0x01,0x00,0x03,0x20,0x7B,0x00,0x00,0x51};//Discover Identity Nontendo 
+              u8 code szNintendoSwitch_SourceCap_Msg[10]={0x61,0x21,0x64,0x90,0x01,0x2a,0x04,0xb1,0x04,0x00};
+              
+              #endif
+              u8 code szLast_DataOrder_Buffer[2]={0x00,0x00};
+              u8 szCC_DiscoverIDMsg[22]= 
+              {0x4f,0x54,0x41,0x80,0x00,0xff,0x00,0x00,0x00,0x6c,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x00,0x00,
+             -0x00};//Discover Identity 0   
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 3   
+
+              //u8 code CC_Discover_Id_PD30[22]= //male 
+              //{0x4f,0x54,0x41,0x80,0x00,0xff,0x00,0x00,0x60,0x6c,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x00,0x0
+             -0,0x00};//Discover Identity 0 
+              //u8 code CC_Discover_Id_PD30[22]= //female
+              //{0x4f,0x54,0x41,0x80,0x00,0xff,0x00,0x00,0x40,0x6c,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x00,0x0
+             -0,0x00};//Discover Identity 0
+              //    
+              u8 szCC_SourceCapExt[30]= 
+              {0x81,0xfb,0x18,0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+             -0x00,
+              0x00,0x00,0x00,0x01,0x00,0x0b,0x00,0x00};
+              #if PDVERSION == PD31
+              u8 code szSink_CapExtended_Msg[30] = {0x8F,0xf1,0x18,0x80,VID_L8,VID_H8,PID_L8,PID_H8,XID_B0,XID_B1,XID_B2
+             -,XID_B3,FWVER,HWVER,
+              SKEDBVER,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x05,0x0F,0x0F,0x05,0x0F,0x0F,0x00,0x00};
+              u8 szSource_Info_Msg[6] = {0x8B,0x11,0x00,0x00,0x00,0x80};
+              u8 code szRevision_Msg[6] = {0x8c,0x11,0x00,0x00,0x10,0x31};//Ver 1.0 Rev:3.1
+              u8 code szEprMod_Msg[6] = {0x8a,0x11,0x00,0x00,0x00,0x01};
+              u8 code szEprRequest_Msg[10] = {0x89,0x21,0x2c,0x01,0x44,0x13,0x2c,0x91,0x81,0x08};
+              
+              u8 code szEprKeepAlive_Msg[6] = {0x90,0x91,0x02,0x80,0x03,0x00};
+              #endif
+              
+              u8 code szCCData_SourceCap[6] = {0x41,0x11,0x96,0x90,0x01,0x2e};
+              u8 code szCCData_Request[6] = {0x42,0x10,0x5a,0x68,0x01,0x13};
+              
+              u8 code szCCData_REQDiscoverId[6] = {0x6f,0x1D,0x01,0x80,0x00,0xff};//3 Discover Identity initiator
+              u8 code szCCData_REQDiscoverSvid[6] = {0x6F,0x1F,0x02,0x80,0x00,0xFF};//4 Discover SVIDs initiator
+              u8 code szCCData_REQDiscoverModes[6] = {0x6F,0x11,0x03,0x80,0x01,0xFF};//5 Discover Modes initiator
+              u8 code szCCData_REQEnterMode[6] = {0x6F,0x13,0x04,0x81,0x01,0xFF};//6 Enter Modes
+              
+              u8 code szCCData_REQExitMode[6] = {0x42,0x10,0x5a,0x68,0x01,0x13};
+              
+              u8 code szCCData_REQDpStatusUpdate[10] = {0x6F,0x25,0x10,0x81,0x01,0xFF,0x01,0x00,0x00,0x00};//7 DP Status
+             - Update initiator
+              u8 code szCCData_REQDpConfig_PINCE[10] = {0x6F,0x27,0x11,0x81,0x01,0xFF,0x06,0x04,0x00,0x00};// 1 4lane DP
+             - config
+              u8 code szCCData_REQDpConfig_PIND[10]   = {0x6F,0x27,0x11,0x81,0x01,0xFF,0x06,0x08,0x00,0x00};// 2 2lane D
+             -P Config
+              
+              u8 code szCCData_SinkCapPD20[6] = {0x44,0x12,0x2c,0x91,0x01,0x06};
+              u8 code szCCData_SinkCapPD30[6] = {0x44,0x12,0x2c,0x91,0x81,0x27};
+              
+              
+              u8 code szCCCtrl_PrSwap[2] = {0x4A,0x0A};
+              u8 code szCCCtrl_PsReady[2] = {0x46,0x0F};
+              u8 code szCCCtrl_Accept[2] = {0x43,0x02};
+              u8 code szCCCtrl_Reject[2] = {0x44,0x02};
+              u8 code szCCCtrl_VconnSwap[2] = {0x4b,0x0f};
+              u8 code szCCCtrl_DrSwap[2] = {0x49,0x03};
+              u8 code szCCCtrl_NotSupport[2] = {0x90,0x0f};
+              u8 code szCCCtrl_SoftReset[2] = {0x4d,0x01};
+              u8 code szCCCtrl_FrSwap[2]     = {0x53,0x00};//4 FR_SWAP;
+              
+              u8 code szCCCtrl_GotoMin[2] = {0x42,0x00};//gotomin           8
+              u8 code szCCCtrl_Ping[2] = {0x45,0x00};//ping              9
+              u8 code szCCCtrl_GetSourceCap[2] = {0x47,0x00};//get_source_cap
+              u8 code szCCCtrl_GetSinkCap[2] = {0x48,0x00};//get_sink_cap
+              u8 code szCCCtrl_Wait[2] = {0x4c,0x00};//wait
+              //u8 code szCCCtrl_DataReset[2] = {0x4e,0x00};//data_reset
+              //u8 code szCCCtrl_DataResetComplete[2] = {0x4f,0x00};//data_reset_complete
+              //u8 code szCCCtrl_GetSourceCapExtended[2] = {0x51,0x00};//get_source_cap_extended
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 4   
+
+              //u8 code sszCCCtrl_GetStatus[2] = {0x52,0x00};//get_status
+              //u8 code sszCCCtrl_FrSwap[2] = {0x53,0x00};//fr_swap
+              //u8 code sszCCCtrl_GetPPSStatus[2] = {0x54,0x00};//get_pps_status
+              //u8 code sszCCCtrl_GetCountryCodes[2] = {0x55,0x00};//get_country_codes
+              //u8 code sszCCCtrl_GetSinkCapExtended[2] = {0x56,0x00};//get_sink_cap_extended
+              //u8 code sszCCCtrl_GetSourceInfo[2] = {0x57,0x00};//get_source_info
+              //u8 code sszCCCtrl_GetVersion[2] = {0x58,0x00};//get_version
+              
+              
+              StructAms UCCAmsType;
+              StructAms DCCAmsType;
+              
+              StructCcStatus DCCStatus;
+              StructCcStatus UCCStatus;
+              StructCcMsg    DCCMSG;
+              StructCcMsg    UCCMSG;   
+              StructNintendoState CC1NINTENDOState;
+              //===========================================
+              //func  :used to indicate the typec communication is done ,when new cc communction must be cleared zero
+              //input :N/A
+              //output:1:meas cc is done , 0 means cc is on-going
+              //return:void
+              //Info  :N/A
+              //===========================================
+              u8 Mod_CC1ComDone_Get(void)
+              {
+                  #if CHIP_SEL == LT6711GXE
+                  if((UCCStatus.ucVDM_Step&BIT6_1)&&(UCCStatus.b1IsCc_done == TRUE))//todo
+                  #else
+                  if((UCCStatus.ucVDM_Step&BIT5_1)&&(UCCStatus.b1IsCc_done == TRUE))//todo
+                  #endif
+                  {
+                              return TRUE;
+                  }
+                  return FALSE;
+              }
+              
+              
+              //=============================================
+              //func  :send the attetion flage for the hpd or irq
+              //input :N/A
+              //output:1:meas cc is done , 0 means cc is on-going
+              //return:void
+              //Info  :N/A
+              //==============================================
+              
+              void Mod_CC1HpdIrq_Send(u8 ucAttentType)
+              {
+                  static u8 b1Atten_EN = 0;
+                  
+                  if(ucAttentType == ATTENTION_LOW)
+                  {
+                      if(UCCStatus.ucVDM_Step & BIT6_1)
+                      {
+                          UCCMSG.pDataOrder = szCC_DataMsg[10];  
+                          #if REMOVE_UART == DISABLED
+                          printLT(PRINT_PRIO_HIG,"\nATN LOW"); 
+                          #endif
+                          UCCStatus.ucVDM_Step &= BIT6_0;
+                          b1Atten_EN = 1;
+                      }
+                  }
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 5   
+
+                  else
+                  {
+                      if(ucAttentType == ATTENTION_HIGH)
+                      {
+                          UCCMSG.pDataOrder = szCC_DataMsg[11];
+                          #if REMOVE_UART == DISABLED
+                          printLT(PRINT_PRIO_HIG,"\nATN HIG");//need update 
+                          #endif
+                          UCCStatus.ucVDM_Step |= BIT6_1; 
+                          b1Atten_EN = 1;
+                      }
+                      else if(ucAttentType == ATTENTION_IRQ)
+                      {
+                          if(UCCStatus.ucVDM_Step & BIT6_1)
+                          {
+                              UCCMSG.pDataOrder = szCC_DataMsg[12];
+                              #if REMOVE_UART == DISABLED
+                              printLT(PRINT_PRIO_HIG,"\nATN IRQ");//need update 
+                              #endif
+                              b1Atten_EN = 1;             
+                          }
+                      }           
+                  } 
+                  if(b1Atten_EN == 1)
+                  {
+                      b1Atten_EN = 0;
+                      UCCMSG.b1Vdm_Msg = TRUE;
+                      UCCStatus.b1Multi_Function = (UCCStatus.uclaneCount == 4)?(0):(1);
+                      Mod_CC1Msg_Send();
+                  }
+              }   
+                  
+              void Mod_CC2Vari_Init(void)
+              {
+                  DCCStatus.b1DataRole = 0;
+                  DCCStatus.b1PowerRole = 0;
+                  DCCStatus.b1AdapterWithPD = FALSE;
+                  
+                  #if PD_PPS_EN == ENABLED
+                  DCCMSG.ucCcVersion = PD30;
+                  #else
+                  DCCMSG.ucCcVersion = PD20;
+                  #endif
+                  
+                  DCCMSG.ucMessageID = 0;
+                  
+                  DCCStatus.b1DataRole = 0;
+                  DCCStatus.b1PowerRole = 0;
+                  DCCStatus.ucRetryCounter = 0;
+                  DCCStatus.b1FrTriggle = FALSE;
+                  DCCMSG.b1RcvGoodCRC = 1;
+                  DCCStatus.b2Charger_Scan = PDSCANSTART;
+                  DCCStatus.b1Msg_ID_Change = 1;
+                  #if DCC_TOGGLE_SUPPORT == ENABLED
+                  DCCStatus.b1DccUfpMode = FALSE;
+                  DCCStatus.b1DccDfpMode = FALSE;
+                  #endif    
+                  #if NINTENDO_SWITCH == ENABLED
+                  CC1NINTENDOState.b2Switch_Ada_Online = NOT_SWITCH;
+                  #endif
+              }
+              void Mod_CC1CableVari_Init(void)
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 6   
+
+              {
+                  #if UCC_EMARK_SUPPORT == ENABLED 
+                  UCCStatus.ucSop1MsgStep = SOP1END;
+                  if(UCCStatus.b1UCcInput_type == FEMALE)
+                  {
+                      UCCStatus.ucCable5A = 0; 
+                  }
+                  else
+                  {
+                      UCCStatus.ucCable5A = 1; 
+                  }
+                  #else
+                  if(UCCStatus.b1UCcInput_type == FEMALE)
+                  {
+                      UCCStatus.ucCable5A = 0; 
+                  }
+                  else
+                  {
+                      UCCStatus.ucCable5A = 1; 
+                  }
+                  #endif
+              }
+              
+              void Mod_CC1Vari_Init(void)
+              {
+                  #if HUB_RESET_CTRL == ENABLED
+                  UCCStatus.b2HubResetHigh = HUBRESETLOW;//TBDY
+                  #endif
+                      #if CCTRY_MODE != NO_TRY
+                  UCCStatus.b2TRYTIMES = TRYTIMES;    
+                      #endif
+                  UCCStatus.b1IsCc_done = FALSE;
+                  UCCStatus.b1DataRole = 0;
+                  UCCStatus.b1PowerRole = 0;
+                      #if VCONNSWAP_SUPPORT == ENABLED 
+                  UCCStatus.b1VconnSwap_En = 0;
+                      #endif
+                      UCCStatus.b1PrDone = FALSE;
+                  UCCStatus.b1Multi_Function = 0;
+                  UCCStatus.b1PsRdy_Send  = 0;
+                  UCCStatus.b1WaitMsg_Receive = 0;
+                  UCCStatus.b1IsFlip = FALSE;
+                  UCCStatus.b1Flag_Source_Send = 0;
+                  UCCStatus.b1Toggle_DFP_EN = FALSE;
+                  UCCStatus.b2Hardreset_Hdl = HardRst_None;
+              //    UCCStatus.b1IsCc_done = 0;
+                  UCCStatus.b1CCDataMsg_Sent = FALSE;    
+                  UCCStatus.ucPRSended = 0;
+                  UCCStatus.ucPRSwaping = 0;
+                  UCCStatus.ucPRSwaped = 0;    
+                  UCCStatus.ucFRSwaping = FRSWAP_NULL;    
+                  UCCStatus.ucDrSwap_En = 0;
+                  UCCStatus.ucContract_Succeed =0;
+                  UCCStatus.ucSwap_Sent = 0;
+                  UCCStatus.ucRetryCounter = 0;   
+                  UCCStatus.ucFlow_Step = 0;
+                  UCCStatus.ucVDM_Step = 0;
+                  UCCStatus.ucnUccSourceCapCnt = 0;
+                  UCCStatus.b2SwapSourceStart = 0x00;
+                  Mod_CC1CableVari_Init();
+                  UCCStatus.b1Msg_ID_Change = 1;    
+                  UCCStatus.b2Toggle_enable = 0x01;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 7   
+
+                  UCCStatus.b1PrSwapDone = FALSE;
+                  UCCStatus.b1IsVconnSource = FALSE;
+                  #if PDCTS_USE == ENABLED
+                  UCCStatus.b1SwapToVconnSource = FALSE;
+                  #endif
+                  UCCMSG.b1RcvGoodCRC = TRUE;
+                  UCCMSG.b1SendEN = 0;
+                  DCCMSG.b1SendEN = 0;  
+                  UCCMSG.b1Vdm_Msg = FALSE; 
+                  UCCMSG.ucCcVersion = PD30;    
+                  UCCMSG.ucMessageID_New  =0xfe;
+                  UCCMSG.ucMessageID_Tmp = 0xff;
+                      
+                  UCCMSG.ucMsgType_Tmp = 0xff;
+                  UCCMSG.ucLastMsgType = 0xff;
+                  UCCMSG.ucMessageID = 0;   
+                  UCCMSG.pBuffer_Order = szLast_DataOrder_Buffer;
+                  UCCMSG.pLast_DataOrder = &szLast_DataOrder_Buffer[1];
+                  UCCAmsType.ucBist_Ams = 0;
+                  TR2 = 0;
+              
+                  #if NINTENDO_SWITCH == ENABLED
+                  CC1NINTENDOState.b1Switch_Online = FALSE; 
+                  CC1NINTENDOState.b1IsSwitch = FALSE;
+                  CC1NINTENDOState.b2SwitchIntoSleep = Sleep_None;
+                  CC1NINTENDOState.b2SwitchIntoWakeUp = Sleep_None;
+                  #endif
+                  #if NINTENDO_SWITCH_HDMIHPD == ENABLED
+                  CC1NINTENDOState.b1NintendoRecordTxHpd = Drv_HdmiTx_HpdDet();
+                  CC1NINTENDOState.b1HPDLongTime = FALSE;
+                  #endif
+                  DCCStatus.ucFlow_Step = 0;
+              //    #if DDCCI_EN == ENABLED
+              //    g_stDdcciStatus.b1Send_Differ_En = 0;
+              //    g_stDdcciStatus.ucAuxDDCCI = 0;
+              //    g_stDdcciStatus.ucLenth_Of_Data = 0;
+              //    g_stDdcciStatus.ucFS_Data_Remove = 0;
+              //    g_stDdcciStatus.ucLenth_DDCCI = 0;
+              //    memset(g_stDdcciStatus.szDDCCI_To_HDMI_BF,6,0x00);
+              //    memset(g_stDdcciStatus.szDDCCI_From_HDMI_BF,48,0x00);
+              //      #endif
+                  #if IIC_WITH_SOC == 0x01
+                  Mod_LtStatus_Clear(0x00);
+                  #endif
+                      #if PINE_SUPPORT == ENABLED
+                      UCCStatus.ucPin_Assignment = PIN_C;
+                      #endif
+                      
+                      UCCStatus.b1Pd31Test = 1;
+                      
+                      UCCStatus.ucRequestPdo = 0x02;
+                      DCCStatus.ucRequestPdo = 0x02;
+                  
+                  UCCStatus.b2AttentionType = ATTENTION_NULL;
+                  
+                  #if CHIP_SEL == LT6711GXE
+                  UCCStatus.b1CcDataRoleSet = DFP;  
+                  #else
+                  UCCStatus.b1CcDataRoleSet = UFP;
+                  #endif
+                  
+                  UCCStatus.b2VdmBusy = AMS_NONE;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 8   
+
+                  UCCStatus.b2DisIdSend_En = INITIATE_NONE;
+                  memset(&UCCAmsType,AMS_NONE,sizeof(UCCAmsType));
+              }
+              u8 Mod_CC1MsgType_Calc(IN u8 ucCommandType,IN u8 ucMessageType,IN u8 ucVdmType)
+              {
+                  u8 ucMessageTypeCal = 0;
+                  ucMessageTypeCal = ucMessageType;//real message type copy to cal
+                  switch(ucCommandType)
+                  {
+                      case Ctrl_Msg:
+                      case Data_Msg:
+                      case Ext_Msg:
+                          ucMessageTypeCal |= (ucCommandType<<5);
+                          break;
+                      case Vdm_Msg:
+                          if(ucVdmType)
+                          {
+                              ucMessageTypeCal |= (ucCommandType<<5);    
+                          }
+                          else
+                          {
+                              ucMessageTypeCal = 0xff;
+                          }    
+                          break;
+                      default:
+                          ucMessageTypeCal = 0xff;
+                      break;
+                  }
+                  return    ucMessageTypeCal;
+              }
+              
+              
+              void Mod_CC1Vconn_Off(void)
+              {
+                      VCONN1_GPIO_CTRL(LOW);
+                  VCONN2_GPIO_CTRL(LOW);
+              }
+              void Mod_CC1LockVari_Set(u8 ucDat_Role)
+              {
+                  if(ucDat_Role == UFP)
+                  {
+                              #if CCTRY_MODE == TRY_SRC
+                              if(UCCStatus.b2TRYTIMES == 0)
+                      {
+                          UCCStatus.b1IsVconnSource = FALSE;
+                                      #if REMOVE_UART == DISABLED
+                          printLT(PRINT_PRIO_HIG,"\nUUFP");  
+                                      #endif         
+                          UCCStatus.b1PowerRole = FALSE;
+                          UCCStatus.b1DataRole = FALSE;
+                          Drv_CC1Flip_Judge(&UCCStatus);
+                      }
+                      else
+                      {
+                          UCCStatus.b2TRYTIMES--;
+                          Drv_Cc1Sw_Ctrl(DISABLED);
+                          DRV_PowerRole_Set(UCC,SOURCE);   
+                                      #if REMOVE_UART == DISABLED      
+                          printLT(PRINT_PRIO_HIG,"\nTrySrc = 0x%02bx",UCCStatus.b2TRYTIMES);
+                                      #endif  
+                          Ocm_Delay1ms(100);
+                          Drv_Cc1Sw_Ctrl(ENABLED);
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 9   
+
+                          Ocm_Delay1ms(50);//Reserved enough time to set to Rp
+                      }        
+                              #else
+                      UCCStatus.b1IsVconnSource = FALSE;
+                      #if REMOVE_UART == DISABLED
+                      printLT(PRINT_PRIO_HIG,"\nUUFP");   
+                      #endif
+                      UCCStatus.b1PowerRole = FALSE;
+                      UCCStatus.b1DataRole = FALSE;
+                              #if CCTRY_MODE == TRY_SNK
+                      Drv_CC1Flip_Judge(&UCCStatus);
+                              #endif
+                      #endif
+                  }
+                  else if(ucDat_Role == DFP)
+                  {           
+                              #if CCTRY_MODE == TRY_SNK
+                              if(UCCStatus.b2TRYTIMES == 0)
+                      {
+                          UCCStatus.b1IsVconnSource = TRUE;
+                                      #if REMOVE_UART == DISABLED
+                          printLT(PRINT_PRIO_HIG,"\nUDFP");  
+                                      #endif         
+                          UCCStatus.b1PowerRole = TRUE;
+                          UCCStatus.b1DataRole = TRUE;
+                          Drv_CC1Flip_Judge(&UCCStatus);
+                      }
+                      else
+                      {
+                          UCCStatus.b2TRYTIMES--;
+                          Drv_Cc1Sw_Ctrl(DISABLED);
+                          DRV_PowerRole_Set(UCC,SINK);   
+                                      #if REMOVE_UART == DISABLED      
+                          printLT(PRINT_PRIO_HIG,"\nTrySrc = 0x%02bx",UCCStatus.b2TRYTIMES);
+                                      #endif  
+                          Ocm_Delay1ms(100);
+                          Drv_Cc1Sw_Ctrl(ENABLED);
+                          Ocm_Delay1ms(50);//Reserved enough time to set to Rp
+                      }        
+                              #else           
+                      UCCStatus.b1IsVconnSource = TRUE;
+                      #if REMOVE_UART == DISABLED
+                      printLT(PRINT_PRIO_HIG,"\nUDFP");     
+                      #endif
+                      UCCStatus.b1PowerRole = TRUE;
+                      UCCStatus.b1DataRole = TRUE;            
+                              #if CCTRY_MODE == TRY_SRC
+                      Drv_CC1Flip_Judge(&UCCStatus);
+                              #endif
+                              #endif
+                  }
+                      Mod_CC1Vconn_Off();
+                  #if NINTENDO_SWITCH_HDMIHPD == ENABLED
+                  CC1NINTENDOState.b1NintendoRecordTxHpd = Drv_HdmiTx_HpdDet();
+                  #endif
+                  UCCStatus.b1Toggle_DFP_EN = !UCCStatus.b1Toggle_DFP_EN;
+                  UCCStatus.ucnUccSourceCapCnt = 0;
+                  UCCMSG.ucMessageID = 0;
+                  UCCStatus.b2Toggle_enable = 0x02;
+                  UCCStatus.b1PrDone = FALSE;
+                  UCCStatus.ucnUccSourceCapCnt = 0;
+                  UCCStatus.ucContract_Succeed = 0;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 10  
+
+                  SOURCE_GPIO_CTRL(IN LOW);   
+                  #if CHIP_SEL != LT6711GXE
+                  Drv_DpRx_PhyShut();//
+                  #endif
+                  TR2 = 0;
+                      #if CCTRY_MODE == NO_TRY              
+                  Drv_CC1Flip_Judge(&UCCStatus);
+                      #endif
+                      UCCMSG.ucLastMsgType = 0xff;
+                  
+                  UCCStatus.b2AttentionType = ATTENTION_NULL;
+                  //to Solve Samsung Warning issue
+                  #if RX_PORT_SIGN == DP_PORT
+                  Drv_DpRx_AcAuxTermCtrl(DISABLED);
+                  Drv_DpRx_DcAuxResCtrl(DISABLED);
+                  #endif
+                  #if CHIP_SEL == LT6711GXE
+                  UCCStatus.b1CcDataRoleSet = DFP;  
+                  #else
+                  UCCStatus.b1CcDataRoleSet = UFP;
+                  #endif
+                  UCCStatus.b2VdmBusy = AMS_NONE;
+                  UCCStatus.b2DisIdSend_En = INITIATE_NONE;
+                  memset(&UCCAmsType,AMS_NONE,sizeof(UCCAmsType));
+              }
+              void Mod_CC1Toggle_Init(u8 vaule)
+              {         
+                  #if HUB_RESET_CTRL == ENABLED
+                  UCCStatus.b2HubResetHigh = HUBRESETLOW;
+                  HubReset_GPIO_Ctrl(LOW);
+                  #endif
+                      TR2 = 0;
+                      Mod_CC1Vconn_Off();
+                  SOURCE_GPIO_CTRL(IN LOW);
+                      UCCStatus.b1PrDone = FALSE;
+                  UCCStatus.ucnUccSourceCapCnt = 0;
+                  UCCStatus.b1IsCc_done = FALSE;
+                  UCCStatus.b2Toggle_enable = 0x01;
+                  UCCStatus.ucFlow_Step = 0;
+                  UCCStatus.ucVDM_Step = 0;
+                  UCCStatus.b1PowerRole = FALSE;
+                  UCCStatus.b1DataRole =  FALSE;
+                  UCCStatus.ucPRSwaped  = 0;
+                  UCCStatus.ucContract_Succeed = 0;
+                  UCCStatus.b1IsVconnSource = FALSE;
+                  #if PDCTS_USE == ENABLED
+                  UCCStatus.b1SwapToVconnSource = FALSE;
+                  #endif
+                      #if VCONNSWAP_SUPPORT == ENABLED 
+                  UCCStatus.b1VconnSwap_En = FALSE;
+                      #endif
+                  #if NINTENDO_SWITCH == ENABLED
+                  CC1NINTENDOState.b1IsSwitch = FALSE;
+                  #endif
+                  UCCStatus.ucDrSwap_En = 0; 
+                  Mod_CC1CableVari_Init();
+                  UCCMSG.b1Vdm_Msg = FALSE;
+                  UCCStatus.b1Multi_Function = FALSE;
+                  if(vaule)
+                  {
+                      DRV_PowerRole_Set(UCC,SOURCE);
+                      UCCStatus.b1Toggle_DFP_EN = TRUE;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 11  
+
+                  }
+                  else
+                  {
+                      DRV_PowerRole_Set(UCC,SINK);
+                      UCCStatus.b1Toggle_DFP_EN = FALSE;
+                  }
+              }
+              void Mod_CC1Toggle_Loop(void)
+              {
+                      u8 loop_u = 0;
+                      static u8 CC_Role =0;
+                      static u8 ucStage=0;
+                      static u32 ulLastTime=0;
+                      static u16 Toggle_Keep_Time = MS_50;
+                  if(DCCStatus.b2Charger_Scan != PDSCANEND)//after enter into DCCDET,then do CC_Toggle
+                  {
+                      ucStage = 0;
+                              return;
+                  }
+                      switch(ucStage)
+                      {
+                      case 0:
+                          Ocm_Timer_UpdLocalTime(INOUT &ulLastTime);
+                                      #if CCTRY_MODE == TRY_SNK
+                                      if(CC_Role == TRUE)
+                          {
+                              Toggle_Keep_Time = MS_30;
+                          }
+                          else
+                          {
+                              Toggle_Keep_Time = MS_70;
+                          }
+                                      #else
+                          if(CC_Role == TRUE)
+                          {
+                              Toggle_Keep_Time = MS_70;
+                          }
+                          else
+                          {
+                              Toggle_Keep_Time = MS_30;
+                          }
+                                      #endif
+                          ucStage++;
+                          break;
+                      case 1:
+                          if(UCCStatus.ucContract_Succeed == 0)
+                          {           
+                              if((Drv_CC2On_Det(SINK) == TRUE)&&(UCCStatus.ucPRSwaping != 2)&&(UCCStatus.ucPRSwaped == 0
+             -x00))////
+                              {
+                                  if(Drv_CC1RpOn_Scan() == 1)
+                                  {
+                                      if(UCCStatus.b1Toggle_DFP_EN == TRUE)
+                                      {
+                                          Mod_CC1LockVari_Set(DFP);                           
+                                          ucStage++;
+              //                            SOURCE_GPIO_CTRL(IN HIGH);
+                                      }
+                                  }
+                                  else if(Drv_CC1RdOn_Scan() == 1)
+                                  {
+                                      if(UCCStatus.b1Toggle_DFP_EN == FALSE)
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 12  
+
+                                      {
+                                          #if HUB_RESET_CTRL == ENABLED
+                                          UCCStatus.b2HubResetHigh = HUBRESETHIGH_PRE;
+                                          #endif
+                                          Mod_CC1LockVari_Set(UFP);                           
+                                          ucStage++;
+                                      }
+                                  }
+                                  else if(Ocm_Timer_IsOverFlow(&ulLastTime,Toggle_Keep_Time) == TRUE)
+                                  {
+                                      CC_Role = !CC_Role;
+                                      Mod_CC1Toggle_Init(CC_Role);
+                                                              #if CCTRY_MODE == TRY_SNK
+                                                              if(CC_Role == TRUE)
+                                                              {
+                                                                      Toggle_Keep_Time = MS_30;
+                                                              }
+                                                              else
+                                                              {
+                                                                      Toggle_Keep_Time = MS_70;
+                                                              }
+                                                              #else
+                                                              if(CC_Role == TRUE)
+                                                              {
+                                                                      Toggle_Keep_Time = MS_70;
+                                                              }
+                                                              else
+                                                              {
+                                                                      Toggle_Keep_Time = MS_30;
+                                                              }
+                                                              #endif
+                                      Ocm_Timer_UpdLocalTime(INOUT &ulLastTime);
+                                  }
+                                              }
+                                              else
+                                              {
+                                                      ucStage = 0;
+                                              }
+                                      }
+                                      else
+                                      {
+                                              ucStage = 0;
+                                      }
+                          break;
+                      default:
+                          ucStage = 0;
+                          break;                      
+                      }
+              }
+              #if DCC_TOGGLE_SUPPORT == ENABLED
+              void Mod_CC2Flip_Scan(void)
+              {
+                  if(Drv_CC2On_Det(SOURCE) == TRUE)
+                  {
+                      if(BKFC_B0_REG & BIT6_1) //
+                      {
+                          DCCPORTUSBMUX_CTRL(LOW);
+                          BKFC_AF_REG &= BIT1_0;//flip 1 soft
+                      }
+                      else if(BKFC_B0_REG & BIT4_1)//
+                      {
+                          DCCPORTUSBMUX_CTRL(HIGH);
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 13  
+
+                          BKFC_AF_REG |= BIT1_1;//flip 1 soft
+                      }
+                  }
+              }
+              
+              void Mod_CC2LockVari_Set(u8 ucDat_Role)
+              {
+                  if(ucDat_Role == UFP)
+                  {       
+                      #if REMOVE_UART == DISABLED
+                      printLT(PRINT_PRIO_HIG,"\nDUFP");    
+                      #endif
+                      DCCStatus.b1DccUfpMode = TRUE;
+                  }
+                  else if(ucDat_Role == DFP)
+                  {
+                      #if REMOVE_UART == DISABLED
+                      printLT(PRINT_PRIO_HIG,"\nDDFP");
+                      #endif
+                      Mod_CC2Flip_Scan();
+                      DCCStatus.b1DccDfpMode = TRUE;        
+                  }
+                  DCCStatus.b1Toggle_DFP_EN = !DCCStatus.b1Toggle_DFP_EN;       
+                  //Drv_CC1Flip_Judge(&UCCStatus);
+              }
+              void Mod_CC2Toggle_Init(u8 vaule)
+              {          
+                  ADAPTER_GPIO_CTRL(LOW);
+                  DCCPORTUSBMUX_CTRL(LOW);
+                  #if DCC_TOGGLE_SUPPORT == ENABLED
+                  DCCStatus.b1DccUfpMode = FALSE;
+                  DCCStatus.b1DccDfpMode = FALSE;
+                  #endif
+                  #if NINTENDO_SWITCH == ENABLED
+                  CC1NINTENDOState.b2Switch_Ada_Online = NOT_SWITCH;
+                  #endif
+                  DCCStatus.b1AdapterWithPD = FALSE;
+                  UCCStatus.b1PrDone = FALSE;
+                  UCCStatus.b1DataRole = FALSE;
+                  UCCStatus.ucPRSended = 0;
+                  UCCStatus.ucPRSwaping = 0;
+                  UCCStatus.ucPRSwaped = 0;        
+                  UCCStatus.ucFlow_Step = 0;
+                  if(vaule)
+                  {
+                      DRV_PowerRole_Set(DCC,SOURCE);
+                      DCCStatus.b1Toggle_DFP_EN = TRUE;
+                  }
+                  else
+                  {
+                      DRV_PowerRole_Set(DCC,SINK);
+                      DCCStatus.b1Toggle_DFP_EN = FALSE;
+                      DCCStatus.b2Charger_Scan = PDSCANSTART;
+                  }
+              }
+              void Mod_CC2Toggle_Loop(void)
+              {
+                      u8 loop_u = 0;
+                      static u8 CC_Role =0;
+                      static u8 ucStage=0;
+                      static u32 ulLastTime=0;
+                      static u16 Toggle_Keep_Time = MS_50;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 14  
+
+                  
+                      switch(ucStage)
+                      {
+                      case 0:
+                          if(DCCStatus.b1DccDfpMode == TRUE)
+                          {
+                              if(Drv_CC2On_Det(SOURCE) == FALSE)
+                              {
+                                  Mod_CC2Toggle_Init(FALSE);//Rp
+                              }
+                          }
+                          else if(DCCStatus.b1DccUfpMode == TRUE)
+                          {
+                              if(Drv_CC2On_Det(SINK) == FALSE)
+                              {
+                                  Mod_CC2Toggle_Init(TRUE);//Rp
+                              }
+                          }
+                          if((DCCStatus.b1DccDfpMode == FALSE)&&(DCCStatus.b1DccUfpMode == FALSE))
+                          {
+                              Ocm_Timer_UpdLocalTime(INOUT &ulLastTime);
+                              ucStage++;
+                          }            
+                          break;
+                      case 1:
+                          if((DCCStatus.b1DccDfpMode == FALSE)&&(DCCStatus.b1DccUfpMode == FALSE))
+                          {           
+                              if(Drv_CC2On_Det(SOURCE) == TRUE)//Source Detected
+                              {           
+                                  if(DCCStatus.b1Toggle_DFP_EN == TRUE)
+                                  {         
+                                      Mod_CC2LockVari_Set(DFP);
+                                      Ocm_Timer_UpdLocalTime(INOUT &ulLastTime);
+                                      ucStage++;
+                                  }
+                              }
+                              else if(Drv_CC2On_Det(SINK) == TRUE)
+                              {
+                                  if(DCCStatus.b1Toggle_DFP_EN == FALSE)
+                                  {
+                                      Mod_CC2LockVari_Set(UFP);
+                                      Ocm_Timer_UpdLocalTime(INOUT &ulLastTime);
+                                      ucStage++;
+                                  }
+                              }
+                              else if(Ocm_Timer_IsOverFlow(&ulLastTime,Toggle_Keep_Time) == TRUE)
+                              {
+                                  CC_Role = !CC_Role;
+                                  Mod_CC2Toggle_Init(CC_Role);
+                                  if(CC_Role == TRUE)
+                                  {
+                                      Toggle_Keep_Time = MS_50;
+                                  }
+                                  else
+                                  { 
+                                      Toggle_Keep_Time = MS_50;
+                                  }
+                                  Ocm_Timer_UpdLocalTime(INOUT &ulLastTime);
+                              }
+                                      }
+                                      else
+                                      {
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 15  
+
+                                              ucStage++;
+                                      }
+                          break;
+                      case 2:
+                          if(DCCStatus.b1DccDfpMode == TRUE)
+                          {
+                              if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_20) == TRUE)
+                              {
+                                  ADAPTER_GPIO_CTRL(HIGH);
+                                  ucStage++;
+                              }
+                              else if(Drv_CC2On_Det(SOURCE) == FALSE)
+                              {
+                                  Mod_CC2Toggle_Init(TRUE);//Rp
+                                  ucStage = 0;
+                              }
+                          }           
+                          else
+                          {
+                              ucStage++;
+                          }          
+                          break;
+                      default:
+                          ucStage = 0;
+                          break;                      
+                      }
+              }
+              #endif
+              //===============================================================end the toggle ini=======================
+             -==================================
+              
+              #if TYPEC_PRSWAP_EN == ENABLED
+              void Mod_CC1PrSwap_Send(void)
+              {
+              //    if((UCCStatus.ucPRSended == 1)&&(UCCStatus.b1DataRole == FALSE)&&(UCCStatus.ucPRSwaped==0))
+                  if((UCCStatus.ucPRSended == 1)&&(UCCStatus.b1PowerRole == FALSE)&&(UCCStatus.ucPRSwaped==0))
+                  {
+                      if(Drv_CC2On_Det(SINK) == TRUE)
+                      {
+                          ADAPTER_GPIO_CTRL(IN HIGH);
+                          DRV_CC_LogicRst(UCC);    
+                          UCCStatus.ucPRSended = 2;
+                          SOURCE_GPIO_CTRL(IN LOW);
+                          if(Mod_CC1DetOff_Judge() == TRUE)
+                          {
+                              #if REMOVE_UART == DISABLED
+                              printLT(PRINT_PRIO_HIG,"\nPROFF");
+                              #endif
+                              Mod_CC1DetOff_Action();
+                          }
+                          else
+                          {
+                              if(UCCStatus.ucPRSwaped == 0x00)
+                              {           
+                                  #if REMOVE_UART == DISABLED
+                                  printLT(PRINT_PRIO_HIG,"\nPrSend");
+                                  #endif
+                                  UCCMSG.pDataOrder = szCC_CtrlMsg[0];    
+                                  UCCStatus.ucPRSwaping = 1;
+                                  UCCStatus.ucPRSwaped =  1;    
+                                  UCCAmsType.ucPrSwap_Ams = AMS_READY;
+                                  UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,PR_Swap,StrVdm);                  
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 16  
+
+             -  
+                                  Mod_CC1Msg_Send();//// PR_SWAP 1                                    
+                              }
+                              else
+                              {
+                                  ;
+                              }
+                          }        
+                      }
+                      else
+                      {            
+                          #if REMOVE_UART == DISABLED
+                          printLT(PRINT_PRIO_HIG,"\nAda Lst");    
+                          #endif
+                          DCCStatus.b1AdapterWithPD = FALSE;
+                          ADAPTER_GPIO_CTRL(IN LOW);
+                          SOURCE_GPIO_CTRL(IN HIGH);
+                          DCCStatus.b2Charger_Scan = PDSCANSTART;
+                          UCCStatus.ucPRSwaped = 0;
+                          UCCStatus.ucPRSended = 0;
+                          #if NINTENDO_SWITCH == ENABLED
+                          CC1NINTENDOState.b2Switch_Ada_Online = NOT_SWITCH;
+                          #endif
+                                      if(UCCStatus.b1IsCc_done == FALSE)
+                                      {
+                                              UCCStatus.b1IsCc_done = TRUE; // Hdmi_Edid = 0x02;
+                                      }
+                      }        
+                  }
+              }
+              
+              void Mod_CC1PrSwap_Scan(void)
+              {
+                  static u8 ucStage_Change=0;
+                  static u8 ucStage=0;
+                  static u32 ulLastTime=0;
+                  if(UCCStatus.b2Toggle_enable == 0x01)
+                  {
+                      ucStage = 0;
+                      return;
+                  }
+                  if(UCCStatus.ucFlow_Step >= 2)
+                  {
+                      ucStage = 0;
+                      return;
+                  }
+                  if(UCCAmsType.ucPrSwap_Ams == AMS_DONE)
+                  {
+                      ucStage = 0;
+                      return;
+                  }
+                  if(UCCStatus.ucPRSended == 2)
+                  {
+                      ucStage = 0;
+                      return;
+                  }
+                  switch(ucStage)
+                  {
+                      case 0:
+                          ucStage_Change = 1;
+                          ucStage++;
+                          break;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 17  
+
+                      case 1:
+                          if(ucStage_Change)
+                          {
+                              ucStage_Change = 0;
+                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                          }
+                          if(Ocm_Timer_IsOverFlow(&ulLastTime,SECOND_3) == TRUE)//do not receive source cap
+                          {
+                              if(UCCStatus.ucContract_Succeed == 0)
+                              {
+                                  Drv_CC1Flip_Judge(&UCCStatus);
+                                  UCCStatus.b2Hardreset_Hdl = HardRst_Source;
+                                  ucStage = 0;
+                              }
+                              else
+                              {
+                                  ucStage_Change = 1;
+                                  ucStage++;
+                              }
+                          }
+                          else if(UCCStatus.ucContract_Succeed == 1)
+                          {
+                              ucStage_Change = 1;
+                              ucStage++;
+                          }        
+                          break;
+                      case 2:
+                          if(ucStage_Change)
+                          {
+                              ucStage_Change = 0;
+                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                          }
+                          if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_800) == TRUE)
+                          {      
+                              //ADAPTER_GPIO_CTRL(IN LOW);   
+                              Mod_CC1PrSwap_Send();    
+                              ucStage_Change = 1;
+                              ucStage++;
+                          }
+                          else if((UCCStatus.ucPRSended == 0)||(UCCStatus.ucPRSwaped))
+                          {
+                              ucStage_Change = 1;
+                              ucStage = 0;
+                          }
+                          break;
+                      case 3:
+                          if(ucStage_Change)
+                          {
+                              ucStage_Change = 0;
+                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                          }
+                          if(UCCStatus.ucPRSwaping == 1)
+                          {
+                              if(Ocm_Timer_IsOverFlow(&ulLastTime,SECOND_3)== TRUE)//can not receive accept
+                              {       
+                                  UCCStatus.b2Hardreset_Hdl = HardRst_Source;
+                                  ucStage = 0;
+                              }
+                              else
+                              {
+                                  ;
+                              }
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 18  
+
+                          }
+                          else
+                          {
+                              ucStage_Change = 1;
+                              ucStage++;
+                          }    
+                          break;   
+                      default:
+                          ucStage = 0;
+                          break;            
+                  } 
+              }
+              
+              #endif
+              #if VCONNSWAP_SUPPORT == ENABLED 
+              void Mod_CC1Vconn_Send(void)
+              {
+                  if(UCCStatus.b1VconnSwap_En == TRUE)
+                  {
+                      UCCStatus.b1WaitMsg_Receive = FALSE;
+                      UCCStatus.b1VconnSwap_En = FALSE;
+                      UCCStatus.ucSwap_Sent |= Vconn_Sent;
+                      UCCMSG.pDataOrder = szCC_CtrlMsg[4];
+                      UCCAmsType.ucVconnSwap_Ams = AMS_GOING;
+                      Mod_CC1Msg_Send();//Vconn Swap
+                      UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,VCONN_Swap,StrVdm);
+                  }        
+              }
+              #endif
+              void Mod_CC1DrSwap_Send(void)
+              {
+                      #if CHIP_SEL == LT6711GXE
+                  if(UCCStatus.b1DataRole == TRUE)
+                  {
+                      return;
+                  }
+                      #else
+                      if(UCCStatus.b1DataRole == FALSE)
+                  {
+                      return;
+                  }
+                      #endif
+                  if(UCCStatus.ucDrSwap_En == 1)
+                  {
+                      if(UCCMSG.ucCcVersion >= PD30)
+                      {
+                          DRV_RpCur_Sel(UCC,Rp_SinkTxNG);//Needed for Honor Magic3 Phone
+                      }
+                      Ocm_Delay1ms(20);//Needed for Honor Magic3 Phone
+                      UCCStatus.b1WaitMsg_Receive = FALSE;
+                              #if VCONNSWAP_SUPPORT == ENABLED 
+                      UCCStatus.b1VconnSwap_En = FALSE;
+                              #endif
+                      if((UCCStatus.ucDrSwap_En == 1)&&(UCCStatus.ucFlow_Step < 2))
+                      {
+                          printLT(PRINT_PRIO_HIG, "\nDR_Swap send");
+                          UCCStatus.ucSwap_Sent &= DR_No_Sent;
+                          UCCStatus.ucDrSwap_En = 0;
+                          UCCMSG.pDataOrder = szCC_CtrlMsg[5];    
+                          Mod_CC1Msg_Send();//DR_Swap
+                          UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,DR_Swap,StrVdm);
+                      }
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 19  
+
+                              Ocm_Delay1ms(1);
+                      if(UCCMSG.ucCcVersion >= PD30)
+                      {
+                          DRV_RpCur_Sel(UCC,Rp_SinkTxOK);
+                      }
+                      #if HUB_RESET_CTRL == ENABLED
+                      UCCStatus.b2HubResetHigh = HUBRESETHIGH_PRE;
+                      #endif
+                  }        
+              }
+              void Mod_CC1WaitMsg_Send(void)//use Timer to do this
+              {
+                  if(UCCStatus.b1WaitMsg_Receive== TRUE)
+                  {
+                      if(UCCAmsType.ucPrSwap_Ams == AMS_READY)
+                      {
+                          UCCStatus.ucPRSwaping = 1;
+                      }
+                      UCCMSG.pDataOrder = UCCMSG.pLast_DataOrder;
+                      UCCStatus.b1WaitMsg_Receive = FALSE;
+                      Mod_CC1Msg_Send();    
+                  }
+              }
+              void Mod_CC1SwapMsg_Scan(void)
+              {
+                  static u8 ucStage=0;
+                  static u32 ulLastTime=0;
+                  if(UCCStatus.ucFlow_Step >= 2)
+                  {
+                      ucStage = 0;
+                      return;
+                  }
+                      #if VCONNSWAP_SUPPORT == ENABLED 
+                      if((UCCStatus.b1VconnSwap_En== FALSE)&&(UCCStatus.ucDrSwap_En != 1)&&(UCCStatus.b1WaitMsg_Receive== FALSE
+             -))
+                  #else
+                      if((UCCStatus.ucDrSwap_En != 1)&&(UCCStatus.b1WaitMsg_Receive== FALSE))
+                      #endif
+                      {
+                      ucStage = 0;
+                      return;
+                  }
+                  switch(ucStage)
+                  {
+                      case 0:
+                          Ocm_Timer_UpdLocalTime(&ulLastTime);
+                          ucStage++;
+                          break;
+                      case 1:
+                          if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_500) == TRUE)
+                          {
+                                              #if VCONNSWAP_SUPPORT == ENABLED 
+                              Mod_CC1Vconn_Send();
+                                              #endif
+                              Mod_CC1DrSwap_Send();
+                              Mod_CC1WaitMsg_Send();
+                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                              ucStage++;
+                          }
+                          else
+                          {
+                              ;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 20  
+
+                          }
+                          break;
+                      default:
+                          ucStage = 0;
+                          break;            
+                  }
+              }    
+              void Mod_Cc1VconnSwap_Handle(void)
+              {
+                      #if VCONNSWAP_SUPPORT == ENABLED 
+                  static u32 ulLastTime = 0;
+                  if(UCCAmsType.ucVconnSwap_Ams == AMS_NONE)
+                  {
+                      return;
+                  }
+                  if(UCCAmsType.ucVconnSwap_Ams == AMS_DONE)
+                  {
+                      return;
+                  }
+                  if(UCCAmsType.ucVconnSwap_Ams == AMS_GOING)
+                  {
+                      UCCAmsType.ucVconnSwap_Ams = AMS_GOEXP;
+                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+                  }
+                  if(UCCAmsType.ucVconnSwap_Ams == AMS_GOEXP)
+                  {
+                      if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_100) == TRUE)
+                      {
+                          Ocm_Timer_UpdLocalTime(&ulLastTime);
+                          UCCAmsType.ucVconnSwap_Ams = AMS_DONE;
+                          UCCStatus.b1IsVconnSource = FALSE;
+                          Mod_CC1Vconn_Off();     
+                          Mod_Cc1DrSwap_Set();
+                      }
+                  }
+                      #endif
+              }
+              void Mod_CC1Unlock_Init(void)
+              {
+                  UCCStatus.b1PowerRole = FALSE;
+                  UCCStatus.b1DataRole =  FALSE;
+                  UCCStatus.ucPRSwaped  = 0;
+                  UCCStatus.ucnUccSourceCapCnt = 0;
+                  UCCStatus.b2Toggle_enable = 0x01;
+                  UCCStatus.ucContract_Succeed = 0;
+                  #if VCONNSWAP_SUPPORT == ENABLED 
+                  UCCStatus.b1VconnSwap_En = FALSE;
+                  #endif
+                  UCCStatus.ucDrSwap_En = 0;
+                  SOURCE_GPIO_CTRL(IN LOW);
+                  UCCStatus.b1Toggle_DFP_EN = !UCCStatus.b1Toggle_DFP_EN;
+              }
+              #if UCC_EMARK_SUPPORT == ENABLED
+              
+              void Mod_CC1Emark_Comm(void)
+              {
+                      u8 ucSop1MsgCnt;
+                  
+                  DRV_CcOrder_Set(UCC,CABLERESET);
+                  Ocm_Delay1ms(3);
+                      for(ucSop1MsgCnt=0;ucSop1MsgCnt<10;ucSop1MsgCnt++)
+                      {
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 21  
+
+                              if(UCCStatus.ucSop1MsgStep == SOP1SENDING)
+                              {               
+                                      if(ucSop1MsgCnt == 5)
+                                      {
+                                              DRV_CcOrder_Set(UCC,CABLERESET);
+                                              Ocm_Delay1ms(10);
+                                      }
+                                      UCCMSG.ucMessageID = 0;
+                                      UCCMSG.pDataOrder = szCC_DataMsg[20];
+                                      Mod_CC1MessageSOP1_Send();
+                                      Ocm_Delay1ms(3);
+                              }       
+                              else
+                              {
+                                      break;
+                              }
+                      }
+              }
+              void Mod_CC1Emark_Initiate(void)
+              {
+                  UCCStatus.ucCable5A = 0;
+                  Mod_CC1Vconn_Off();
+                  Drv_CC1Ra_Det();
+                  Ocm_Delay1ms(20);
+                  UCCStatus.ucSop1MsgStep = SOP1SENDING;
+                  Mod_CC1Emark_Comm();
+                  Ocm_Delay1ms(1);//
+              }
+              void Mod_CC1Emark_Done(void)
+              {
+                  UCCStatus.ucSop1MsgStep = SOP1END;
+                  BKFC_19_REG = 0x01;
+                  BKFC_17_REG = 0x40;
+                  BKFC_18_REG = 0x00;
+              }
+              #endif
+              void Mod_CC1SourceCapMsg_Loop(void)
+              {
+                  u8 ucSourceCapPerCycle;
+                  static u8 ucStage_Change = 0;
+                  static u8 ucStage=0;
+                  static u32 ulLastTime=0;
+                  if(UCCStatus.ucContract_Succeed||(UCCStatus.b2Toggle_enable==0x01))
+                  {
+                      return;
+                  }
+                      if(UCCStatus.b2Toggle_enable==0x02)
+                      {
+                              UCCStatus.b2Toggle_enable = 0x00;
+                              ucStage = 0x00;
+                  }
+                  switch(ucStage)
+                  {
+                      case 0:
+                          Ocm_Timer_UpdLocalTime(&ulLastTime);
+                          ucStage++;
+                          ucStage_Change = 1;
+                          break;
+                      case 1:
+                          //MS_100 for OPPO findX3 and Switch; if MS_20,switch will not ack source_cap
+                                      //MS_150 for 黑鲨,if MS_100, 1/3的概率会出现不回包的情况
+                          if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_150) == TRUE)
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 22  
+
+                          {
+                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                              ucStage++;
+                              ucStage_Change = 1;
+                          }
+                          break;
+                      case 2:        
+                          if((UCCStatus.ucContract_Succeed == 0x00)&&(UCCStatus.b1PowerRole == TRUE)&&(UCCStatus.b1DataR
+             -ole == TRUE))
+                          {
+                              if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_100) == TRUE)
+                              {
+                                  if(UCCStatus.ucnUccSourceCapCnt < nCapsCount)
+                                  {    
+                                      UCCStatus.ucnUccSourceCapCnt++;
+                                      for(ucSourceCapPerCycle = 0; ucSourceCapPerCycle< 4; ucSourceCapPerCycle++)
+                                      {        
+                                          if(Drv_CC1RpOn_Scan() == 0)
+                                          {
+                                              Mod_CC1Unlock_Init();
+                                              ucStage = 0;
+                                              break;
+                                          }
+                                          else                
+                                          {        
+                                              if(ucStage_Change == 1)
+                                              {
+                                                                                      #if UCC_EMARK_SUPPORT == ENABLED
+                                                  if(UCCStatus.b1UCcInput_type == FEMALE)
+                                                  {
+                                                      Mod_CC1Emark_Initiate();
+                                                      Ocm_Delay1ms(20);
+                                                      Mod_CC1Emark_Done();
+                                                  }
+                                                                                      #endif
+                                                  ucStage_Change = 0;
+                                                  ADAPTER_GPIO_CTRL(IN HIGH);
+                                                  SOURCE_GPIO_CTRL(IN HIGH);
+                                                  Ocm_Timer_UpdLocalTime(&ulLastTime);
+                                                  break;
+                                              }
+                                              else
+                                              {
+                                                  ADAPTER_GPIO_CTRL(IN HIGH);
+                                                  if(!UCCStatus.ucContract_Succeed) //source cap
+                                                  {
+                                                      DRV_RpCur_Sel(UCC,Rp_SinkTxNG);
+                                                      Ocm_Delay1ms(4);
+                                                      UCCStatus.ucPRSwaped  = 1;    //necessary for dr swap as the role 
+             -of UFP
+                                                      UCCStatus.b1PowerRole = TRUE;
+                                                      UCCStatus.b1DataRole = TRUE;
+                                                                                              #if VCONNSWAP_SUPPORT == ENABLED 
+                                                      UCCStatus.b1VconnSwap_En = FALSE;  
+                                                                                              #endif  
+                                                      UCCStatus.ucDrSwap_En = 0;    
+                                                      UCCMSG.ucMessageID = 0;
+                                                      
+                                                      Mod_CC1SourceCapMsg_Set();    
+                                                      UCCStatus.ucFlow_Step = 6;
+                                                                                              #if CCTRY_MODE != NO_TRY
+                                                                                              UCCStatus.b2TRYTIMES = TRYTIMES;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 23  
+
+                                                                                              #endif
+                                                      //#if ((LT8711UXD == DISABLED)||(TYPEC_INPUT_TYPE == FEMALE))     
+             -            
+                                                      Drv_CC1Flip_Judge(&UCCStatus);
+                                                      //#endif
+                                                      Mod_CC1Msg_Send();
+                                                      UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Data_Msg,Source_Capabil
+             -ities,StrVdm);    
+                                                      Ocm_Delay1ms(2);
+                                                  }
+                                                  else
+                                                  {
+                                                      ucStage++;
+                                                  }    
+                                              }                                
+                                          }
+                                      }
+                                  }
+                                  else
+                                  {
+                                      UCCStatus.ucnUccSourceCapCnt = nCapsCount;
+                                      #if HUB_RESET_CTRL == ENABLED
+                                      UCCStatus.b2HubResetHigh = HUBRESETHIGH_DONE;
+                                      #endif
+                                  }
+                                  Ocm_Timer_UpdLocalTime(&ulLastTime);
+                              }
+                              else                     
+                              {
+                                  if(Drv_CC1RpOn_Scan() == 0)
+                                  {
+                                      Mod_CC1Unlock_Init();
+                                      ucStage = 0;                      
+                                  }                 
+                              }
+                          } 
+                          else
+                          {
+                              ucStage = 0;
+                          }
+                          break;
+                      default:
+                          ucStage = 0;
+              //            ucRtn = 1;
+                          break;                    
+                  }    
+              //    return ucRtn;
+              }
+              #if ((TYPEC_PRSWAP_EN == ENABLED)||(TYPEC_DRSWAP_EN == ENABLED))
+              void Mod_CC1DetOff_Action(void)
+              {
+                  u16 usWaitRequestDone;
+                      Mod_CC1Vconn_Off();
+                  #if RX_PORT_SIGN == DP_PORT
+                  Drv_System_IntSet(IRQ_DPRX_AUX_INT, OFF);
+                  Drv_System_IntClr(IRQ_DPRX_AUX_INT);
+                  
+                  Drv_DpRx_AcAuxTermCtrl(DISABLED);
+                  Drv_DpRx_DcAuxResCtrl(DISABLED);
+                  #endif
+                  
+                  Ocm_Delay1ms(1);
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 24  
+
+                  Drv_Cc1Sw_Ctrl(DISABLED);
+                  
+                  Ocm_Delay1ms(26);//big than 25ms.less than 35ms 
+                      SOURCE_GPIO_CTRL(IN LOW);
+                  DISCSOURCE_GPIO_CTRL(IN HIGH);
+                      #if HUB_RESET_CTRL == ENABLED
+                  HubReset_GPIO_Ctrl(LOW);
+                      #endif
+                  
+              //      Mod_CC1SwapMsg_Scan(0);
+                  DRV_CC_LogicRst(UCC);
+                  DRV_PowerRole_Set(UCC,SINK);
+                      Mod_CC1Vari_Init();
+                  BKA2_BA_REG = 0x08;//400mv
+                  if(DCCStatus.b1AdapterWithPD)       
+                  {
+                      DCCMSG.pDataOrder = szCC_DataMsg[1];//request 5v
+                      Mod_CC2Msg_Send();//request 5v
+                      DCCStatus.ucFlow_Step = 2;//INITITATE REQUEST
+                  }
+              //    DRV_HdmiTx_TxPllReset();//TBD
+                  //Mod_CC1Vari_Init();
+                  #if RX_PORT_SIGN == DP_PORT
+                  #if DPRX_HDCP_DEC_MODE != NO_HDCP
+                  Drv_System_IntSet(IRQ_RXHDCP1X_INT,OFF);//
+                  Drv_System_IntSet(IRQ_RXHDCP2X_INT,OFF);//
+                  
+                  Drv_HdcpRx_StateClear();
+                  #endif
+                  #endif
+                  Ocm_Delay1ms(100);
+                  for(usWaitRequestDone=0;usWaitRequestDone<300;usWaitRequestDone++)
+                  {
+                      if(DCCStatus.ucFlow_Step == 2)
+                      {
+                          Ocm_Delay1ms(1);
+                      }
+                      else
+                      {
+                          break;
+                      }
+                  }
+                  DISCSOURCE_GPIO_CTRL(IN LOW);
+                  Drv_Cc1Sw_Ctrl(ENABLED);
+                  #if REMOVE_UART == DISABLED
+                  printLT(PRINT_PRIO_HIG,"\nUCC OFF");
+                  #endif
+                 
+              }
+              u8 Mod_CC1DetOff_Scan(void)
+              {
+                  if(((BKFC_30_REG&0xf0)==0x00)||((((BKFC_30_REG&0xf0)==0x80)||((BKFC_30_REG&0xf0)==0x20))&&(BKA2_B1_REG
+             -&BIT2_1))) //UCC OUT
+                  {
+                      return TRUE; 
+                  }
+                  return FALSE;
+              }
+              //===============================
+              //detect ucc state
+              //1 stands for out,0 stands for in
+              u8 Mod_CC1DetOff_Judge(void)
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 25  
+
+              {
+                  bool CC_Off_Line = FALSE;
+                  u8 ucCC_Count;
+                  //For LT8711UXD,UCC2 maybe used for HUB reset;in this case,CC detect will abnormal
+                  if(Mod_CC1DetOff_Scan() == TRUE)
+                  {
+                              Ocm_Delay1us(3);
+                      for(ucCC_Count=0;ucCC_Count < 100;ucCC_Count++)
+                      {
+                          if(Mod_CC1DetOff_Scan() == TRUE)
+                          {
+                              CC_Off_Line = TRUE;
+                                              Ocm_Delay1us(3);
+                          }
+                          else
+                          {
+                              CC_Off_Line = FALSE;
+                              break;
+                          }
+                      }
+                  }
+                  return CC_Off_Line;
+              }
+              void Mod_CC1PSSourceOff_Det(void)// ps rdy off timer detect
+              {
+                  static u8 ucStage= 0;
+                  static u32 ulLastTime= 0;
+                  switch(ucStage)
+                  {
+                      case 0:
+                          Ocm_Timer_UpdLocalTime(&ulLastTime);
+                          ucStage++;
+                      case 1:          
+                          if(UCCStatus.ucPRSwaping == 2)
+                          {
+                              if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_835) == TRUE)//tPSSourceOff
+                              {        
+                                  UCCStatus.b2Hardreset_Hdl = HardRst_Initate;
+                                  ucStage++;   
+                              }
+                              else
+                              {
+                                  ;
+                              }                
+                          }
+                          else
+                          {
+                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                              ucStage = 0;
+                          }
+                          break;
+                      default:
+                          ucStage = 0;
+                          break;            
+                  }  
+              }
+              #endif
+              
+              //u8 Chip_Dcc_Lost_Det(IN u8 ucPow_Role)
+              //{
+              //    u8 ucDccState = 0;
+              //    ucDccState = BKD0_1E_REG&0xf0;//DCC state
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 26  
+
+              //      if(ucPow_Role&SINK)
+              //      {
+              //        if((UCCStatus.ucFRSwaping == 0)&&(DCCStatus.b2Charger_Scan == FALSE))
+              //        {
+              //            if((BKE2_27_REG & BIT2_1) == 0x00)//Sink Mode
+              //            {
+              //                if((ucDccState == 0)&&(DCCStatus.ucDccState_Tmp != 0))
+              //                {
+              //                    ADAPTER_GPIO_CTRL(LOW);
+              //                    DCCMSG.ucCcVersion = PD30;
+              //                    DCCStatus.b2Charger_Scan = TRUE;
+              //                    DCCStatus.b1AdapterWithPD = FALSE;
+              //                    DCCMSG.ucMessageID = 0;
+              //                    DCCStatus.b2Charger_Scan = TRUE;                 
+              //                    DCCStatus.b1DataRole = FALSE;
+              //                    DCCStatus.b1PowerRole = FALSE;
+              //                    DCCStatus.b1Msg_ID_Change = TRUE;                  
+              //                    DCCMSG.b1RcvGoodCRC = TRUE;
+              //                    UCCStatus.b1PrDone = FALSE;  
+              //                    UCCStatus.ucPRSended = 0;
+              //                    UCCStatus.ucPRSwaping = 0;
+              //                    UCCStatus.ucPRSwaped = 0;         
+              //                    UCCStatus.ucFlow_Step = 0;
+              //                    DCCStatus.ucDccState_Tmp = 0;
+              //                    return TRUE;
+              //                }
+              //            }
+              //        }       
+              //      }
+              //      if(ucPow_Role&SOURCE)
+              //      {
+              ////            if(((BKE2_27_REG&0x04)==0x04)&&(BKD0_30_REG&0x50))//DCC RP Mode
+              ////            {
+              ////                    return TRUE;
+              ////            }
+              //      }
+              //      return FALSE;
+              //}
+              void Mod_CC2Flip_ScanDet(void)
+              {
+                      if(Drv_CC2On_Det(SINK) == TRUE)
+                  {
+                      if(BKFC_B0_REG&0xc0) //
+                      {
+                          BKFC_AF_REG &= BIT1_0;//flip 1 soft
+                      }
+                      else if(BKFC_B0_REG&0x30)//
+                      {
+                          BKFC_AF_REG |= BIT1_1;//flip 1 soft
+                      }
+                  }
+              }
+              #if ((TYPEC_PRSWAP_EN == ENABLED)||(TYPEC_DRSWAP_EN == ENABLED))
+              void Mod_CC2PowerOn_Det(void)
+              {
+                  static u32 ulLastTime = 0;
+                  static u8 ucStage = 0x00;
+                  static u8 ucHardRst_Cnt = 0x00;
+                      #if DCC_TOGGLE_SUPPORT == ENABLED
+                  u8 ucLoopCnt;
+                      #endif
+                  Mod_CC2Flip_ScanDet();
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 27  
+
+                      #if DCC_TOGGLE_SUPPORT == ENABLED
+                  Mod_CC2Flip_Scan();
+                      #endif
+                  if((Drv_CC2On_Det(SINK) == TRUE)&&(UCCStatus.ucFRSwaping == FRSWAP_NULL))
+                  {    
+                      if(DCCStatus.b2Charger_Scan == PDSCANSTART)
+                      {
+                          #if REMOVE_UART == DISABLED
+                          printLT(PRINT_PRIO_HIG, "\nAdaP");
+                          #endif
+                          ucStage = 0x00;
+                          UCCMSG.szPDP_Value[0] = 0x07;
+                          UCCMSG.szPDP_Value[1] = 0x07;
+                          ADAPTER_GPIO_CTRL(IN LOW);;
+                          DCCStatus.b1FrTriggle = FALSE;
+                          DCCStatus.b2Charger_Scan = PDSCANGOING;           
+                          #if DCC_TOGGLE_SUPPORT == ENABLED
+                          for(ucLoopCnt = 0;ucLoopCnt<250;ucLoopCnt++)
+                          {        
+                              Ocm_Delay1ms(1);
+                              if(Drv_CC2On_Det(SINK) == FALSE)
+                              {
+                                  Mod_CC2Toggle_Init(FALSE);//Rp
+                                  DCCStatus.b2Charger_Scan = PDSCANSTART;
+                                  break;
+                              }            
+                          }
+                          #endif
+                      }                              
+                      if(DCCStatus.b2Charger_Scan == PDSCANGOING)
+                      {          
+                          if(Drv_CC2On_Det(SINK) == FALSE)
+                          {
+                              ucStage = 0x00;
+                              DCCStatus.b2Charger_Scan = PDSCANSTART;
+                              return;
+                          }
+                          Mod_CC2Flip_ScanDet();
+                              switch(ucStage)
+                          {
+                              case 0x00:
+                                  ucStage++;  
+                                  ucHardRst_Cnt = 0;
+                                  Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                                  break;
+                              case 0x01:   
+                                  if((DCCStatus.b1AdapterWithPD)||(Ocm_Timer_IsOverFlow(&ulLastTime,SECOND_1)))
+                                  {
+                                      ucStage++; 
+                                      Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                                  }
+                                  break;
+                              case 0x02:
+                                  if(DCCStatus.b1AdapterWithPD == FALSE)//没有收到包
+                                  {
+                                      if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_500))//500ms发送一次hardreset
+                                      {
+                                          if(ucHardRst_Cnt <= nHardResetCount)//最多发送三次
+                                          {
+                                              ucHardRst_Cnt++;
+                                              DRV_CcOrder_Set(DCC,HARDRESET);
+                                              Ocm_Timer_UpdLocalTime(&ulLastTime); 
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 28  
+
+                                          }
+                                          else//发完就结束
+                                          {      
+                                              #if TYPEC_PRSWAP_EN == ENABLED
+                                              if((Mod_CC1DetOff_Judge() == FALSE)&&(UCCStatus.ucPRSended == 0)&&(UCCStat
+             -us.b1PowerRole ==FALSE))    //
+                                              {
+                                                  UCCStatus.ucPRSended = 1;
+                                              }
+                                              #endif
+                                              ucHardRst_Cnt = 0;
+                                              ucStage++; 
+                                          }
+                                      }
+                                  }
+                                  else
+                                  {
+                                      ucStage++; 
+                                  }
+                                  break;
+                              case 0x03:
+                                  ucHardRst_Cnt = 0;
+                                  ucStage++;
+                                  DCCStatus.b2Charger_Scan = PDSCANEND;
+                                  SOURCE_GPIO_CTRL(IN LOW);
+                                  ADAPTER_GPIO_CTRL(IN HIGH);
+                                  break;
+                              default:
+                                  ucStage = 0;
+                                  break;
+                              
+                          }
+                      }
+                  }
+              }
+              
+                      
+              #endif
+              #if  TYPEC_FRSWAP_EN == ENABLED
+              //void Mod_CC2FrSwapDischarge_Scan(void)
+              //{
+              //    u8 Discharge_Cnt = 0;
+              //    if(UCCStatus.ucFRSwaping == 2)
+              //    {        
+              //        DISCADAPTER_GPIO_CTRL(HIGH);
+              //        for(Discharge_Cnt= 0;Discharge_Cnt< 100;Discharge_Cnt++)
+              //        {
+              //            if(Drv_CC2On_Det(SINK) == TRUE)
+              //            {
+              //                Ocm_Delay1ms(20);
+              //            }
+              //            else
+              //            {
+              //                break;
+              //            }
+              //        }            
+              //        Ocm_Delay1ms(100); 
+              //        DISCADAPTER_GPIO_CTRL(LOW);
+              //        UCCStatus.ucFRSwaping = 0;
+              //    }    
+              //}
+              
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 29  
+
+              void Mod_CC2FrSwapDischarge_Scan(void)
+              {
+                  static u32 ulLastTime = 0;
+                  static u8 ucStage = 0x00;
+                  static u8 ucStateChange = 0x00;
+                  if(UCCStatus.ucFRSwaping == FRSWAP_NULL)
+                  {
+                      // in case of abnormal cases
+                      if(Drv_GetIO_State(GPIO28_SD1B)==HIGH)
+                      {
+                          DISCADAPTER_GPIO_CTRL(LOW);
+                      }
+                      if(Drv_GetIO_State(GPIO19_SD0A_VSYNC)==HIGH)
+                      {
+                          DISCSOURCE_GPIO_CTRL(LOW);
+                      }
+                      ucStage = 0;
+                      return;
+                  }
+                  switch(ucStage)
+                  {
+                      case 0x00:
+                          ucStage++;
+                          ucStateChange = 0x01;
+                          Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                          break;
+                      case 0x01://此处等待FR swap收到
+                          //如果一段时间内没有收到FRSWAP，处理
+                          if(UCCStatus.ucFRSwaping == FRSWAP_INITIATE)
+                          {
+                              if(Ocm_Timer_IsOverFlow(&ulLastTime,SECOND_1))//1s 没有收到FR swap
+                              {
+                                  ;///TBD
+                              }
+                          }
+                          else if(UCCStatus.ucFRSwaping == FRSWAP_RECEIVED)
+                          {      
+                              if(ucStateChange == 0x01)
+                              {
+                                  DISCSOURCE_GPIO_CTRL(HIGH);
+                                  ucStateChange = 0x00;
+                                  Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                              }     
+                              if((Drv_Cc2VbusOff_Det() != 0x00)||Ocm_Timer_IsOverFlow(&ulLastTime,MS_1500))
+                              {
+                                  Ocm_Delay1ms(5);  //needed for Ipad Pro
+                                  DISCSOURCE_GPIO_CTRL(LOW);
+                                  //to solve lenovo PD30 issue
+              //                    DRV_PowerRole_Set(UCC,SINK);
+                                  UCCStatus.b1Toggle_DFP_EN = FALSE;
+                                  UCCStatus.ucFRSwaping = FRSWAP_ONGOING;
+                                  DCCStatus.b2Charger_Scan = PDSCANSTART;
+                                  //set to send PS_RDY
+                                  UCCStatus.b1PsRdy_Send  = TRUE;
+                                  Ocm_Timer2ForPsRdy_Set();//
+                              }                             
+                          }
+                          else if(UCCStatus.ucFRSwaping == FRSWAP_ONGOING)
+                          {
+                              DISCADAPTER_GPIO_CTRL(HIGH);
+                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                              ucStage++;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 30  
+
+                          }
+                          break;
+                      case 0x02:
+                          if((Drv_CC2On_Det(SINK) == FALSE)||(Ocm_Timer_IsOverFlow(&ulLastTime,SECOND_1)))
+                          {
+                              Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                              ucStage++;
+                          }
+                          else
+                          {
+                              ;
+                          }
+                          break;
+                      case 0x03:
+                          if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_100))
+                          {
+                              ucStage = 0x00;
+                              DISCADAPTER_GPIO_CTRL(LOW);
+                              UCCStatus.ucFRSwaping = FRSWAP_NULL;
+                          }
+                          break;
+                      default :
+                          ucStage = 0x00;
+                          break;
+                  }
+              }
+              #endif
+              //void Mod_TSwapSourceStart(void)//tSwapSourceStart >=20ms   
+              //{
+              //    //reserve for Emark communication
+              //    if(UCCStatus.b2SwapSourceStart == TRUE)
+              //    {
+              //              if(UCCMSG.ucCcVersion == PD30)
+              //              {
+              //              DRV_RpCur_Sel(UCC,Rp_SinkTxNG);
+              //              }
+              //              #if UCC_EMARK_SUPPORT == ENABLED     
+              //        if(UCCStatus.b1UCcInput_type == FEMALE)
+              //        {
+              //            Mod_CC1Emark_Initiate();
+              //        }
+              //              #endif
+              //        UCCStatus.b2SwapSourceStart = FALSE;
+              //        UCCStatus.ucPRSwaping = 0;        
+              //        Ocm_Delay1ms(80);
+              //              #if UCC_EMARK_SUPPORT == ENABLED
+              //        if(UCCStatus.b1UCcInput_type == FEMALE)
+              //        {
+              //            Mod_CC1Emark_Done();
+              //        }
+              //              #endif
+              //              //for HUAWEI P50,we need to Delay at least 70ms before sending Source cap                             
+             -  
+              //              UCCMSG.ucMessageID = 0x00;
+              //        Mod_CC1SourceCapMsg_Set();
+              //        Mod_CC1Msg_Send();
+              //        UCCMSG.ucLastMsgType = 0xff;
+              //              if(UCCMSG.ucCcVersion == PD30)
+              //              {
+              //              DRV_RpCur_Sel(UCC,Rp_SinkTxOK);
+              //              }
+              //    }
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 31  
+
+              //}
+              
+              void Mod_TSwapSourceStart(void)//tSwapSourceStart >=20ms   
+              {
+                  static u32 ulLastTime = 0;
+                  //reserve for Emark communication
+                  if(UCCStatus.b2SwapSourceStart == 0x00)
+                  {
+                      return;
+                  }
+                  else if(UCCStatus.b2SwapSourceStart == 0x01)
+                  {
+                      UCCMSG.ucLastMsgType = 0xff;
+                      UCCStatus.b2SwapSourceStart = 0x02;     
+                              if(UCCMSG.ucCcVersion == PD30)
+                              {
+                              DRV_RpCur_Sel(UCC,Rp_SinkTxNG);
+                              }
+                              #if UCC_EMARK_SUPPORT == ENABLED     
+                      if(UCCStatus.b1UCcInput_type == FEMALE)
+                      {
+                          Mod_CC1Emark_Initiate();
+                      }
+                              #endif
+                      Ocm_Timer_UpdLocalTime(&ulLastTime);      
+                  }
+                  else//02
+                  {
+                      if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_80))
+                      {
+                          UCCStatus.b2SwapSourceStart = 0x00; 
+                          UCCStatus.ucPRSwaping = 0;        
+                          #if UCC_EMARK_SUPPORT == ENABLED
+                          if(UCCStatus.b1UCcInput_type == FEMALE)
+                          {
+                              Mod_CC1Emark_Done();
+                          }
+                          #endif
+                          if(UCCAmsType.ucPrSwap_Ams == AMS_GOING)
+                          {
+                              UCCAmsType.ucPrSwap_Ams = AMS_GOEXP;
+                          }
+                          //for HUAWEI P50,we need to Delay at least 70ms before sending Source cap                     
+             -          
+                          UCCMSG.ucMessageID = 0x00;
+                          Mod_CC1SourceCapMsg_Set();
+                          Mod_CC1Msg_Send();
+                          UCCMSG.ucLastMsgType = 0xff;
+                          if(UCCMSG.ucCcVersion == PD30)
+                          {
+                              DRV_RpCur_Sel(UCC,Rp_SinkTxOK);
+                          }
+                      }
+                  }
+              }
+              void Mod_Cc1_DisIdentifySend(void)
+              {
+                  static u8 ucStage = 0;
+                  static u8 ucDisIdSendCnt = 0;
+                  static u32 ulLastTime= 0;
+                  static u8 ucTmpInit = 0x00;
+                  static u16 ucKeepTime = MS_50;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 32  
+
+                  if(UCCStatus.b2DisIdSend_En == INITIATE_NONE)
+                  {
+                      ucTmpInit = 1;
+                  }
+                  else if(UCCStatus.b2DisIdSend_En == INITIATE_DONE)
+                  {
+                      ucTmpInit = 1;
+                  }
+                  else if(UCCStatus.ucFlow_Step >= 2)
+                  {
+                      ucTmpInit = 1;
+                  }
+                  else if(UCCStatus.ucPRSwaping)
+                  {
+                      ucTmpInit = 1;
+                  }
+                  else if(UCCAmsType.ucVconnSwap_Ams == AMS_GOING)
+                  {
+                      ucTmpInit = 1;
+                  }
+                  if(ucTmpInit == 1)
+                  {
+                      ucTmpInit = 0;
+                      ucStage = 0;
+                      ucDisIdSendCnt = 0;
+                      ucKeepTime = MS_800;
+                      return ;
+                  }
+                  switch(ucStage)
+                  {
+                      case 0://init
+                          Ocm_Timer_UpdLocalTime(&ulLastTime);
+                          ucStage++;   
+                          break; 
+                      case 1:     
+                          if((UCCStatus.b1DataRole == TRUE)&&(UCCAmsType.ucBist_Ams == 0))
+                          {
+                              if(ucDisIdSendCnt < 30) //send Discover_Identity
+                              {
+                                  if(Ocm_Timer_IsOverFlow(&ulLastTime,ucKeepTime) == TRUE)
+                                  {
+                                      UCCMSG.pDataOrder     = szCCData_REQDiscoverId;// 
+                                      UCCMSG.ucLastMsgType  = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_Identity,StrVdm);
+                                      UCCMSG.b1Vdm_Msg = TRUE;
+                                      Mod_CC1Msg_Send();
+                                      ucKeepTime = MS_50;
+                                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+                                  }
+                              }
+                              else
+                              {
+                                  UCCStatus.b2DisIdSend_En = INITIATE_DONE;
+                                  ucStage = 0;
+                              }
+                          }
+                          else
+                          {
+                              ucStage = 0;
+                          }
+                          break;
+                      default:
+                          ucStage = 0;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 33  
+
+                          break;            
+                  }
+              }
+              #if NINTENDO_SWITCH == ENABLED
+              void Mod_Nintendoswitch_WakeUp_Handle(void)
+              {
+                  static u32 ulLastTime = 0;
+                  //Sleep Type1 is 
+                  //HDMI Plug OUT and IN
+                  if(Drv_HdmiTx_HpdDet() == HIGH)
+                  {
+                      //01 01 01 00 00 00 14 80 
+              //        if(CC1NINTENDOState.b2SwitchIntoWakeUp == Sleep_Type1)
+              //        {           
+              //            CC1NINTENDOState.b2SwitchIntoWakeUp = Sleep_Type1_Ing;
+              //            Ocm_Timer_UpdLocalTime(&ulLastTime);  
+              ////            CC1NINTENDOState.b2SwitchIntoWakeUp = Sleep_None;
+              ////            g_stHdmiTx.b1IsTxHpdDet = LOW;
+              ////            Chip_HdmiTx_SetState(STATE_HDMITX_UPSTREAM_DEVICE_READY);
+              ////            g_stHdmiTx.pHdmiTxNotify(HDMITX_SINK_UNPLUG_EVENT);
+              //        }
+                      //00 01 1c 00
+                      if(CC1NINTENDOState.b2SwitchIntoSleep == Sleep_Type0)
+                      {
+                          CC1NINTENDOState.b1HPDLongTime = TRUE;
+                          //Ocm_Delay1ms(100);
+                          UCCStatus.b2AttentionType = ATTENTION_LOW;
+                          CC1NINTENDOState.b2SwitchIntoSleep = Sleep_None;
+                      }
+                      //01 01 1c 00
+                      if(CC1NINTENDOState.b2SwitchIntoWakeUp == Sleep_Type0)
+                      {
+                          CC1NINTENDOState.b1HPDLongTime = FALSE;
+                          Ocm_Timer_UpdLocalTime(&ulLastTime);  
+                          CC1NINTENDOState.b2SwitchIntoWakeUp = Sleep_Type0_Ing;
+                      }
+                      if(CC1NINTENDOState.b2SwitchIntoWakeUp == Sleep_Type0_Ing)
+                      {
+                          if(Ocm_Timer_IsOverFlow(&ulLastTime,SECOND_1))
+                          {
+                              UCCStatus.b2AttentionType = ATTENTION_HIGH;
+                              CC1NINTENDOState.b2SwitchIntoWakeUp = Sleep_None;
+                          }
+                      }
+              //        else if(CC1NINTENDOState.b2SwitchIntoWakeUp == Sleep_Type1_Ing)
+              //        {
+              //            if(KNL_Timer_IsOverFlow(&ulLastTime,MS_500))
+              //            {
+              //                CC1NINTENDOState.b2SwitchIntoWakeUp = Sleep_None;
+              //                g_stHdmiTx.b1IsTxHpdDet = LOW;
+              //                Chip_HdmiTx_SetState(STATE_HDMITX_UPSTREAM_DEVICE_READY);
+              //                g_stHdmiTx.pHdmiTxNotify(HDMITX_SINK_UNPLUG_EVENT);
+              //            }
+              //        }
+                  }
+              }
+              #endif
+              #if HUB_RESET_CTRL == ENABLED
+              void Mod_HubReset_Handle(void)
+              {
+                  static u32 ulLastTime = 0;
+                  if(UCCStatus.b2HubResetHigh == HUBRESETHIGH_PRE)
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 34  
+
+                  {
+                      UCCStatus.b2HubResetHigh = HUBRESETHIGH_GOING;
+                      Ocm_Timer_UpdLocalTime(&ulLastTime);        
+                  }
+                  if(UCCStatus.b2HubResetHigh == HUBRESETHIGH_GOING)
+                  {
+                      //if(KNL_Timer_IsOverFlow(&ulLastTime,MS_1500))
+                      if(Ocm_Timer_IsOverFlow(&ulLastTime,SECOND_1))
+                      {
+                          UCCStatus.b2HubResetHigh = HUBRESETHIGH_DONE;
+                      }
+                  }
+                  if(UCCStatus.b2HubResetHigh == HUBRESETHIGH_DONE)
+                  {
+                      Drv_CC1Flip_Judge(&UCCStatus);
+                      UCCStatus.b2HubResetHigh = HUBRESETLOW;
+                      HubReset_GPIO_Ctrl(HIGH);
+                  }    
+              }
+              #endif
+              #if NINTENDO_SWITCH_HDMIHPD == ENABLED
+              void Mod_Nintendoswitch_HdmiHpd_Handle(void)
+              {   
+                  u8 b1HdmiHpdState;
+                  static u32 ulLastTime = 0;
+                  static u8 b1StateChange = FALSE;
+                  static u16 Time_Stampe = 0x00;
+                  if(CC1NINTENDOState.b1HPDLongTime == TRUE)
+                  {
+                      Time_Stampe = SECOND_4;
+                  }
+                  else
+                  {
+                      Time_Stampe = MS_1500;
+                  }
+                  b1HdmiHpdState = Drv_HdmiTx_HpdDet();
+                  if((b1HdmiHpdState != CC1NINTENDOState.b1NintendoRecordTxHpd))
+                  {
+                      if(b1StateChange == FALSE)
+                      {
+                          b1StateChange = TRUE;
+                          Ocm_Timer_UpdLocalTime(&ulLastTime);  
+                      }
+                  }
+                  else
+                  {
+                      if(b1StateChange == TRUE)
+                      {
+                          b1StateChange = FALSE;
+                          Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                      }
+                  }
+                  #if ((FORCE_NINTENDO_SWITCH == ENABLED)||(NINTENDO_SWITCH_FORALL == ENABLED))
+                  if(((CC1NINTENDOState.b2Switch_Ada_Online != NOT_SWITCH)||(DCCStatus.b1AdapterWithPD == FALSE))&&(Drv_
+             -CC2On_Det(SINK)==TRUE))//DCC Online and Switch adapter Online
+                  {
+                      if((UCCStatus.b1PrDone&&((UCCStatus.ucVDM_Step&BIT2_1)==0x00))||(CC1NINTENDOState.b1Switch_Online 
+             -== TRUE))
+                      {         
+                          if((b1HdmiHpdState != CC1NINTENDOState.b1NintendoRecordTxHpd))
+                          {
+                              
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 35  
+
+                              if(Ocm_Timer_IsOverFlow(&ulLastTime,Time_Stampe))
+                              {
+                                  CC1NINTENDOState.b1NintendoRecordTxHpd = b1HdmiHpdState;
+                                  UCCStatus.b2Hardreset_Hdl = HardRst_Switch;
+                              }
+                              else
+                              {
+                                  ;
+                              }
+                          }
+                          else
+                          {
+                              Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                          }
+                      }
+                  }
+                  #else
+                  if(((CC1NINTENDOState.b2Switch_Ada_Online == SWITCH_ADAPTER)||(DCCStatus.b1AdapterWithPD == FALSE))&&(
+             -Drv_CC2On_Det(SINK)==TRUE))//DCC Online and Switch adapter Online
+                  {
+                      if((UCCStatus.b1PrDone&&((UCCStatus.ucVDM_Step&BIT2_1)==0x00))||(CC1NINTENDOState.b1Switch_Online 
+             -== TRUE))
+                      {         
+                          if((b1HdmiHpdState != CC1NINTENDOState.b1NintendoRecordTxHpd))
+                          {
+                              
+                              if(Ocm_Timer_IsOverFlow(&ulLastTime,Time_Stampe))
+                              {
+                                  CC1NINTENDOState.b1NintendoRecordTxHpd = b1HdmiHpdState;
+                                  UCCStatus.b2Hardreset_Hdl = HardRst_Switch;
+                              }
+                              else
+                              {
+                                  ;
+                              }
+                          }
+                          else
+                          {
+                              Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                          } 
+                      }
+                  }
+                  #endif
+              }
+              #endif
+              void Mod_Cc1Attention_Handle(void)
+              {
+                  #if CHIP_SEL == LT6711GXE
+                  static u8 b2AttentionStatus = ATTENTION_NULL;
+                  static u8 ucHpdChange = 0;
+                      static u32 ulLastTime=0;
+                  //DP config之前的变换全部清掉
+                  if(UCCStatus.ucFlow_Step >= 2)
+                  {
+                      return;
+                  }
+                  if((UCCStatus.ucVDM_Step & BIT5_1) == 0x00)
+                  {
+                      b2AttentionStatus = ATTENTION_NULL;
+                      ucHpdChange = 0;
+                      return;
+                  }
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 36  
+
+                  if(b2AttentionStatus != UCCStatus.b2AttentionType)
+                  {
+                      ucHpdChange = 1;
+                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+                  }
+                  b2AttentionStatus = UCCStatus.b2AttentionType;
+                  if(ucHpdChange == 1)//in case of constant IRQ issue, reserve 20ms keep out
+                  {
+                      if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_20))
+                      {
+                          UCCStatus.b2AttentionType = ATTENTION_NULL;
+                          ucHpdChange = 0;
+                          if(b2AttentionStatus == ATTENTION_LOW)
+                          {
+                              #if REMOVE_UART == DISABLED
+                              printLT(PRINT_PRIO_HIG, "\nUAttLOW");
+                              #endif
+                              UCCStatus.ucVDM_Step &= BIT6_0;
+                          }
+                          else if(b2AttentionStatus == ATTENTION_HIGH)
+                          {
+                              #if REMOVE_UART == DISABLED
+                              printLT(PRINT_PRIO_HIG, "\nUAttHIGH");
+                              #endif
+                              UCCStatus.ucVDM_Step |= BIT6_1;
+                          }
+                          else if(b2AttentionStatus == ATTENTION_IRQ)
+                          {
+                              if(UCCStatus.ucVDM_Step & BIT6_1)
+                              {
+                                  UCCStatus.ucUccIrq=1;
+                                  #if REMOVE_UART == DISABLED
+                                  
+                                  printLT(PRINT_PRIO_HIG, "\nUAttIRQ");
+                                  #endif
+                                  Drv_DpTx_IrqTrig();
+                              }
+                              else
+                              {
+                                  #if REMOVE_UART == DISABLED
+                                  printLT(PRINT_PRIO_HIG, "\nUAttInvalid");
+                                  #endif
+                              }
+                          }
+                          b2AttentionStatus = ATTENTION_NULL;
+                      }
+                  }
+                  #else
+                  static u8 ucAttentionStep = 0x00;
+                  static u32 ulLastTime = 0;
+                  static u8 ucAttentType = ATTENTION_NULL;
+                  if(UCCStatus.ucFlow_Step >= 2)//IN Power Nego
+                  {
+                      ucAttentionStep = 0x00;
+                      return;
+                  }
+                  //没有要发的ATTENTION
+                  if(UCCStatus.b2AttentionType == ATTENTION_NULL)
+                  {
+                      ucAttentionStep = 0x00;
+                      return;
+                  }
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 37  
+
+                  else
+                  {
+                      if(ucAttentionStep == 0x00)
+                      {
+                          Ocm_Timer_UpdLocalTime(&ulLastTime); 
+                          ucAttentionStep = 0x01;
+                      }        
+                  }
+                  if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_20))
+                  {
+                      ucAttentionStep = 0x00;
+                      ucAttentType = UCCStatus.b2AttentionType;
+                      //先发送后清零
+                      Mod_CC1HpdIrq_Send(UCCStatus.b2AttentionType);
+                      //如果发送Attention过程中，新触发了Attention，需要处理一下
+                      if(UCCStatus.b2AttentionType != ucAttentType)
+                      {
+                          ;
+                      }
+                      else
+                      {
+                          UCCStatus.b2AttentionType = ATTENTION_NULL;
+                      }   
+                  }
+                  #endif
+              }
+              
+              void Mod_Cc1VdmBusy_Handle(void)
+              {
+                  static u32 ulLastTime= 0;
+                  static u8 ucVdmBusyCnt = 0x00;
+                  if(UCCStatus.ucFlow_Step >= 2)
+                  {
+                      return;
+                  }
+                  else if(UCCStatus.ucPRSwaping)
+                  {
+                      return;
+                  }
+                  else if(UCCStatus.b2VdmBusy == AMS_NONE)
+                  {
+                      ucVdmBusyCnt = 0;
+                  }
+                  else if(UCCStatus.b2VdmBusy == AMS_READY)
+                  {
+                      UCCStatus.b2VdmBusy = AMS_GOING;
+                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+                  }
+                  else if(UCCStatus.b2VdmBusy == AMS_GOING)
+                  {
+                      if(ucVdmBusyCnt < nBusyCount)
+                      {
+                          ucVdmBusyCnt++;
+                          if(Ocm_Timer_IsOverFlow(&ulLastTime,MS_100) == TRUE)
+                          {
+                              UCCStatus.b2VdmBusy = AMS_DONE;
+                              UCCMSG.pDataOrder = UCCMSG.pLast_DataOrder;
+                              Mod_CC1Msg_Send();
+                          }
+                      }
+                      else
+                      {
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 38  
+
+                          UCCStatus.b2VdmBusy = AMS_DONE;
+                      }  
+                  }
+              }
+              
+              void Mod_CC1Rx_Loop(void)
+              {
+                  
+                  #if CHIP_SEL == LT6711GXE
+                  if(g_stDpTx.b1IsDpOrTypec  == DP_INTF)
+                  {
+                      return;
+                  }
+                  #else
+                  if(g_stDpRx.b1Input_Type_Sel == DP_INTF)
+                  {
+                      return;
+                  }
+                  #endif  
+                  if(UCCStatus.b1PrDone == FALSE)
+                  {
+                      Drv_CC1Flip_Scan(&UCCStatus);      
+                      if(UCCAmsType.ucBist_Ams == 0)
+                      {
+                          #if ((TYPEC_PRSWAP_EN == ENABLED)||(TYPEC_DRSWAP_EN == ENABLED))
+                          Mod_CC1PSSourceOff_Det();
+                          #endif
+                      }
+                      #if TYPEC_DRSWAP_EN == ENABLED
+                      Mod_CC2PowerOn_Det();           
+                      Mod_CC1Toggle_Loop();
+                      #endif
+                      if(UCCAmsType.ucBist_Ams == 0)
+                      {
+                          Mod_CC1SourceCapMsg_Loop();
+                          #if TYPEC_PRSWAP_EN == ENABLED
+                          Mod_CC1PrSwap_Scan();
+                          #endif
+                      }
+                      if((UCCStatus.ucPRSwaping != 2)&&(UCCStatus.ucContract_Succeed)&&(UCCStatus.ucFRSwaping != FRSWAP_
+             -ONGOING))//det UCC all the time
+              //              if((UCCStatus.ucPRSwaping != 2)&&(UCCStatus.ucContract_Succeed))//det UCC all the time
+                      {
+                          if(Mod_CC1DetOff_Judge()==TRUE)
+                          {                   
+                              Mod_CC1DetOff_Action();
+                          }
+                      }           
+                  }
+                  else
+                  {
+                      #if ((TYPEC_PRSWAP_EN == ENABLED)||(TYPEC_DRSWAP_EN == ENABLED))
+              //        if(UCCAmsType.ucBist_Ams == 0)
+              //        {
+              //            Mod_CC1SwapMsg_Scan(1);
+              //        }
+                      if(Mod_CC1DetOff_Judge() == TRUE)
+                      {
+                          Mod_CC1DetOff_Action();
+                      }
+                      #endif
+                  }
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 39  
+
+                  if(UCCAmsType.ucBist_Ams == 0)
+                  {
+                      Mod_CC1SwapMsg_Scan();
+                      Mod_Cc1VconnSwap_Handle();
+                  }
+                  Mod_TSwapSourceStart();
+                  Mod_Cc1_DisIdentifySend();
+                  Mod_HardRstRec_Handle();
+                  Mod_HardRstSend_Handle();
+                  Mod_CC1SoftRstRec_Handle();
+                  #if NINTENDO_SWITCH == ENABLED
+                  Mod_EnterIntoSwitch_Handle();
+                  Mod_Nintendoswitch_WakeUp_Handle();
+                  #if NINTENDO_SWITCH_HDMIHPD == ENABLED
+                  Mod_Nintendoswitch_HdmiHpd_Handle();
+                  #endif
+                  #endif
+                  #if HUB_RESET_CTRL == ENABLED
+                  Mod_HubReset_Handle();
+                  #endif
+                  #if DCC_TOGGLE_SUPPORT == ENABLED
+                  Mod_CC2Toggle_Loop();
+                  #endif
+                  Mod_Cc1Attention_Handle();
+                  #if  TYPEC_FRSWAP_EN == ENABLED
+                  Mod_CC2FrSwapDischarge_Scan();
+                  #endif
+                  Mod_Cc1VdmBusy_Handle();
+              }
+              
+              //u8 Mod_CC1SinkMode_Det(u8 ucFlag)
+              //{
+              //      u8 ucRtn = 0;
+              //      static u8 ucStage=0;
+              //      static u32 ulLastTime=0;
+              //      if(ucFlag == 0)
+              //      {
+              //              ucStage = 0;
+              //              return ucRtn;
+              //      }
+              //      switch(ucStage)
+              //      {
+              //              case 0:
+              //                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                      ucStage++;
+              //            break;
+              //              case 1: 
+              //            if(UCCStatus.ucFlow_Step != 2)
+              //            {
+              //                Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                ucStage++;
+              //            }
+              //            else
+              //            {         
+              //                if(KNL_Timer_IsOverFlow(&ulLastTime,MS_26))
+              //                {
+              //                    DRV_CcOrder_Set(UCC,HARDRESET);
+              //                    printLT(PRINT_PRIO_HIG,"\nH_R 5");
+              //                    ucStage = 0;
+              //                }
+              //                else
+              //                {
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 40  
+
+              //                    ;
+              //                }
+              //            }                                                 
+              //                      break;
+              //              case 2:
+              //                      if(KNL_Timer_IsOverFlow(&ulLastTime,MS_500))//MS_450
+              //                      {
+              //                              if(UCCStatus.ucFlow_Step != 3)
+              //                              {
+              //                                      ;
+              //                              }
+              //                              else
+              //                              {
+              //                                      printLT(PRINT_PRIO_HIG,"\nH_R 4");
+              //                                      DRV_CcOrder_Set(UCC,HARDRESET);
+              //                              }
+              //                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                              ucStage++;                              
+              //                      }
+              //                      else if(UCCStatus.ucFlow_Step != 3)
+              //                      {
+              //                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                              ucStage++;
+              //                      }
+              //                      break;  
+              //              default:
+              //                      ucStage = 0;
+              //                      ucRtn=1;
+              //                      break;                  
+              //      }
+              //      return ucRtn;   
+              //}
+              //u8 Mod_SinkWaitCap_Timer(u8 ucFlag)
+              //{
+              //      u8 ucRtn = 0;
+              //      static u8 ucStage=0;
+              //      static u32 ulLastTime=0;
+              //      if(ucFlag == 0)
+              //      {
+              //              ucStage = 0;
+              //              return ucRtn;
+              //      }
+              //      switch(ucStage)
+              //      {
+              //              case 0:
+              //                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                      ucStage++;
+              //              case 1:          
+              //                      if((UCCStatus.b1Toggle_enable==1)||(UCCStatus.b1PowerRole==1)||(UCCStatus.b1DataRole==1))
+              //                      {
+              //                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                              ucStage = 0;
+              //                      }
+              //                      else if((Drv_CC1RdOn_Scan()==1)&&(BKE5_D2_REG&0x10)&&(UCCStatus.b1Toggle_DFP_EN == TRUE))
+              //                      {             
+              //                              if(KNL_Timer_IsOverFlow(&ulLastTime,MS_450))//SECOND_1//Sinkwaitcaptimer:310-620ms
+              //                              {               
+              //                                      if(UCCStatus.ucContract_Succeed == 0)
+              //                                      {                    
+              //                        printLT(PRINT_PRIO_HIG,"\nH_R 6");
+              //                                              DRV_CcOrder_Set(UCC,HARDRESET);
+              //                                              ucStage = 0;                                            
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 41  
+
+              //                                      }
+              //                                      else
+              //                                      {
+              //                                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                                              ucStage++;
+              //                                      }
+              //                              }
+              //                              else if(UCCStatus.ucContract_Succeed)
+              //                              {
+              //                                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                                      ucStage++;
+              //                              }
+              //                      }
+              //            else
+              //            {
+              //                Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                ucStage = 0;
+              //            }
+              //            break;
+              //              default:
+              //                      ucStage = 0;
+              //                      ucRtn=1;
+              //                      break;                  
+              //      }
+              //      return ucRtn;   
+              //}
+              /*
+              void Mod_SinkWaitCap_Timer(void)
+              {
+                      static u8 ucStage=0;
+                      static u32 ulLastTime=0;
+                      switch(ucStage)
+                      {
+                              case 0:
+                                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+                                      ucStage++;
+                          break;
+                              case 1:          
+                                      if((UCCStatus.b1PowerRole==TRUE)||(UCCStatus.b1DataRole==TRUE))
+                                      {
+              //                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                                              ucStage = 0;
+                                      }
+                                      else if((Drv_CC1RdOn_Scan()==1)&&(BKE5_D2_REG&0x10))
+                                      {             
+                              if(KNL_Timer_IsOverFlow(&ulLastTime,MS_600))//SECOND_1//Sinkwaitcaptimer:310-620ms
+                                              {               
+                                                      if(UCCStatus.ucContract_Succeed == 0)
+                                                      {                  
+                                      #if REMOVE_UART == DISABLED
+                                      printLT(PRINT_PRIO_HIG,"\nH_R 6");
+                                      #endif
+                                                              UCCStatus.b2Hardreset_Hdl = HardRst_Initate;
+                                                              ucStage = 0;    
+                                                      }
+                                                      else
+                                                      {
+              //                                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+                                                              ucStage = 0;
+                                                      }
+                                              }
+                                              else if(UCCStatus.ucContract_Succeed)
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 42  
+
+                                              {
+              //                                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+                                                      ucStage = 0;
+                                              }
+                                      }
+                          else
+                          {
+              //                Ocm_Timer_UpdLocalTime(&ulLastTime);
+                              ucStage = 0;
+                          }
+                          break;
+                              default:
+                                      ucStage = 0;
+                                      break;                  
+                      }       
+              }
+              */
+              //u8 Mod_GetSourceCap_Handle(u8 ucFlag)
+              //{
+              //    u8 ucRtn = 0;
+              //      static u8 ucStage=0;
+              //      static u32 ulLastTime=0;
+              //      if(ucFlag == 0)
+              //      {
+              //              ucStage = 0;
+              //              return ucRtn;
+              //      }
+              //    if((UCCStatus.ucFlow_Step != 5)&&(UCCStatus.ucFlow_Step != 6))
+              //    {
+              //        ucStage = 0;
+              //              return ucRtn;
+              //    }
+              //    switch(ucStage)
+              //      {
+              //              case 0:
+              //                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                      ucStage++;
+              //              case 1:
+              //            if((UCCStatus.ucFlow_Step == 5)||((UCCStatus.ucContract_Succeed)&&(UCCStatus.ucFlow_Step == 
+             -6)))
+              //            {
+              //                if(KNL_Timer_IsOverFlow(&ulLastTime,MS_26))
+              //                {
+              //                    DRV_CcOrder_Set(UCC,HARDRESET);
+              //                    ucStage = 3;   
+              //                    printLT(PRINT_PRIO_HIG,"\nH_R 9");
+              //                }
+              //                else
+              //                {
+              //                    ;
+              //                }
+              //            }
+              //            else
+              //            {
+              //                Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                ucStage++;
+              //            }
+              //            break;
+              //        case 2:
+              //            break;
+              //              default:
+              //                      ucStage = 0;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 43  
+
+              //                      ucRtn=1;
+              //                      break;                  
+              //      }
+              //      return ucRtn;   
+              //}
+              
+              
+              void Mod_CC1SoftRstRec_Handle(void)
+              {
+                  if(UCCStatus.b1Flag_Source_Send)
+                  {
+                      UCCStatus.b1Flag_Source_Send = 0;     
+                      if(Drv_CC1RpOn_Scan()==1)
+                      {
+                          Ocm_Delay1ms(5);
+                          Mod_CC1SourceCapMsg_Set();
+                          UCCStatus.ucFlow_Step = 5;
+                          UCCMSG.ucMessageID = 0x02;
+                          Mod_CC1Msg_Send();
+                          UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Data_Msg,Source_Capabilities,StrVdm);
+                          Ocm_Delay1ms(1);                                            
+                      }
+                  }
+              }
+              
+              void Mod_HardRstSend_Handle(void)
+              {
+                  if(UCCStatus.b2Hardreset_Hdl == HardRst_Initate)
+                  {
+                      UCCStatus.b2Hardreset_Hdl = HardRst_None;
+                      if(Mod_CC1DetOff_Judge() == FALSE)
+                      {            
+                          DRV_CcOrder_Set(UCC,HARDRESET);
+                          Mod_CC1DetOff_Action();   
+                      }            
+                  }
+                  if(UCCStatus.b2Hardreset_Hdl == HardRst_Source)
+                  {
+                      UCCStatus.b2Hardreset_Hdl = HardRst_None;
+                      if(Mod_CC1DetOff_Judge() == FALSE)
+                      {
+                                      //if C2A cable inserts, 8711 should send hardreset and set the Try timer
+                                      #if CCTRY_MODE != NO_TRY
+                          UCCStatus.b2TRYTIMES = TRYTIMES;
+                                      #endif
+                          DRV_CcOrder_Set(UCC,HARDRESET);
+                      } 
+                  }
+              }
+              #if NINTENDO_SWITCH == ENABLED
+              void Mod_EnterIntoSwitch_Handle(void)
+              {
+                  if(UCCStatus.b2Hardreset_Hdl == HardRst_Switch)
+                  {
+                      DRV_CcOrder_Set(UCC,HARDRESET);
+                      Mod_CC1DetOff_Action();
+                      CC1NINTENDOState.b1Switch_Online = TRUE;
+                      DRV_PowerRole_Set(UCC,SOURCE);
+                      DRV_RpCur_Sel(UCC,Rp_SinkTxOK);
+                      UCCStatus.b1Toggle_DFP_EN = TRUE;
+                  }
+              }
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 44  
+
+              #endif
+              //void Mod_HardRstRec_Handle(void)//TDB2.2.13.1
+              //{
+              //      static u8 ucStage=0;
+              //      static u32 ulLastTime=0;
+              //      switch(ucStage)
+              //      {
+              //              case 0:
+              //            if(UCCStatus.b2Hardreset_Hdl == HardRst_Rec)
+              //            {
+              ////                Chip_HardReset_Recv();
+              //                Mod_CC1DetOff_Action();
+              //                UCCStatus.b2Hardreset_Hdl = HardRst_Rec;//in case of fixed by 
+              //                Ocm_Timer_UpdLocalTime(&ulLastTime); 
+              //                ucStage++;                
+              //            }
+              //            break;
+              //              case 1:          
+              //                      if(UCCStatus.b2Hardreset_Hdl == HardRst_Rec)
+              //            {
+              //                if(Drv_CC1RpOn_Scan() == 1)
+              //                {
+              //                    if(KNL_Timer_IsOverFlow(&ulLastTime,MS_800))
+              //                    {
+              //                        Mod_CC1DetOff_Action();
+              //                        UCCStatus.b1Toggle_DFP_EN = TRUE;
+              //                        UCCStatus.b2Hardreset_Hdl = HardRst_None;
+              //                    }
+              //                    else
+              //                    {
+              //                        ;
+              //                    }
+              //                }
+              //                else
+              //                {
+              //                    UCCStatus.b2Hardreset_Hdl = HardRst_None;
+              //                    ucStage++;
+              //                }               
+              //            }
+              //                      else
+              //                      {       
+              //                              ucStage++;
+              //                      }
+              //            break;
+              //              default:
+              //                      ucStage = 0;
+              //                      break;                  
+              //      }
+              //}
+              void Mod_HardRstRec_Handle(void)//TDB2.2.13.1
+              {
+                      if(UCCStatus.b2Hardreset_Hdl == HardRst_Rec)
+                      {
+                              Mod_CC1DetOff_Action();
+                              UCCStatus.b2Hardreset_Hdl = HardRst_None;
+                      }               
+              }
+              //u8 Mod_PSSourceOnTimer(u8 ucFlag)//TEST.PD.PORT.SRC.10
+              //{
+              //    u8 ucRtn = 0;
+              //      static u8 ucStage=0;
+              //      static u32 ulLastTime=0;
+C51 COMPILER V9.53.0.0   MODCC1TYPEC                                                       02/13/2025 10:13:59 PAGE 45  
+
+              //      if(ucFlag == 0)
+              //      {
+              //              ucStage = 0;
+              //              return ucRtn;
+              //      }
+              //      switch(ucStage)
+              //      {
+              //              case 0:
+              //                      Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                      ucStage++;
+              //              case 1:          
+              //                      if(UCCStatus.ucPRSwaped == 6)
+              //            {
+              //                if(Drv_CC1RdOn_Scan() == 1)
+              //                {                   
+              //                    if(KNL_Timer_IsOverFlow(&ulLastTime,MS_435))
+              //                    {                     
+              //                        DRV_CcOrder_Set(UCC,HARDRESET);
+              //                        ucStage++;   
+              //                        printLT(PRINT_PRIO_HIG,"\nH_R C");
+              //                    }
+              //                    else
+              //                    {
+              //                        ;
+              //                    }
+              //                }
+              //                else
+              //                {
+              //                    ucStage++;
+              //                }               
+              //            }
+              //                      else
+              //                      {               
+              //                              Ocm_Timer_UpdLocalTime(&ulLastTime);
+              //                              ucStage++;
+              //                      }
+              //            break;
+              //              default:
+              //                      ucStage = 0;
+              //                      ucRtn=1;
+              //                      break;                  
+              //      }
+              //      return ucRtn;   
+              //}
+              #endif
+2738          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

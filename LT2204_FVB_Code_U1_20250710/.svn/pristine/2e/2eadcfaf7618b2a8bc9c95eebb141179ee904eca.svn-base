@@ -1,0 +1,2379 @@
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVSYSTEM
+OBJECT MODULE PLACED IN .\Objects\DrvSystem.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvSystem.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE) 
+                    -REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRIN
+                    -T(.\Listings\DrvSystem.lst) OBJECT(.\Objects\DrvSystem.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  System.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          #include "Include.h"
+   8          #if ((HDMITX_VID_PATTERN_SEL != NO_PATTERN)||(DPTX_VID_PATTERN_SEL != NO_PATTERN))
+              //                           hstart     vstart    hactive   vactive   htotal    vtotal    hsync vsync divs
+             -et freqset
+              u8 code timing480p60hz[17] = {0x00,0x44,0x00,0x1b,0x01,0x40,0x01,0xe0,0x01,0x90,0x02,0x0d,0x00,0x30,0x02,0
+             -x40,0xe0};
+              u8 code timing720p60hz[17] = {0x00,0x82,0x00,0x19,0x02,0x80,0x02,0xd0,0x03,0x39,0x02,0xee,0x00,0x14,0x05,0
+             -x2f,0xd0};
+              u8 code timing1080p60hz[17] ={0x00,0x60,0x00,0x29,0x03,0xc0,0x04,0x38,0x04,0x4c,0x04,0x65,0x00,0x16,0x05,0
+             -x2f,0xc0};
+              u8 code timing4k30hz[17] =   {0x00,0xc0,0x00,0x52,0x07,0x80,0x08,0x70,0x08,0x98,0x08,0xca,0x00,0x2c,0x0a,0
+             -x2f,0xb0};
+              u8 code timing4k60hz[17] =   {0x00,0xc0,0x00,0x52,0x07,0x80,0x08,0x70,0x08,0x98,0x08,0xca,0x00,0x2c,0x0a,0
+             -x2f,0xa0};
+              u8 code timing4k120hz[17] =  {0x00,0xc0,0x00,0x52,0x07,0x80,0x08,0x70,0x08,0x98,0x08,0xca,0x00,0x2c,0x0a,0
+             -x2f,0x90};
+              u8 code timing8k30hz[17] =   {0x01,0x80,0x00,0x40,0x0F,0x00,0x10,0xE0,0x11,0x94,0x11,0x30,0x00,0x58,0x14,0
+             -x2F,0x90};   
+              #endif
+  18              
+  19          //===========================================
+  20          //func  :xtal init
+  21          //input :N/A
+  22          //output:N/A
+  23          //return:void
+  24          //Info  :N/A
+  25          //===========================================
+  26          void Drv_System_XtalSet(void)
+  27          {
+  28   1          u8 ucSyspll_Cnt;
+  29   1          
+  30   1          BKA3_00_REG &= BIT7_0;//[7]rg_syspll_pd: 0-normal work, 1-power down;
+  31   1          BKA3_02_REG |= BIT0_1;// syspll 600M enable
+  32   1          
+  33   1          BKA3_00_REG |= BIT6_1; 
+  34   1          BKE2_89_REG = 0x20;//ks = 2
+  35   1          ucSyspll_Cnt = 0;
+  36   1          do
+  37   1          {
+  38   2              BKE2_89_REG &= BIT6_0;
+  39   2              BKE1_09_REG &= 0xfc;
+  40   2              BKE1_09_REG |= 0x03;
+  41   2              BKE2_89_REG |= BIT6_1;
+  42   2              Ocm_Delay1ms(5);
+  43   2          }while((ucSyspll_Cnt < 3)&&((BKE2_93_REG&BIT6_1) == 0x00));
+  44   1          BKA3_00_REG &= BIT6_0; 
+  45   1          #if SYSCLK == SYS_CLK_40M
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 2   
+
+                  BKE6_E9_REG |= 0x50;//
+              
+                  BKC7_46_REG = 0x9c;//rgd_fm_fm_timer_set[15:8]
+                  BKC7_47_REG = 0x40;//rgd_fm_fm_timer_set[ 7:0]
+              
+                  BKE2_A1_REG = 0x9c;//rgd_fm_timer_set[15:8]
+                  BKE2_A2_REG = 0x40;//rgd_fm_timer_set[ 7:0]
+              
+                  BKE6_96_REG = 0x9c;//rgd_top_fm_fm_timer_set[15:8]
+                  BKE6_97_REG = 0x40;//rgd_top_fm_fm_timer_set[ 7:0]
+              
+                  BKED_38_REG = 0x9c;//rgd_txfm_fm_timer_set[15:8]
+                  BKED_39_REG = 0x40;//rgd_txfm_fm_timer_set[ 7:0]
+                  #endif
+  60   1      
+  61   1          #if SYSCLK == SYS_CLK_48M
+  62   1          BKE6_E9_REG |= 0x60;//
+  63   1      
+  64   1          BKC7_46_REG = 0xbb;//rgd_fm_fm_timer_set[15:8]
+  65   1          BKC7_47_REG = 0x80;//rgd_fm_fm_timer_set[ 7:0]
+  66   1      
+  67   1          BKE2_A1_REG = 0xbb;//rgd_fm_timer_set[15:8]
+  68   1          BKE2_A2_REG = 0x80;//rgd_fm_timer_set[ 7:0]
+  69   1      
+  70   1          BKE6_96_REG = 0xbb;//rgd_top_fm_fm_timer_set[15:8]
+  71   1          BKE6_97_REG = 0x80;//rgd_top_fm_fm_timer_set[ 7:0]
+  72   1      
+  73   1          BKED_38_REG = 0xbb;//rgd_txfm_fm_timer_set[15:8]
+  74   1          BKED_39_REG = 0x80;//rgd_txfm_fm_timer_set[ 7:0]
+  75   1          #endif
+  76   1      }
+  77          
+  78          //===============================================
+  79          //func  :enable  int for lt8711
+  80          //input : Int typec   IS ON/OFF
+  81          //output:N/A
+  82          //return:void
+  83          //Info  :N/A
+  84          //================================================
+  85          void Drv_System_IntSet(EnumInterrupt ucIntType, u8 b1IsOn)
+  86          {
+  87   1          switch(ucIntType)
+  88   1          {
+  89   2              case IRQ_RXPLL_UNSTB_INT:
+  90   2                  break;
+  91   2      
+  92   2              #if RX_PORT_SIGN == DP_PORT
+                      case IRQ_DPRX_AUX_INT:
+                          (b1IsOn)?(BKE5_00_REG &= BIT7_0):(BKE5_00_REG |= BIT7_1);
+                          break;
+                      #if DPRX_ADAPTIVE_SYNC == ENABLED
+                      case IRQ_DPRX_ADAPTIVE_SYNC_INT:
+                          (b1IsOn)?(BKF2_17_REG |= BIT0_1):(BKF2_17_REG &= BIT0_0);    
+                          break;
+                      #endif
+                      case IRQ_DPRX_VSI_INT: //
+                          (b1IsOn)?(BKF2_16_REG |= BIT7_1):(BKF2_16_REG &= BIT7_0);
+                          break;
+                      case IRQ_DPRX_PPS_PKT_INT:
+                          (b1IsOn)?(BKF2_17_REG |= BIT4_1):(BKF2_17_REG &= BIT4_0);
+                          break;
+                      case IRQ_DPRX_STATICHDR_INT: //using the user define pkt
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 3   
+
+                          (b1IsOn)?(BKF2_16_REG |= BIT3_1):(BKF2_16_REG &= BIT3_0);
+                          break;
+                      case IRQ_DPRX_DYNAMICHDR_INT:
+                          break;
+                      case IRQ_RXHDCP1X_INT:
+                                      if(b1IsOn)
+                          {
+                              //BKE5_00_REG &= BIT3_0;//[1]dp rx int msk, hdcp1.3 must open
+                              BKF1_A7_REG |= BIT3_1;//[3]dprx hdcp interrupt enable, 1-en, 0-dis
+                              BKF1_BB_REG |= 0x50;//interrupt en
+                          }
+                          else
+                          {
+                              //BKE5_00_REG |= BIT3_1;//[1]dp rx int msk, hdcp1.3 must open
+                              BKF1_A7_REG &= BIT3_0;//[3]dprx hdcp interrupt enable, 1-en, 0-dis
+                              BKF1_BB_REG &= 0xaf;  //interrupt dis
+                          }
+                          BKE5_30_REG |= BIT3_1;//[1]dp rx int clr en
+                          BKE5_30_REG &= BIT3_0;//[1]dp rx int clr dis   
+                                      break;
+                              case IRQ_RXHDCP2X_INT:
+                                      if(b1IsOn)
+                          {
+              //                BKE5_01_REG &= BIT7_0;//[6]hdcp2.3 rx int msk
+                              BKCA_28_REG |= 0x39;//interrupt en
+                              BKCA_2A_REG |= 0x0f;//interrupt en
+                          }
+                          else
+                          {
+              //                BKE5_01_REG |= BIT7_1;//[6]hdcp2.3 rx int msk
+                              BKCA_28_REG &= 0xc6;//interrupt dis
+                              BKCA_2A_REG &= 0xf0;//interrupt dis
+                          }
+                          BKCA_29_REG |= 0x39;//flag clear en
+                          BKCA_29_REG &= 0xc6;//flag clear dis
+                          BKE5_31_REG |= BIT7_1;//[6]hdcp rx int clr en
+                          BKE5_31_REG &= BIT7_0;//[6]hdcp rx int clr dis  
+                          break;
+                      case IRQ_DPRX_PPS_DATA_CHG_INT:
+                          (b1IsOn)?(BKE5_09_REG &= BIT0_0):(BKE5_09_REG |= BIT0_1);
+                          break;
+                      #endif
+ 150   2      
+ 151   2              #if RX_PORT_SIGN == HDMI_PORT
+ 152   2              case IRQ_TMDS_UNSTB_INT:
+ 153   2                  break;
+ 154   2              case IRQ_RXPLL_UNLOCK_INT:
+ 155   2                  break;
+ 156   2              case IRQ_HDMIRX_VSI_INT: //
+ 157   2                  (b1IsOn)?(BKCC_60_REG |= BIT3_1):(BKCC_60_REG &= BIT3_0);
+ 158   2                  break;
+ 159   2              case IRQ_HDMIRX_STATICHDR_INT: //using the user define pkt
+ 160   2                  (b1IsOn)?(BKCC_12_REG |= BIT4_1):(BKCC_12_REG &= BIT4_0);
+ 161   2                  break;
+ 162   2              case IRQ_HDMIRX_DYNAMICHDR_INT:
+ 163   2                  (b1IsOn)?(BKCC_64_REG |= BIT1_1):(BKCC_64_REG &= BIT1_0);
+ 164   2                  break;
+ 165   2              case IRQ_HDMIRX_PPS_LOAD_SUCC_INT:
+ 166   2                  (b1IsOn)?(BKCC_64_REG |= BIT3_1):(BKCC_64_REG &= BIT3_0);
+ 167   2                  break;
+ 168   2              case IRQ_HDMIRX_PPS_DATA_CHG_INT:
+ 169   2                  if(b1IsOn)
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 4   
+
+ 170   2                  {
+ 171   3                      BKE6_EE_REG |= BIT0_1;//[0]rgd_pps_cksum_en: 1-en
+ 172   3      //                BKE5_09_REG &= BIT0_0;
+ 173   3      //                BKE5_88_REG |= BIT3_1; //[3]1'b1:software pps cksum enable
+ 174   3                  }
+ 175   2                  else
+ 176   2                  {
+ 177   3                      BKE6_EE_REG &= BIT0_0;//[0]rgd_pps_cksum_en: 0-dis
+ 178   3      //                BKE5_09_REG |= BIT0_1;
+ 179   3      //                BKE5_88_REG &= BIT3_0; //[3]1'b1:software pps cksum enable
+ 180   3                  }
+ 181   2                  break;
+ 182   2              case IRQ_HDMIRX_VRRSTART_INT:
+ 183   2                  (b1IsOn)?(BKCC_22_REG |= BIT7_1):(BKCC_22_REG &= BIT7_0);
+ 184   2                  break;
+ 185   2              case IRQ_HDMIRX_VRRSTOP_INT:
+ 186   2                  (b1IsOn)?(BKCC_22_REG |= BIT6_1):(BKCC_22_REG &= BIT6_0);
+ 187   2                  break;
+ 188   2              #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT 
+ 189   2              case IRQ_HDMIRX_FRL_INT:
+ 190   2                  (b1IsOn)?(BKE5_01_REG &= BIT4_0):(BKE5_01_REG |= BIT4_1);  //[5]hdmi21 rx int mask dis
+ 191   2                  break;
+ 192   2              #endif
+ 193   2              #endif 
+ 194   2              #if BB_EN == ENABLED    
+                      case IRQ_BB_INT:
+                          (b1IsOn)?(BKE5_10_REG &= BIT6_0):(BKE5_10_REG |= BIT6_1);  //bit5:bb_int_maskt 
+                          break;
+                      #endif
+ 199   2              
+ 200   2              case IRQ_CC1_INT:
+ 201   2                  (b1IsOn)?(BKE5_12_REG &= BIT1_0):(BKE5_12_REG |= BIT1_1);  //UCC1 INT MASK
+ 202   2                  break;
+ 203   2              case IRQ_CC2_INT:
+ 204   2                  (b1IsOn)?(BKE5_12_REG &= BIT0_0):(BKE5_12_REG |= BIT0_1);  //UCC1 INT MASK
+ 205   2                  break;
+ 206   2              default:
+ 207   2                  break;    
+ 208   2          }
+ 209   1      }
+ 210          
+ 211          u8 Drv_System_IntSrcGet(EnumInterrupt ucIntType)
+ 212          {
+ 213   1          u8 ucRtn;
+ 214   1      
+ 215   1          switch(ucIntType)
+ 216   1          {
+ 217   2              case IRQ_TMDS_STB_INT:
+ 218   2                  ucRtn = (BKE5_5B_REG & BIT0_1)? (TRUE) : (FALSE);
+ 219   2                  break;
+ 220   2              case IRQ_TMDS_PKDET_INT:
+ 221   2                  ucRtn = (BKE5_56_REG & BIT2_1)? (TRUE) : (FALSE);
+ 222   2                  break;
+ 223   2              default:
+ 224   2                  break;    
+ 225   2          }
+ 226   1          return ucRtn;
+ 227   1      }
+ 228          
+ 229          u8 Drv_System_IntFlagGet(EnumInterrupt ucIntType)
+ 230          {
+ 231   1          u8 ucRtn = 0x00;
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 5   
+
+ 232   1      
+ 233   1          switch(ucIntType)
+ 234   1          {
+ 235   2              #if RX_PORT_SIGN == DP_PORT
+                      case IRQ_DPRX_AUX_INT:
+                          ucRtn = (BKE5_40_REG & BIT7_1);
+                          break;
+                      #if DPRX_ADAPTIVE_SYNC == ENABLED
+                      case IRQ_DPRX_ADAPTIVE_SYNC_INT:
+                          ucRtn = (BKF2_EE_REG & BIT0_1);
+                          break;
+                      #endif
+                      case IRQ_DPRX_VSI_INT: //
+                                      ucRtn = (BKF2_ED_REG & BIT7_1);
+                          break;
+                      case IRQ_DPRX_PPS_PKT_INT:
+                          ucRtn = (BKF2_EE_REG & BIT4_1);
+                          break;
+                      case IRQ_DPRX_MSA_INT:
+                          ucRtn = (BKF2_EE_REG & BIT2_1);
+                          break;
+                      case IRQ_DPRX_STATICHDR_INT: //using the user define pkt
+                          ucRtn = (BKF2_ED_REG & BIT3_1);
+                          break;
+                      case IRQ_DPRX_DYNAMICHDR_INT:
+                          break;
+                      case IRQ_DPRX_PPS_DATA_CHG_INT:
+                          ucRtn = (BKE5_49_REG & BIT0_1);
+                          break;
+                      #endif
+ 262   2      
+ 263   2              #if RX_PORT_SIGN == HDMI_PORT
+ 264   2              case IRQ_TMDS_UNSTB_INT:
+ 265   2                  ucRtn = (BKE5_4B_REG & BIT1_1);
+ 266   2                  break;
+ 267   2             case IRQ_HDMIRX_VSI_INT: 
+ 268   2                  ucRtn = (BKCC_F4_REG & BIT2_1);
+ 269   2                  break; 
+ 270   2              case IRQ_HDMIRX_STATICHDR_INT: //using the user define pkt
+ 271   2                   ucRtn = (BKCC_F2_REG & BIT5_1);
+ 272   2                   break;
+ 273   2              case IRQ_HDMIRX_DYNAMICHDR_INT:
+ 274   2                  ucRtn = (BKCC_F4_REG & BIT3_1);
+ 275   2                  break;
+ 276   2              case IRQ_HDMIRX_PPS_LOAD_SUCC_INT:
+ 277   2                  ucRtn = (BKCC_F4_REG & BIT4_1);
+ 278   2                  break;
+ 279   2              case IRQ_HDMIRX_PPS_DATA_CHG_INT:
+ 280   2                  ucRtn = (BKE5_49_REG & BIT0_1);
+ 281   2                  break;
+ 282   2              case IRQ_HDMIRX_VRRSTART_INT:
+ 283   2                  ucRtn = (BKCC_F1_REG&BIT7_1);
+ 284   2                  break;
+ 285   2              case IRQ_HDMIRX_VRRSTOP_INT:
+ 286   2                  ucRtn = (BKCC_F1_REG&BIT6_1);
+ 287   2                  break;        
+ 288   2              case IRQ_RXPLL_UNLOCK_INT:
+ 289   2                  ucRtn = (BKE5_4B_REG & BIT3_1);
+ 290   2                  break;
+ 291   2              
+ 292   2      //        #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT 
+ 293   2      //        case IRQ_HDMIRX_FRL_INT:
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 6   
+
+ 294   2      //            ucRtn = (BKE5_41_REG & BIT4_1);
+ 295   2      //            break;
+ 296   2      //        #endif
+ 297   2              #endif
+ 298   2              #if BB_EN == ENABLED    
+                      case IRQ_BB_INT:
+                          ucRtn = (BKE5_40_REG & BIT6_1);
+                          break;
+                      #endif
+ 303   2              case IRQ_CC1_INT:
+ 304   2                  ucRtn = (BKE5_42_REG & BIT1_1);  //UCC1 INT MASK
+ 305   2                  break;
+ 306   2              case IRQ_CC2_INT:
+ 307   2                  ucRtn = (BKE5_42_REG & BIT0_1);  //UCC1 INT MASK
+ 308   2                  break;
+ 309   2              default:
+ 310   2                  break;    
+ 311   2          }
+ 312   1          if(ucRtn != 0x00)
+ 313   1          {
+ 314   2              ucRtn = TRUE;
+ 315   2          }
+ 316   1          return ucRtn;
+ 317   1      }
+ 318          
+ 319          //===============================================
+ 320          //func  :enable  int for lt8711
+ 321          //input : Int typec   IS ON/OFF
+ 322          //output:N/A
+ 323          //return:void
+ 324          //Info  :N/A
+ 325          //================================================
+ 326          void Drv_System_IntClr(EnumInterrupt ucIntType)
+ 327          {
+ 328   1          switch(ucIntType)
+ 329   1          {
+ 330   2              #if RX_PORT_SIGN == DP_PORT
+                      case IRQ_DPRX_AUX_INT:
+                          BKE5_30_REG |= BIT7_1;//bit0 clear interrupt 0
+                          BKE5_30_REG &= BIT7_0;//bit0 release interrupt 0
+                          break;
+                      #if DPRX_ADAPTIVE_SYNC == ENABLED
+                      case IRQ_DPRX_ADAPTIVE_SYNC_INT:
+                          BKF2_19_REG |= BIT0_1;//[0]adaptive sync int clr en
+                          BKF2_19_REG &= BIT0_0;//[0]adaptive sync int clr dis
+                      #endif
+                      case IRQ_DPRX_VSI_INT: //
+                                      BKF2_18_REG |= BIT7_1;//[0]adaptive sync int clr en
+                          BKF2_18_REG &= BIT7_0;//[0]adaptive sync int clr dis
+                          break;
+                      case IRQ_DPRX_PPS_PKT_INT:
+                          BKF2_19_REG |= BIT4_1;//[0]PPS packet int clr en
+                          BKF2_19_REG &= BIT4_0;//[0]PPS packet int clr dis
+                          break;
+                      case IRQ_DPRX_STATICHDR_INT: //using the user define pkt
+                          BKF2_18_REG |= BIT3_1;//[0]adaptive sync int clr en
+                          BKF2_18_REG &= BIT3_0;//[0]adaptive sync int clr dis
+                          break;
+                      case IRQ_DPRX_DYNAMICHDR_INT:
+                          break;
+                      case IRQ_DPRX_PPS_DATA_CHG_INT:
+                          BKE5_39_REG |= BIT0_1;
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 7   
+
+                          BKE5_39_REG &= BIT0_0;
+                          break;
+                      #endif
+ 359   2      
+ 360   2              #if RX_PORT_SIGN == HDMI_PORT
+ 361   2              case IRQ_TMDS_UNSTB_INT:
+ 362   2                  BKE5_3B_REG |= BIT1_1;//tmds clr en
+ 363   2                  BKE5_3B_REG &= BIT1_0;//tmds clr dis
+ 364   2                  break;
+ 365   2              case IRQ_HDMIRX_VSI_INT: //using the user define pkt
+ 366   2                  BKCC_60_REG |= BIT2_1;
+ 367   2                  BKCC_60_REG &= BIT2_0;
+ 368   2                  break;
+ 369   2              case IRQ_HDMIRX_STATICHDR_INT: //using the user define pkt
+ 370   2                  BKCC_12_REG |= BIT5_1;
+ 371   2                  BKCC_12_REG &= BIT5_0;
+ 372   2                  break;
+ 373   2              case IRQ_HDMIRX_DYNAMICHDR_INT:
+ 374   2                  BKCC_64_REG |= BIT0_1;
+ 375   2                  BKCC_64_REG &= BIT0_0;
+ 376   2                  break;
+ 377   2              case IRQ_HDMIRX_PPS_LOAD_SUCC_INT:
+ 378   2                  BKCC_64_REG |= BIT2_1;//rgd_hdmirx_pps_upd_intr_clr en
+ 379   2                  BKCC_64_REG &= BIT2_0;//rgd_hdmirx_pps_upd_intr_clr dis
+ 380   2                  break;
+ 381   2              case IRQ_HDMIRX_PPS_DATA_CHG_INT:
+ 382   2                  BKE5_39_REG |= BIT0_1;
+ 383   2                  BKE5_39_REG &= BIT0_0;
+ 384   2                  break;
+ 385   2              case IRQ_HDMIRX_VRRSTART_INT:
+ 386   2                  BKCC_22_REG |= BIT5_1;//[5]rgd_vrr_en_pos_intr_clr en
+ 387   2                  BKCC_22_REG &= BIT5_0;
+ 388   2                  break;
+ 389   2              case IRQ_HDMIRX_VRRSTOP_INT:
+ 390   2                  BKCC_22_REG |= BIT4_1;//[4]rgd_vrr_en_neg_intr_clr en
+ 391   2                  BKCC_22_REG &= BIT4_0;
+ 392   2                  break;
+ 393   2              case IRQ_RXPLL_UNLOCK_INT:
+ 394   2                  BKE5_3B_REG |= BIT3_1;//rxpll clr en
+ 395   2                  BKE5_3B_REG &= BIT3_0;//rxpll clr dis
+ 396   2                  break;
+ 397   2              #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT 
+ 398   2              case IRQ_HDMIRX_FRL_INT:
+ 399   2                  BKE5_31_REG |= BIT4_1;//[5]hdmi21 rx int clr en
+ 400   2                  BKE5_31_REG &= BIT4_0;//[5]hdmi21 rx int clr dis
+ 401   2                  break;
+ 402   2              #endif
+ 403   2              #endif 
+ 404   2              #if BB_EN == ENABLED    
+                      case IRQ_BB_INT:
+                          BKE5_30_REG |= BIT6_1;//[5]clear bb_ininterrupt en
+                          BKE5_30_REG &= BIT6_0;//[5]clear bb_ininterrupt dis
+                          break;
+                      #endif
+ 410   2              case IRQ_CC1_INT:
+ 411   2                  BKE5_32_REG |= BIT1_1;    // clear interrupt 2
+ 412   2                  BKE5_32_REG &= BIT1_0;
+ 413   2                  break;
+ 414   2              case IRQ_CC2_INT:
+ 415   2                  BKE5_32_REG |= BIT0_1;    // clear interrupt 2
+ 416   2                  BKE5_32_REG &= BIT0_0;
+ 417   2                  break;
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 8   
+
+ 418   2              default:
+ 419   2                  break;    
+ 420   2          }
+ 421   1      }
+ 422          
+ 423          void Drv_System_FmSet(EnumFreqMeter emType, EnumClk ucSrc)
+ 424          {
+ 425   1          switch(emType)
+ 426   1          {
+ 427   2              case RX_FM:
+ 428   2                  BKC7_40_REG = ucSrc;
+ 429   2                  break;
+ 430   2      
+ 431   2              case RXLINK_FM:
+ 432   2                  printLT(PRINT_PRIO_HIG, "\nThis fm rxpll_in_clk");
+ 433   2                  break;
+ 434   2      
+ 435   2              case TX_FM:
+ 436   2                  printLT(PRINT_PRIO_HIG, "\nThis fm dhtx_div_link_clk");
+ 437   2                  break;
+ 438   2      
+ 439   2              case TOP_FM:
+ 440   2                  BKE6_90_REG = ucSrc;
+ 441   2                  break;
+ 442   2      
+ 443   2              default:
+ 444   2                  break;
+ 445   2          }
+ 446   1      }
+ 447          
+ 448          u8 Drv_System_FmStbGet(EnumFreqMeter emType)
+ 449          {
+ 450   1          u8 ucRtn = STABLE;
+ 451   1      
+ 452   1          switch(emType)
+ 453   1          {
+ 454   2              case RX_FM:
+ 455   2                  ucRtn = (BKC7_58_REG & BIT5_1)? (STABLE) : (UNSTABLE);
+ 456   2                  break;
+ 457   2      
+ 458   2              case RXLINK_FM:
+ 459   2                  ucRtn = (BKC7_48_REG & BIT5_1)? (STABLE) : (UNSTABLE);
+ 460   2                  break;
+ 461   2      
+ 462   2              case TX_FM:
+ 463   2                  ucRtn = (BKED_3B_REG & BIT5_1)? (STABLE) : (UNSTABLE);
+ 464   2                  break;
+ 465   2      
+ 466   2              case TOP_FM:
+ 467   2                  
+ 468   2                  ucRtn = (BKE6_98_REG & BIT6_1)? (STABLE) : (UNSTABLE);
+ 469   2                  break;
+ 470   2      
+ 471   2              default:
+ 472   2                  break;
+ 473   2          }
+ 474   1      
+ 475   1          return ucRtn;
+ 476   1      }
+ 477          
+ 478          //===========================================
+ 479          //func  :system freq meter value get
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 9   
+
+ 480          //input :emType: freq meter
+ 481          //      :ucOpt: HALF_PIX_CLK, PIX_CLK
+ 482          //output:N/A
+ 483          //return:u32
+ 484          //Info  :N/A
+ 485          //===========================================
+ 486          u32 Drv_System_FmGet(EnumFreqMeter emType, u8 ucOpt)
+ 487          {
+ 488   1          u32 ulRtn;
+ 489   1          switch(emType)
+ 490   1          {
+ 491   2              case RX_FM:
+ 492   2                  BKC7_40_REG |= BIT7_1;//[7]freq_khz_frz_en: 1-en
+ 493   2                  ulRtn = PACK_24_BIT(BKC7_58_REG & 0x0f, BKC7_59_REG, BKC7_5A_REG);
+ 494   2                  BKC7_40_REG &= BIT7_0;//[7]freq_khz_frz_en: 0-dis
+ 495   2                  break;
+ 496   2              
+ 497   2              case RXLINK_FM:
+ 498   2                  ulRtn = PACK_24_BIT(BKC7_48_REG & 0x0f, BKC7_49_REG, BKC7_4A_REG);
+ 499   2                  break;
+ 500   2              
+ 501   2              case TX_FM:
+ 502   2                  BKED_30_REG |= BIT1_1;//[1]rgd_txfm_freq_khz_frz_en: 1-en
+ 503   2                  ulRtn = PACK_24_BIT(BKED_3C_REG & 0x0f, BKED_3D_REG, BKED_3E_REG);
+ 504   2                  BKED_30_REG &= BIT1_0;//[1]rgd_txfm_freq_khz_frz_en: 0-dis
+ 505   2                  break;
+ 506   2      
+ 507   2              case TOP_FM:
+ 508   2                  BKE6_90_REG |= BIT7_1;//[7]freq_khz_frz_en: 1-en
+ 509   2                  ulRtn = PACK_24_BIT(BKE6_98_REG & 0x0f, BKE6_99_REG, BKE6_9A_REG);
+ 510   2                  BKE6_90_REG &= BIT7_0;//[7]freq_khz_frz_en: 0-dis
+ 511   2                  break;
+ 512   2      
+ 513   2              default:
+ 514   2                  printLT(PRINT_PRIO_HIG, "\nWARNING: Freq meter get fail");
+ 515   2                  break;
+ 516   2          }
+ 517   1      
+ 518   1          ulRtn <<= ucOpt;
+ 519   1          return ulRtn;
+ 520   1      }
+ 521          
+ 522          void Drv_System_PktHeadSet(EnumPacktType ucType)
+ 523          {
+ 524   1          switch(ucType)
+ 525   1          {
+ 526   2              case USER_DEFINE_PKT_0X77:
+ 527   2                  BKCC_0A_REG = 0x77;
+ 528   2                  break;
+ 529   2              case VSI_INFO_FRAME_0X81:
+ 530   2                  BKCC_5C_REG = 0X03;
+ 531   2                  BKCC_5D_REG = 0x81;
+ 532   2                  BKCC_5E_REG = 0X46;
+ 533   2                  BKCC_5F_REG = 0xD0;        
+ 534   2                  break;
+ 535   2              case HDR_INFO_FRAME_0X87:
+ 536   2                  //HDR PKT det SET
+ 537   2                  BKCC_09_REG = 0XF3;
+ 538   2                  BKCC_0A_REG = 0X87;
+ 539   2                  BKCC_0B_REG = 0X01;
+ 540   2                  BKCC_0C_REG = 0X1A;
+ 541   2                  break;
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 10  
+
+ 542   2              default:
+ 543   2                  break;
+ 544   2          }
+ 545   1      }
+ 546          
+ 547          u8 Drv_System_PktDataChk(EnumPacktType ucType)
+ 548          {
+ 549   1          u8 ucRtn = FAIL;
+ 550   1      
+ 551   1          switch(ucType)
+ 552   1          {
+ 553   2              case USER_DEFINE_PKT_0X77:
+ 554   2                  break;
+ 555   2              case VSI_INFO_FRAME_0X81:
+ 556   2                  if ((BKCC_B1_REG == 0x81)&&(BKCC_B5_REG == 0x46)&&(BKCC_B6_REG == 0xD0)&&(BKCC_B7_REG == 0x00)
+             -)
+ 557   2                  {
+ 558   3                      ucRtn = SUCCESS;
+ 559   3                 }  
+ 560   2                 #if RX_PORT_SIGN == HDMI_PORT
+ 561   2                 #if HDR10PLUS==ENABLED  
+                          if ((BKCC_B1_REG == 0x81)&&(BKCC_B5_REG == 0x8b)&&(BKCC_B6_REG == 0x84)&&(BKCC_B7_REG == 0x90)
+             -)
+                          {
+                              ucRtn = SUCCESS+1;
+                          } 
+                         #endif   
+ 567   2                 #endif 
+ 568   2                  break;
+ 569   2              case HDR_INFO_FRAME_0X87:
+ 570   2                  if ((BKCC_75_REG == 0x87)&&(BKCC_76_REG == 0x01)&&(BKCC_77_REG == 0x1A))//&& (BKCC_79_REG!=0
+ 571   2                  {
+ 572   3                      ucRtn = SUCCESS;
+ 573   3                  }
+ 574   2                  break;
+ 575   2              case AVI_INFO_FRAME_0X82:
+ 576   2                  if ((BKCC_9F_REG == 0x82) &&
+ 577   2                      ((BKCC_A0_REG == 0x02) || (BKCC_A0_REG == 0x03)) &&
+ 578   2                      (BKCC_A1_REG == 0x0d))
+ 579   2                  {
+ 580   3                      ucRtn = SUCCESS;
+ 581   3                  }
+ 582   2                  break;
+ 583   2      
+ 584   2              default:
+ 585   2                  break;
+ 586   2          }
+ 587   1      
+ 588   1          return ucRtn;
+ 589   1      }
+ 590          
+ 591          void Drv_System_VidChkSet(u8 ucSrc)
+ 592          {
+ 593   1          if (RX_OUT_VIDEO == ucSrc)
+ 594   1          {
+ 595   2              BKC9_20_REG |= BIT7_1;//[7]rgd_vid_chk_pix_clk_src_sel: 1-pcrpll_div_pcr_clk
+ 596   2              BKC8_7D_REG &= BIT0_0;//[0]rgd_vid_chk_src_sel: 0-rx out
+ 597   2          }
+ 598   1          else if (CSC_OUT_VIDEO == ucSrc)
+ 599   1          {
+ 600   2              BKC9_20_REG &= BIT7_0;//[7]rgd_vid_chk_pix_clk_src_sel: 0-pcrpll_pcr_clk
+ 601   2              BKC8_7D_REG |= BIT0_1;//[0]rgd_vid_chk_src_sel: 1-csc out
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 11  
+
+ 602   2          }
+ 603   1      }
+ 604          
+ 605          u8 Drv_System_VidChkStateGet(u8 b1GetEnable)
+ 606          {
+ 607   1          static u8 ucVidChk_Scan_Cnt = 0;
+ 608   1          if(b1GetEnable == DISABLED)
+ 609   1          {
+ 610   2              ucVidChk_Scan_Cnt = 0; 
+ 611   2          }
+ 612   1          else
+ 613   1          {
+ 614   2              BKC8_71_REG &= 0x3f;// hacitve vactive clr = 0;
+ 615   2              if(BKC8_6F_REG & BIT2_1)
+ 616   2              {
+ 617   3                  ucVidChk_Scan_Cnt++;
+ 618   3              }
+ 619   2              else if(((BKC8_6F_REG & BIT2_1) == 0x00)||(BKC8_6E_REG&0x30))
+ 620   2              {
+ 621   3                  BKC8_71_REG |= 0xc0;// hactive vactive clr = 1;
+ 622   3                  BKC8_71_REG &= 0x3f;// hactive vactive clr = 0;
+ 623   3                  ucVidChk_Scan_Cnt = 0;
+ 624   3                  return UNSTABLE; 
+ 625   3              }
+ 626   2              if(ucVidChk_Scan_Cnt >= 200)
+ 627   2              {
+ 628   3                  return STABLE;
+ 629   3              }
+ 630   2          }
+ 631   1          return UNKNOWN; 
+ 632   1      }
+ 633          /*
+ 634          u16 Drv_System_FrameGet(void)
+ 635          {
+ 636              u8 ucIndex = 60, ucNum;
+ 637              u32 ulVsyncNum, ulLastVsyncNum;
+ 638          
+ 639              while(ucIndex--)
+ 640              {
+ 641                  ulVsyncNum = PACK_24_BIT(BKC8_3B_REG, BKC8_3C_REG, BKC8_3D_REG);
+ 642                  if (ulLastVsyncNum != ulVsyncNum)
+ 643                  {
+ 644                      ucNum = 0;
+ 645                      ulLastVsyncNum = ulVsyncNum;
+ 646                  }
+ 647                  else
+ 648                  {
+ 649                      ucNum++;
+ 650                  }
+ 651                  Ocm_Delay1ms(2);
+ 652          
+ 653                  if (ucNum > 15)
+ 654                  {
+ 655                      break;
+ 656                  }
+ 657              }
+ 658          
+ 659              #if SYSCLK == SYS_CLK_48M
+ 660              return floor((double)48000000 / ulLastVsyncNum);
+ 661              #endif
+ 662          
+ 663              #if SYSCLK == SYS_CLK_40M
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 12  
+
+ 664              return floor((double)40000000 / ulLastVsyncNum);
+ 665              #endif
+ 666          }
+ 667          */
+ 668          void Drv_Sys_ChipRxSrcSel(u8 ucSel)
+ 669          {
+ 670   1          BKC7_D7_REG &= 0xcf;//[5:4]rgd_chip_rx_sel: 00-dprx, 01-hdmirx
+ 671   1          BKC7_D7_REG |= ucSel;//[5:4]
+ 672   1      }
+ 673          
+ 674          //========================================================================
+ 675          // Func Name   : Drv_System_SramPathSet
+ 676          // Description : sram src and sink set
+ 677          // Input       : IN EnumSramPath ucPath  
+ 678          // Output      : None
+ 679          // Return      : void
+ 680          //========================================================================
+ 681          void Drv_System_SramPathSet(IN EnumSramPath ucPath)
+ 682          {
+ 683   1          u8 ucSaveReg;
+ 684   1      
+ 685   1          ucSaveReg = 0x00;//[6:4]pps sink sel: 000-hdmi tx
+ 686   1                           //[3:2]pps src sel: 00-hdmi rx
+ 687   1          switch (ucPath)
+ 688   1          {
+ 689   2              #if RX_PORT_SIGN == DP_PORT
+                      case DPRX_INIT_SET_PATH:
+                          BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-link clk
+                          ucSaveReg = (BKE5_6B_REG & 0xf0) | 0x04;
+                          BKE5_6B_REG = ucSaveReg;//[3:2]pps src sel: 01-dp rx
+                          break;
+                      case DPRX_DSCDEC_PPS_PATH:
+                          BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-link clk
+                          BKE5_6B_REG = 0x24;//[6:4]pps sink sel: 2-select dsc decoder control
+                                             //[3:2]pps src sel: 01-dp rx
+                          break;
+                      case DPRX_DSCBYPASS_PPS_PATH:
+                          BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-link clk
+                          ucSaveReg = (BKE5_6B_REG & 0xf0) | 0x04;
+                          BKE5_6B_REG = ucSaveReg;//[3:2]pps src sel: 01-dp rx
+                          break;
+                      #endif
+ 706   2      
+ 707   2              #if RX_PORT_SIGN == HDMI_PORT
+ 708   2              case HDMIRX_INIT_SET_PATH:
+ 709   2                  BKE1_40_REG &=BIT0_0;
+ 710   2                  ucSaveReg = BKE5_6B_REG & 0xf0;
+ 711   2                  BKE5_6B_REG = ucSaveReg;//[3:2]pps src sel: 00-hdmi rx
+ 712   2                  break;
+ 713   2              case HDMIRX_DSCDEC_PPS_PATH:
+ 714   2                  BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-tmds clk
+ 715   2                  BKE5_6B_REG = 0x20;//[6:4]pps sink sel: 010-select dsc decoder control
+ 716   2                                     //[3:2]pps src sel: 00-hdmi rx
+ 717   2                  break;
+ 718   2              case HDMIRX_DSCBYPASS_PPS_PATH:
+ 719   2                  BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-tmds clk
+ 720   2                  ucSaveReg = (BKE5_6B_REG & 0x0f) | 0xd0;
+ 721   2                  BKE5_6B_REG = ucSaveReg; //[7]rgd_pps_rd_en = 1; [6:4]rgd_pps_sink_sel
+ 722   2                  break;
+ 723   2              #endif
+ 724   2      
+ 725   2              #if TX_PORT_SIGN == DP_PORT
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 13  
+
+ 726   2              case DPTX_INIT_SET_PATH:
+ 727   2                  ucSaveReg = (BKE5_6B_REG & 0x0f) | 0x10;
+ 728   2                  BKE5_6B_REG = ucSaveReg;//[6:4]pps sink sel: 001-dp tx
+ 729   2                  break;
+ 730   2              case DPTX_DSCENC_PPS_PATH:
+ 731   2                  BKE5_6B_REG = 0x18;//[6:4]pps sink sel: 001-dp tx
+ 732   2                                     //[3:2]pps src sel: 10-dsc enc
+ 733   2                  break;
+ 734   2              case DPTX_DSCBYPASS_PPS_PATH:
+ 735   2                  ucSaveReg = (BKE5_6B_REG & 0x0f) | 0x10;
+ 736   2                  BKE5_6B_REG = ucSaveReg;//[6:4]pps sink sel: 001-dp tx
+ 737   2                                          //[3:2]pps src sel: 01-dp rx
+ 738   2                  break;
+ 739   2              case DPTX_HDR_PKT_PATH:
+ 740   2      //            BKF6_EF_REG |= BIT6_1;//[6]rg_pps_upd_dis: 1-dis pps update
+ 741   2                  #if RX_PORT_SIGN == DP_PORT
+                          ucSaveReg |= 0x14;
+                          BKE5_6B_REG = ucSaveReg;//[6:4]pps sink sel: 001-dp tx
+                                                  //[3:2]pps src sel: 01-dp rx
+                          #endif
+ 746   2                  #if RX_PORT_SIGN == HDMI_PORT
+ 747   2                  ucSaveReg |= 0x10; 
+ 748   2                  BKE5_6B_REG = ucSaveReg;//[6:4]pps sink sel: 001-dp tx
+ 749   2                                          //[3:2]pps src sel: 00-hdmi rx
+ 750   2                  #endif
+ 751   2                  break;
+ 752   2              #endif
+ 753   2      
+ 754   2              #if TX_PORT_SIGN == HDMI_PORT
+                      case HDMITX_INIT_SET_PATH:
+                          BKE5_6B_REG &= 0x0f;//[6:4]pps sink sel: 000-hdmi tx
+                          break;
+                      case HDMITX_DSCENC_PPS_PATH:
+                          BKE5_6B_REG = 0x08;//[6:4]pps sink sel: 000-hdmi tx
+                                             //[3:2]pps src sel: 10-dsc enc
+                          break;
+                      case HDMITX_DSCBYPASS_PPS_PATH:
+                          BKE5_6B_REG &= 0x0f;//[6:4]pps sink sel: 000-hdmi tx
+                          break;
+                      case HDMITX_HDR_PKT_PATH:
+                          BKEA_1A_REG &= BIT0_0;//[0]rgd_pps_update_en: 0-sw
+                          #if RX_PORT_SIGN == DP_PORT
+                          ucSaveReg |= 0x04;//[3:2]pps src sel: 01-dp rx
+                          BKE5_6B_REG = ucSaveReg;
+                          #endif
+              
+                          #if RX_PORT_SIGN == HDMI_PORT
+                          BKE5_6B_REG = ucSaveReg;//[3:2]pps src sel: 00-hdmi rx
+                          #endif
+                          break;
+                      #endif
+ 777   2      
+ 778   2              #if TX_PORT_SIGN == MIPI_PORT
+                      case MIPITX_DSCENC_PPS_PATH:
+                      BKE5_6B_REG = 0x38;//[6:4]pps sink sel: 011-mipi tx
+                                         //[3:2]pps src sel: 10-dsc enc
+                      break;
+                      #endif
+ 784   2      
+ 785   2              default:
+ 786   2                  printLT(PRINT_PRIO_HIG,"Warning: input is invalid");
+ 787   2                  break;
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 14  
+
+ 788   2          }
+ 789   1      }
+ 790          
+ 791          
+ 792          //========================================================================
+ 793          // Func Name   : Drv_Sys_HdcpKeyLoad
+ 794          // Description : load hdcp key from flash to sram.
+ 795          // Input       : void  
+ 796          // Output      : None
+ 797          // Return      : void
+ 798          //========================================================================
+ 799          void Drv_Sys_HdcpKeyLoad(void)
+ 800          {
+ 801   1          u8 loadkey_cnt = 0;
+ 802   1      
+ 803   1          BKCA_2B_REG |= BIT6_1; 
+ 804   1          BKCA_2B_REG &= BIT6_0; //load key status clear.
+ 805   1      
+ 806   1          //rgd_sec_flash_init_addr[23:0] = 0x050000 (Flash load address)
+ 807   1          BKE0_68_REG = 0x05;
+ 808   1          BKE0_69_REG = 0x00;
+ 809   1          BKE0_6A_REG = 0x00;
+ 810   1          
+ 811   1          //rgd_upld_size[23:0] = = 0x000800 (Flash load size)
+ 812   1          BKE0_65_REG = 0x00;
+ 813   1          BKE0_66_REG = 0x08;
+ 814   1          BKE0_67_REG = 0x00;
+ 815   1      
+ 816   1          BKE0_60_REG |= BIT1_1; //start load key.
+ 817   1          do
+ 818   1          {
+ 819   2              loadkey_cnt++;
+ 820   2              Ocm_Delay1ms(1);
+ 821   2              if(BKCA_80_REG & BIT0_1)
+ 822   2              {
+ 823   3                  break;
+ 824   3              }
+ 825   2          }while(loadkey_cnt < 20);
+ 826   1          printLT(PRINT_PRIO_HIG, "\nload key done[0x%02bx]",BKCA_80_REG);
+ 827   1          BKE0_60_REG &= BIT1_0; //stop load key.
+ 828   1      }
+ 829          
+ 830          void Drv_Sys_DHRxPowerDomain(u8 b1IsPowerOn)
+ 831          {
+ 832   1         if(b1IsPowerOn == TRUE)
+ 833   1         {
+ 834   2              BKE1_21_REG = 0x00; 
+ 835   2              BKE1_22_REG = 0x00; 
+ 836   2              BKE1_23_REG = 0x00; 
+ 837   2              BKE1_24_REG = 0x00; 
+ 838   2              BKE1_25_REG = 0x00;    //clk disable 
+ 839   2              BKE5_80_REG &= BIT7_0; //power iso_en
+ 840   2              BKE1_0B_REG &= BIT3_0; // reset
+ 841   2              BKE5_80_REG &= BIT6_0; //power domin  enable
+ 842   2         }
+ 843   1         else
+ 844   1         {
+ 845   2              BKE5_80_REG |= BIT6_1; //power domin  disable
+ 846   2              BKE1_0B_REG |= BIT3_1; // reset
+ 847   2              BKE5_80_REG |= BIT7_1; //power iso_en
+ 848   2              BKE1_21_REG = 0x7f; 
+ 849   2              BKE1_22_REG = 0x0b; 
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 15  
+
+ 850   2              BKE1_23_REG = 0xff; 
+ 851   2              BKE1_24_REG = 0xff; 
+ 852   2              BKE1_25_REG = 0xf3; // clk enable  
+ 853   2         } 
+ 854   1      }
+ 855          
+ 856          void Drv_Sys_DHTxPowerDomain(u8 b1IsPowerOn)
+ 857          {
+ 858   1         if(b1IsPowerOn == TRUE)
+ 859   1         {
+ 860   2              BKE1_26_REG = 0x00; 
+ 861   2              BKE1_27_REG = 0x00;     // clk disable 
+ 862   2              BKE5_80_REG &= BIT5_0; //power iso_en
+ 863   2              BKE1_0B_REG &= BIT2_0; // reset
+ 864   2              BKE5_80_REG &= BIT4_0; //power domin  enable
+ 865   2         }
+ 866   1         else
+ 867   1         {
+ 868   2              BKE5_80_REG |= BIT4_1; //power domin  disable
+ 869   2              BKE1_0B_REG |= BIT2_1; // reset
+ 870   2              BKE5_80_REG |= BIT5_1; //power iso_en
+ 871   2              BKE1_26_REG = 0xFF; 
+ 872   2              BKE1_27_REG = 0xF8;// clk enable  
+ 873   2         } 
+ 874   1      }
+ 875          
+ 876          void Drv_Sys_LmtxPowerDomain(u8 b1IsPowerOn)
+ 877          {
+ 878   1         if(b1IsPowerOn == TRUE)
+ 879   1         {
+ 880   2              BKE1_2A_REG = 0x00; 
+ 881   2              BKE1_2B_REG = 0x00;     //lmtx clk disable 
+ 882   2              BKE5_81_REG &= BIT1_0; //power iso_en
+ 883   2              BKE1_0B_REG &= BIT4_0; //LMTX reset
+ 884   2              BKE5_81_REG &= BIT0_0; //power domin  enable
+ 885   2         }
+ 886   1         else
+ 887   1         {
+ 888   2              BKE5_81_REG |= BIT0_1; //power domin  disable
+ 889   2              BKE1_0B_REG |= BIT4_1; //LMTX reset
+ 890   2              BKE5_81_REG |= BIT1_1; //power iso_en
+ 891   2              BKE1_2A_REG = 0xff; 
+ 892   2              BKE1_2B_REG = 0xff; //lmtx clk enable  
+ 893   2         } 
+ 894   1      }
+ 895          void Drv_Sys_DecPowerDomain(u8 b1IsPowerOn)
+ 896          {
+ 897   1         if(b1IsPowerOn == TRUE)
+ 898   1         {
+ 899   2              BKE1_28_REG = 0x00;     // clk disable 
+ 900   2              BKE5_80_REG &= BIT3_0; //power iso_en
+ 901   2              BKE1_0B_REG &= BIT1_0; // reset
+ 902   2              BKE5_80_REG &= BIT2_0; //power domin  enable
+ 903   2         }
+ 904   1         else
+ 905   1         {
+ 906   2              BKE5_80_REG |= BIT2_1; //power domin  disable
+ 907   2              BKE1_0B_REG |= BIT1_1; // reset
+ 908   2              BKE5_80_REG |= BIT3_1; //power iso_en
+ 909   2              BKE1_28_REG = 0xff; // clk enable  
+ 910   2         } 
+ 911   1      }
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 16  
+
+ 912          
+ 913          void Drv_Sys_EncPowerDomain(u8 b1IsPowerOn)
+ 914          {
+ 915   1         if(b1IsPowerOn == TRUE)
+ 916   1         {
+ 917   2              BKE1_29_REG = 0x00;    // clk disable 
+ 918   2              BKE5_80_REG &= BIT1_0; //power iso_en
+ 919   2              BKE1_0B_REG &= BIT0_0; //reset
+ 920   2              BKE5_80_REG &= BIT0_0; //power domin  enable
+ 921   2         }
+ 922   1         else
+ 923   1         {
+ 924   2              BKE5_80_REG |= BIT0_1; //power domin  disable
+ 925   2              BKE1_0B_REG |= BIT0_1; // reset valid
+ 926   2              BKE5_80_REG |= BIT1_1; //power iso_en
+ 927   2              BKE1_29_REG = 0xff;    //clk enable  
+ 928   2         } 
+ 929   1      }
+ 930          
+ 931          #if ((TX_PORT_SIGN == DP_PORT) || (TX_PORT_SIGN == HDMI_PORT))
+ 932          void Drv_Sys_DhTxSrcSel(u8 ucSel)
+ 933          {
+ 934   1          BKED_20_REG = ucSel;
+ 935   1      }
+ 936          #endif
+ 937          #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+              void Drv_Sys_LmOutSel(u8 ucSel)
+              {
+                  BKF9_00_REG = ucSel;
+              }
+              #endif
+ 943          
+ 944          #if ((HDMITX_VID_PATTERN_SEL != NO_PATTERN)||(DPTX_VID_PATTERN_SEL != NO_PATTERN))
+              void Drv_System_VidPatternSet(void)
+              {
+                  u8 ucpcrpll_cal_cnt,ucpcrpll_lock_cnt;
+                  u8 timing[17];
+                  //timing fill
+                  #if DPTX_VID_PATTERN_SEL == PTN480P
+                  memcpy(timing,timing480p60hz,17);
+                  #elif DPTX_VID_PATTERN_SEL == PTN720P
+                  memcpy(timing,timing720p60hz,17);
+                  #elif DPTX_VID_PATTERN_SEL == PTN1080P
+                  memcpy(timing,timing1080p60hz,17);
+                  #elif DPTX_VID_PATTERN_SEL == PTN4K30
+                  memcpy(timing,timing4k30hz,17);
+                  #elif DPTX_VID_PATTERN_SEL == PTN4K60
+                  memcpy(timing,timing4k60hz,17);
+                  #elif DPTX_VID_PATTERN_SEL == PTN4K120
+                  memcpy(timing,timing4k120hz,17);
+                  #elif DPTX_VID_PATTERN_SEL == PTN8K30
+                  memcpy(timing,timing8k30hz,17);
+                  #endif
+                  
+                  #if HDMITX_VID_PATTERN_SEL == PTN480P
+                  memcpy(timing,timing480p60hz,17);
+                  #elif HDMITX_VID_PATTERN_SEL == PTN720P
+                  memcpy(timing,timing720p60hz,17);
+                  #elif HDMITX_VID_PATTERN_SEL == PTN1080P
+                  memcpy(timing,timing1080p60hz,17);
+                  #elif HDMITX_VID_PATTERN_SEL == PTN4K30
+                  memcpy(timing,timing4k30hz,17);
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 17  
+
+                  #elif HDMITX_VID_PATTERN_SEL == PTN4K60
+                  memcpy(timing,timing4k60hz,17);
+                  #elif HDMITX_VID_PATTERN_SEL == PTN4K120
+                  memcpy(timing,timing4k120hz,17);
+                  #elif HDMITX_VID_PATTERN_SEL == PTN8K30
+                  memcpy(timing,timing8k30hz,17);
+                  #endif
+                  BKC7_C3_REG = timing[0];
+                  BKC7_C4_REG = timing[1];
+                  BKC7_C5_REG = timing[2];
+                  BKC7_C6_REG = timing[3];
+                  BKC7_C7_REG = timing[4];
+                  BKC7_C8_REG = timing[5];
+                  BKC7_C9_REG = timing[6];
+                  BKC7_CA_REG = timing[7];
+                  BKC7_CB_REG = timing[8];
+                  BKC7_CC_REG = timing[9];
+                  BKC7_CD_REG = timing[10];
+                  BKC7_CE_REG = timing[11];
+                  BKC7_CF_REG = timing[12];
+                  BKC7_D0_REG = timing[13];
+                  BKC7_D1_REG = timing[14];
+              
+                  //pattern color space/depth set
+                  BKC7_D6_REG = 0x30;//[5:4]rgd_ptn_video_pattern: 11-color square
+                                     //[1:0]rgd_ptn_pixel_format:  00-rgb/ycbcr444/ycbcr420
+                  //pcrpll init
+                  BKC7_D7_REG &= BIT0_0;//[0]rgd_rx_da_src_sel: 0-dp
+                  BKA3_23_REG = 0x01;//[6:4]rg_pcrpll_half_pcrck_muxsel : 010-aa_pll_half_pix_clk
+                  BKA3_24_REG = 0x00;//[6:4]rg_pcrpll_half_pixck_muxsel : 010-aa_pll_half_pix_clk
+                  BKA3_25_REG = 0x01;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+                  BKA3_26_REG = 0x01;//[6:4]rg_pcrpll_dscin_muxsel      : 000-aa_pll_pix_clk
+                  BKA3_2A_REG = 0x80|timing[15];
+                  BKA3_2B_REG = timing[16];//[7]rgd_sw_en_pcrpll_freq_set: 1-sw;
+                                           //[6:4]rgd_sw_pcrpll_freq_set
+                  BKA3_2E_REG = 0x08;//da_pcrpll_post_divsel = 1;                         
+                  //pcrpll cali
+                  BKA3_20_REG &= BIT4_0;//[4]rg_pcrpll_pd: 0-normal work
+                  BKA3_20_REG |= BIT2_1;//post_div_set  = 2
+                  BKA3_20_REG &= 0xfc;  //[1:0]rg_pcrpll_ref_sel: 00-Xtal_25m_clk
+                  BKE2_3D_REG = 0x20;// ks =2;
+                  ucpcrpll_cal_cnt = 0;
+                  do{
+                      BKE1_08_REG &= 0xfc;//[1]rgd_sw_pcrpll_cal_rst_n
+                      BKE1_0E_REG &= BIT1_0;//[1]rg_sw_pcrpll_rst_n
+                      BKE2_3D_REG &= BIT3_0;//[3]rgd_pcrpll_pll_cal_en
+                      Ocm_Delay1ms(1);
+                      BKE1_08_REG |= 0x03;
+                      BKE1_0E_REG |= BIT1_1;
+                      Ocm_Delay1ms(1);
+                      BKE2_3D_REG |= BIT3_1;
+                      Ocm_Delay1ms(2);
+                      ucpcrpll_cal_cnt++;
+                  }while((ucpcrpll_cal_cnt <3)&&((BKE2_47_REG&0x3) != 0x02));
+                  printLT(PRINT_PRIO_HIG, "\nPattern pcr band = 0x%02bx", BKE2_4E_REG);
+                  ucpcrpll_lock_cnt = 0;      
+                  while((!(BKE2_28_REG&BIT4_1)) && (ucpcrpll_lock_cnt < 6))  //PLL lock output lock status
+                  {
+                      ucpcrpll_lock_cnt++;
+                      Ocm_Delay1ms(1);
+                  }
+                  //dp rx sdm control mode
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 18  
+
+                  BKF3_34_REG |= 0x05;//[2]rg_soft_k_en: 1-en
+                                      //[0]rg_soft_m_en: 1-en
+                  BKF3_37_REG = timing[15];//m value
+                  #if DPTX_VID_PATTERN_SEL == PTN480P
+                  BKF3_3A_REG = 0x00;//k value
+                  BKF3_3B_REG = 0x00;//k value
+                  BKF3_3C_REG = 0x00;//k value
+                  #elif DPTX_VID_PATTERN_SEL == PTN720P
+                  BKF3_3A_REG = 0x85;//k value
+                  BKF3_3B_REG = 0x1e;//k value
+                  BKF3_3C_REG = 0xb8;//k value
+                  #elif DPTX_VID_PATTERN_SEL == PTN1080P
+                  BKF3_3A_REG = 0x85;//k value
+                  BKF3_3B_REG = 0x1e;//k value
+                  BKF3_3C_REG = 0xb8;//k value
+                  #elif DPTX_VID_PATTERN_SEL == PTN4K30
+                  BKF3_3A_REG = 0x85;//k value
+                  BKF3_3B_REG = 0x1e;//k value
+                  BKF3_3C_REG = 0xb8;//k value
+                  #elif DPTX_VID_PATTERN_SEL == PTN4K60
+                  BKF3_3A_REG = 0x85;//k value
+                  BKF3_3B_REG = 0x1e;//k value
+                  BKF3_3C_REG = 0xb8;//k value
+                  #elif DPTX_VID_PATTERN_SEL == PTN4K120
+                  BKF3_3A_REG = 0x33;//k value
+                  BKF3_3B_REG = 0x33;//k value
+                  BKF3_3C_REG = 0x33;//k value
+                  #elif DPTX_VID_PATTERN_SEL == PTN8K30
+                  BKF3_3A_REG = 0x33;//k value
+                  BKF3_3B_REG = 0x33;//k value
+                  BKF3_3C_REG = 0x33;//k value
+                  #endif
+                  
+                  #if HDMITX_VID_PATTERN_SEL == PTN480P
+                  g_stHdmiTx.ulTxPixelClk = 25000;
+                  g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+                  BKF3_3A_REG = 0x00;//k value
+                  BKF3_3B_REG = 0x00;//k value
+                  BKF3_3C_REG = 0x00;//k value
+                  #elif HDMITX_VID_PATTERN_SEL == PTN720P
+                  g_stHdmiTx.ulTxPixelClk = 74250;
+                  g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+                  BKF3_3A_REG = 0x85;//k value
+                  BKF3_3B_REG = 0x1e;//k value
+                  BKF3_3C_REG = 0xb8;//k value
+                  #elif HDMITX_VID_PATTERN_SEL == PTN1080P
+                  g_stHdmiTx.ulTxPixelClk = 148500;
+                  g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+                  BKF3_3A_REG = 0x85;//k value
+                  BKF3_3B_REG = 0x1e;//k value
+                  BKF3_3C_REG = 0xb8;//k value
+                  #elif HDMITX_VID_PATTERN_SEL == PTN4K30
+                  g_stHdmiTx.ulTxPixelClk = 297000;
+                  g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+                  BKF3_3A_REG = 0x85;//k value
+                  BKF3_3B_REG = 0x1e;//k value
+                  BKF3_3C_REG = 0xb8;//k value
+                  #elif HDMITX_VID_PATTERN_SEL == PTN4K60
+                  g_stHdmiTx.ulTxPixelClk = 594000;
+                  g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+                  BKF3_3A_REG = 0x85;//k value
+                  BKF3_3B_REG = 0x1e;//k value
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 19  
+
+                  BKF3_3C_REG = 0xb8;//k value
+                  #elif HDMITX_VID_PATTERN_SEL == PTN4K120
+                  g_stHdmiTx.ulTxPixelClk = 1180000;
+                  g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+                  BKF3_3A_REG = 0x33;//k value
+                  BKF3_3B_REG = 0x33;//k value
+                  BKF3_3C_REG = 0x33;//k value
+                  #elif HDMITX_VID_PATTERN_SEL == PTN8K30
+                  g_stHdmiTx.ulTxPixelClk = 1180000;
+                  g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+                  BKF3_3A_REG = 0x33;//k value
+                  BKF3_3B_REG = 0x33;//k value
+                  BKF3_3C_REG = 0x33;//k value
+                  #endif
+                  BKF3_3D_REG &=0xf0;
+                  BKF3_3D_REG |=0x06;//[3:2]rg_diff_ord_sel;
+                                     //[1:0]rg_sdm_ord_sel;  
+                  BKA3_2A_REG = 0x00;
+                  
+                  //data mux
+                  BKC7_D7_REG &= BIT6_0;//[6]rgd_dsc_dec_sel: 0-bypass
+                  Drv_Sys_ChipRxSrcSel(CHIPRX_SRC_SEL_PTN);
+                  //clk mux
+              
+                  BKA3_3C_REG &= 0x80;
+                  BKA3_3D_REG &= 0x80;
+                  BKA3_3E_REG &= 0x80;
+                  BKA3_3F_REG &= 0x80;
+                  BKA3_40_REG &= 0x80;
+                  BKA3_41_REG &= 0x80;
+                  BKA3_42_REG &= 0x80;
+              
+                  //sel pcrpll_dsc_in_clk
+                  BKA3_3D_REG |= 0x60;//[6:4]rg_clkgen_div_link_muxsel     : 110-aa_pcrpll_dsc_in_clk
+                  //half pix
+                  BKA3_45_REG = 0x00;
+                  BKA3_46_REG = 0x00;//[2:0]rg_clkgen_pcr_clk_recvsel      : 000-aa_pcrpll_pcr_clk
+                  //pix
+                  BKA3_3C_REG = 0x01;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_cl
+             -k
+                                          //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 1
+                  BKA3_3E_REG = 0x11;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                                     //[3:0]rg_clkgen_dscout_divse        : div 2
+                  BKA3_3F_REG = 0x01;//ad_dscrx_dsc_clk    2f/2
+                  BKA3_40_REG = 0x11;//ad_dscrx_dsc_rd_clk 2f/2
+                  
+                  BKA3_41_REG = 0x01;//[6:4]rg_clkgen_dsctx_dsc_muxsel    : 000-aa_pcrpll_pix_clk
+                  BKA3_42_REG = 0x11;//[6:4]rg_clkgen_dsctx_dscrd_muxsel  : 001-aa_pcrpll_pix_clk
+                                       //[3:0]rg_clkgen_dsctx_dscrd_divsel : div                                        
+             -     
+              }
+              
+              void Drv_System_AudioPatternSet(void)
+              {
+                  u8 ucAudpll_cal_cnt;
+                  u8 ucAudpll_lock_cnt;
+                  BKE1_0E_REG &= BIT7_0;//AUDPLL HARDSERET = 0
+              
+                  BKA3_08_REG &= BIT4_0;
+                  BKA3_08_REG &= 0xfc;  // 00-Xtal_25m_clk
+                  BKA3_0E_REG = 0x02;
+                  BKE2_2A_REG = 0x20;  // ks =2; rg_cal_en =1
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 20  
+
+                  
+                  #if DPTX_VID_PATTERN_SEL != NO_PATTERN
+                  #if DPTX_AUD_PATTERN_SEL == AUD_PTN_32K
+                  BKA3_0F_REG = 0xbf;//m = 63
+                  BKA3_10_REG = 0xc0;//div =32 
+                  #endif
+              
+                  #if DPTX_AUD_PATTERN_SEL == AUD_PTN_44D1K
+                  BKA3_0F_REG = 0xd7;
+                  BKA3_10_REG = 0xc0;//44.1KHz
+                  #endif
+              
+                  #if DPTX_AUD_PATTERN_SEL == AUD_PTN_48K
+                  BKA3_0F_REG = 0xde;
+                  BKA3_10_REG = 0xc0; //div = 32
+                  #endif
+              
+                  #if DPTX_AUD_PATTERN_SEL == AUD_PTN_88D2K
+                  BKA3_0F_REG = 0xd7;
+                  BKA3_10_REG = 0xb0;//87.9KHz
+                  #endif
+              
+                  #if DPTX_AUD_PATTERN_SEL == AUD_PTN_96K
+                  BKA3_0F_REG = 0xdf;
+                  BKA3_10_REG = 0xb0;//96.6KHz
+                  #endif
+              
+                  #if DPTX_AUD_PATTERN_SEL == AUD_PTN_176D4K
+                  BKA3_0F_REG = 0xd7;
+                  BKA3_10_REG = 0xa0;//175.8KHz
+                  #endif
+              
+                  #if DPTX_AUD_PATTERN_SEL == AUD_PTN_192K
+                  BKA3_0F_REG = 0xde;
+                  BKA3_10_REG = 0xa0;//193.3KHz
+                  #endif
+                  #endif
+                  
+                  #if HDMITX_VID_PATTERN_SEL != NO_PATTERN
+                  #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_32K
+                  BKA3_0F_REG = 0xbf;//m = 63
+                  BKA3_10_REG = 0xc0;//div =32 
+                  #endif
+              
+                  #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_44D1K
+                  BKA3_0F_REG = 0xd7;
+                  BKA3_10_REG = 0xc0;//44.1KHz
+                  #endif
+              
+                  #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_48K
+                  BKA3_0F_REG = 0xde;
+                  BKA3_10_REG = 0xc0; //div = 32
+                  #endif
+              
+                  #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_88D2K
+                  BKA3_0F_REG = 0xd7;
+                  BKA3_10_REG = 0xb0;//87.9KHz
+                  #endif
+              
+                  #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_96K
+                  BKA3_0F_REG = 0xdf;
+                  BKA3_10_REG = 0xb0;//96.6KHz
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 21  
+
+                  #endif
+              
+                  #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_176D4K
+                  BKA3_0F_REG = 0xd7;
+                  BKA3_10_REG = 0xa0;//175.8KHz
+                  #endif
+              
+                  #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_192K
+                  BKA3_0F_REG = 0xde;
+                  BKA3_10_REG = 0xa0;//193.3KHz
+                  #endif
+                  #endif
+                  
+                  ucAudpll_cal_cnt = 0;
+                  do{
+                      BKE1_04_REG &= 0xfc;//[1]rgd_sw_audpll_cal_rst_n
+                      BKE1_0F_REG &= BIT7_0;//[1]rg_sw_pcrpll_rst_n
+                      BKE2_2A_REG &= BIT3_0;//[3]rgd_pcrpll_pll_cal_en
+                      Ocm_Delay1ms(1);
+                      BKE1_04_REG |= 0x03;
+                      BKE1_0F_REG |= BIT7_1;
+                      Ocm_Delay1ms(1);
+                      BKE2_2A_REG |= BIT3_1;
+                      Ocm_Delay1ms(2);
+                      ucAudpll_cal_cnt++;
+                  }while((ucAudpll_cal_cnt <3)&&((BKE2_34_REG&0x03) != 0x02));
+                  printLT(PRINT_PRIO_HIG, "\nPattern Audpll band = 0x%02bx", BKE2_3C_REG);
+                  ucAudpll_lock_cnt = 0;      
+                  while((!(BKE2_28_REG&BIT5_1)) && (ucAudpll_lock_cnt < 6))  //PLL lock output lock status
+                  {
+                      ucAudpll_lock_cnt++;
+                      Ocm_Delay1ms(1);
+                  }
+                  if(BKE2_28_REG&BIT5_1)
+                  {
+                      printLT(PRINT_PRIO_HIG, "\nPattern Audpll lock");
+                  }
+              }
+              
+              void Drv_Vid_TimingGet(LtTiming_S *pstTiming)
+              {
+                  //get V timing by video check
+                  pstTiming->usVfp =   ((u16)BKC8_4C_REG << 8) + BKC8_4D_REG;
+                  pstTiming->usVsync = ((u16)BKC8_46_REG << 8) + BKC8_47_REG;
+                  pstTiming->usVbp =   ((u16)BKC8_4A_REG << 8) + BKC8_4B_REG;
+                  pstTiming->usVact =  ((u16)BKC8_56_REG << 8) + BKC8_57_REG;
+                  pstTiming->usVtol =  ((u16)BKC8_52_REG << 8) + BKC8_53_REG;
+                  //h
+                  pstTiming->usHfp =   ((u16)BKC8_50_REG << 8) + BKC8_51_REG;
+                  pstTiming->usHsync = ((u16)BKC8_48_REG << 8) + BKC8_49_REG;
+                  pstTiming->usHbp =   ((u16)BKC8_4E_REG << 8) + BKC8_4F_REG;
+                  pstTiming->usHact =  ((u16)BKC8_58_REG << 8) + BKC8_59_REG;
+                  pstTiming->usHtol =  ((u16)BKC8_54_REG << 8) + BKC8_55_REG;
+                  //recover to real timing
+                  if ((BKCC_D0_REG & 0x70) == 0x30)//[6:4]hdmi rx color space, 11-yuv420, -wangtt- wait update
+                  {
+                      pstTiming->usHbp   <<= 2;
+                      pstTiming->usHfp   <<= 2;
+                      pstTiming->usHsync <<= 2;
+                      pstTiming->usHtol  <<= 2;
+                      pstTiming->usHact  <<= 2;
+                  }
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 22  
+
+                  else
+                  {
+                      pstTiming->usHbp   <<= 1;
+                      pstTiming->usHfp   <<= 1;
+                      pstTiming->usHsync <<= 1;
+                      pstTiming->usHtol  <<= 1;
+                      pstTiming->usHact  <<= 1;
+                  }
+              }
+              #endif
+1292          
+1293          #if ((LVDXTX_VID_PATTERN_MODE != NO_PATTERN) ||(MIPITX_VID_PATTERN_MODE != NO_PATTERN))
+              
+              
+              void Drv_PtnType_Sel(void)
+              {
+                  //pattern color space/depth set
+                  BKC7_D6_REG = 0x30;//[5:4]rgd_ptn_video_pattern: 11-color square
+                                     //[1:0]rgd_ptn_pixel_format:  00-rgb/ycbcr444/ycbcr420
+              }
+              
+              void Drv_PtnClk_Set(u8 Value_0xA32A,u8 Value_0xA32B)//PTN0 = 0 , PTN1 = 1
+              {
+                  BKA3_2A_REG = 0x80|Value_0xA32A;
+                  BKA3_2B_REG = Value_0xA32B;//[7]rgd_sw_en_pcrpll_freq_set: 1-sw;
+                                           //[6:4]rgd_sw_pcrpll_freq_set
+                              BKF3_37_REG = Value_0xA32A;//m value
+              }
+              
+              
+              void Drv_PtnPCR_Init(void)
+              {
+                  //pcrpll init
+                  BKC7_D7_REG &= BIT0_0;//[0]rgd_rx_da_src_sel: 0-dp
+                  BKA3_23_REG = 0x01;//[6:4]rg_pcrpll_half_pcrck_muxsel : 010-aa_pll_half_pix_clk
+                  BKA3_24_REG = 0x01;//[6:4]rg_pcrpll_half_pixck_muxsel : 010-aa_pll_half_pix_clk
+                  BKA3_25_REG = 0x01;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+                  BKA3_26_REG = 0x01;//[6:4]rg_pcrpll_dscin_muxsel      : 000-aa_pll_pix_clk
+              //    BKA3_2A_REG = 0x80|timing[15];
+              //    BKA3_2B_REG = timing[16];//[7]rgd_sw_en_pcrpll_freq_set: 1-sw;
+                                           //[6:4]rgd_sw_pcrpll_freq_set
+                  //pcrpll cali
+                  BKA3_20_REG &= BIT4_0;//[4]rg_pcrpll_pd: 0-normal work
+                  BKA3_20_REG &= 0xfc;  //[1:0]rg_pcrpll_ref_sel: 00-Xtal_25m_clk
+                  BKE1_08_REG &= BIT1_0;//[1]rgd_sw_pcrpll_cal_rst_n
+                  BKE1_0E_REG &= BIT1_0;//[1]rg_sw_pcrpll_rst_n
+                  BKE2_3D_REG &= BIT3_0;//[3]rgd_pcrpll_pll_cal_en
+                  Ocm_Delay1ms(1);
+                  BKE1_08_REG |= BIT1_1;
+                  BKE1_0E_REG |= BIT1_1;
+                  BKE2_3D_REG |= BIT3_1;
+                  Ocm_Delay1ms(10);
+              
+                  printLT(PRINT_PRIO_HIG, "\nPattern pcr band = 0x%02bx", BKE2_4E_REG);
+                  Ocm_Delay1ms(10);        
+                  if(BKE2_28_REG&BIT4_1)
+                  {
+                      printLT(PRINT_PRIO_HIG, "\nPattern pcr lock");
+                  }
+                              
+                  //dp rx sdm control mode
+                  BKF3_34_REG |= 0x05;//[2]rg_soft_k_en: 1-en
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 23  
+
+                                      //[0]rg_soft_m_en: 1-en
+              //    BKF3_37_REG = timing[15];//m value
+                      
+                  BKF3_3A_REG = 0x04;//k value
+                  BKF3_3B_REG = 0x00;//k value
+                  BKF3_3C_REG = 0x00;//k value
+                  BKF3_3D_REG &=0xf0;
+                  BKF3_3D_REG |=0x06;//[3:2]rg_diff_ord_sel;
+                                      //[1:0]rg_sdm_ord_sel;  
+                  BKA3_2A_REG = 0x00;         
+              }
+              
+              void Drv_PtnTiming_Set(struct TIMING *CustomTiming)
+              {
+                      
+              //    LTLog(LOG_INFO, "Pattern[H]: Htotal:%d,Hactive:%d,Hsw:%d,Hfp:%d,Hbp:%d,Hspol:%bd",  CustomTiming->Ht
+             -otal, CustomTiming->Hactive, CustomTiming->Hsw, CustomTiming->Hfp, CustomTiming->Hbp,CustomTiming->Hspol);
+              //    LTLog(LOG_INFO, "Pattern[V]: Vtotal:%d,Vactive:%d,Vsw:%d,Vfp:%d,Vbp:%d,Vspol:%bd",  CustomTiming->Vt
+             -otal, CustomTiming->Vactive, CustomTiming->Vsw, CustomTiming->Vfp, CustomTiming->Vbp,CustomTiming->Vspol);    
+                      
+                              BKC7_C3_REG = ((CustomTiming->Hsw+CustomTiming->Hbp)/2)/256;
+                              BKC7_C4_REG = ((CustomTiming->Hsw+CustomTiming->Hbp)/2)%256;
+                              BKC7_C5_REG = (CustomTiming->Vsw+CustomTiming->Vbp)/256;
+                              BKC7_C6_REG = (CustomTiming->Vsw+CustomTiming->Vbp)%256;
+                              BKC7_C7_REG = (CustomTiming->Hactive/2)/256;
+                              BKC7_C8_REG = (CustomTiming->Hactive/2)%256;
+                              BKC7_C9_REG = (CustomTiming->Vactive)/256;
+                              BKC7_CA_REG = (CustomTiming->Vactive)%256;
+                              BKC7_CB_REG = (CustomTiming->Htotal/2)/256;
+                              BKC7_CC_REG = (CustomTiming->Htotal/2)%256;
+                              BKC7_CD_REG = (CustomTiming->Vtotal)/256;
+                              BKC7_CE_REG = (CustomTiming->Vtotal)%256;
+                              BKC7_CF_REG = (CustomTiming->Hsw/2)/256;
+                              BKC7_D0_REG = (CustomTiming->Hsw/2)%256;
+                              BKC7_D1_REG = CustomTiming->Vsw;                
+                      
+              }
+              
+              void Drv_PtnDataClk_Mux(void)
+              {
+                  //data mux
+                  BKC7_D7_REG &= BIT6_0;//[6]rgd_dsc_dec_sel: 0-bypass
+                  Drv_Sys_ChipRxSrcSel(CHIPRX_SRC_SEL_PTN);
+                  //clk mux
+                  BKA3_45_REG &= 0xe0;
+                  BKA3_3C_REG &= 0x80;
+                  BKA3_3E_REG &= 0x80;
+                  BKA3_41_REG &= 0x80;
+                  BKA3_42_REG &= 0x80;
+                  //half pix
+              //    BKA3_45_REG &= 0xe0;//[4]rg_clkgen_dscin_clk_recvsel     : 0-aa_pcrpll_dsc_in_clk
+                                       //[3:1]rg_clkgen_divpcr_clk_recvsel  : 000-aa_pcrpll_div_pcr_clk
+                                       //[0]rg_clkgen_pix_clk_recvsel       : 0-aa_pcrpll_pix_clk
+                  BKA3_46_REG = 0x00;//[2:0]rg_clkgen_pcr_clk_recvsel      : 000-aa_pcrpll_pcr_clk
+                  //pix
+                  BKA3_3E_REG |= 0x00;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                                      //[3:0]rg_clkgen_dscout_divse        : div 2
+                  BKA3_3C_REG |= 0x00;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_c
+             -lk
+                                      //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+              //    BKA3_41_REG |= 0x00;//[6:4]rg_clkgen_dsctx_dsc_muxsel    : 000-aa_pcrpll_pix_clk
+                  BKA3_42_REG |= 0x00;//[6:4]rg_clkgen_dsctx_dscrd_muxsel  : 001-aa_pcrpll_pix_clk
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 24  
+
+                                      //[3:0]rg_clkgen_dsctx_dscrd_divsel : div 2  
+              }
+              
+              
+              #endif
+1408          
+1409          #if ((CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP))
+              
+              void Drv_Sys_LT7911gxe_HdcpRx_PowerDomain(u8 b1IsPowerOn)
+              {
+                         if(b1IsPowerOn == TRUE)
+                               {
+                               //HDCP RX
+                      BKC9_13_REG &= 0x07;    
+                      BKC9_13_REG &= 0xF8;    
+                      BKC9_14_REG &= 0x3F;    
+                      BKC9_14_REG &= 0xCF;            
+                      BKC9_14_REG &= 0xF7;                             
+                               }
+                               else
+                               {
+                                       
+                               }
+              }
+              
+              #if TX_PORT_SIGN == MIPI_PORT
+              void Drv_MipiTx_Info_Update(u8 ucEvent)
+              {
+                      
+              #define SOURECE_PLUG_EVENT   1
+              #define SOURECE_UNPLUG_EVENT 2
+              #define VIDEO_ON_EVENT      3
+              #define VIDEO_OFF_EVENT       4 
+              #define VIDEO_HDR_NOTIFY_EVENT  11      
+              
+                      u16 Htotal ,Hactive ,Vtotal,Vactive;
+              
+                      switch ( ucEvent )
+                      {
+                          case SOURECE_PLUG_EVENT :
+                              break;
+                          case SOURECE_UNPLUG_EVENT :
+                              break;
+                          case VIDEO_ON_EVENT :   
+                                                                      
+                                                                              /********Common:0xE080~0xE09F********/
+                                                                              /*version:0xE080~0xE083*/
+                                                                              /*interrupt type:0xE084*/
+                                                                               SET_BIT(BKE0_84_REG, BIT0);//video ready;
+                                                                               CLEAR_BIT(BKE0_84_REG, BIT2);
+                                                                              /*pixelclock:0xE085~0xE087*/
+                                                                       
+                                                                              BKE0_85_REG = (g_stMipiTx.ulMipiInClk*2 >> 16)&0x0F;
+                                                                              BKE0_86_REG = g_stMipiTx.ulMipiInClk*2 >> 8;
+                                                                              BKE0_87_REG = g_stMipiTx.ulMipiInClk*2; 
+                                                                              /*resolution:0xE088~0xE08F*/
+                                                                      
+                                                                              Htotal    = Drv_VideoCheckSingle_Get(HTOTAL_POS);
+                                                                              Hactive   = Drv_VideoCheckSingle_Get(HACTIVE_POS);
+                                                                              Vtotal    = Drv_VideoCheckSingle_Get(VTOTAL_POS);
+                                                                              Vactive   = Drv_VideoCheckSingle_Get(VACTIVE_POS);
+                                                                      
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 25  
+
+                                                                              BKE0_88_REG = GET_16BIT_HIGH(Htotal);
+                                                                              BKE0_89_REG = GET_16BIT_LOW(Htotal);
+                                                                              BKE0_8A_REG = GET_16BIT_HIGH(Vtotal);
+                                                                              BKE0_8B_REG = GET_16BIT_LOW(Vtotal);
+                                                                              BKE0_8C_REG = GET_16BIT_HIGH(Hactive);
+                                                                              BKE0_8D_REG = GET_16BIT_LOW(Hactive);
+                                                                              BKE0_8E_REG = GET_16BIT_HIGH(Vactive);
+                                                                              BKE0_8F_REG = GET_16BIT_LOW(Vactive);
+                                                                              
+                                                                              /*Byteclock:0xE092~0xE093*/
+                                                                              BKE0_92_REG = ((g_stMipiTx.ulMipiDataRate/8)>>16)&0x0F;
+                                                                              BKE0_93_REG = (g_stMipiTx.ulMipiDataRate/8)>>8;
+                                                                              BKE0_94_REG = g_stMipiTx.ulMipiDataRate/8;
+                                                                              
+                                                                              /********Mipi:0xE0A0~0xE0AF********/
+                                                                              /*Lane*/
+                                                                              BKE0_A0_REG = g_stMipiTx.ucTxPortNum ;
+                                                                              /*YUV422 10bit*/
+                                                                              switch(g_stMipiTx.ucTxFormat)
+                                                                              {
+                                                                                              case CSI_YUV422_8Bit:
+                                                                                                              BKE0_A1_REG = 0x00;
+                                                                                                              break;
+                                                                                              case CSI_YUV422_10Bit:
+                                                                                                              BKE0_A1_REG = 0x01;
+                                                                                                              break;
+                                                                                              case CSI_RGB_888:
+                                                                                                              BKE0_A1_REG = 0x02;
+                                                                                                              break;                    
+                                                                                              case CSI_YUV420_8Bit:
+                                                                                                              BKE0_A1_REG = 0x03;
+                                                                                                              break;
+                                                                                              default:
+                                                                                                              BKE0_A1_REG = 0x00;
+                                                                                                              break;
+                                                                              }
+                                                                              
+                                                                              /********Dp:0xE095~0xE096********/                                                              
+                                                                              BKE0_95_REG = g_stDpRx.ucPixelEncoding;//0x00:rgb 0x01:yuv422 0x02:yuv444 0x03:yuv420
+                                                                              BKE0_96_REG = g_stDpRx.ucBitDepth;//0-6bit,  1-8bit, 2-10bit, 3-12bit                                                           
+                                                                              
+                                                                              LTLog(LOG_INFO,"MIPIVidInfoUpdate!!!!!!");
+                              break;
+                          case VIDEO_OFF_EVENT :
+                                                                      
+                                                                              BKE0_84_REG = 0x00;                                             
+                                                                              BKE0_85_REG = 0x00;
+                                                              
+                                                                              BKE0_86_REG = 0x00;
+                                                                              BKE0_87_REG = 0x00;     
+                                                                              BKE0_88_REG = 0x00;
+                                                                              BKE0_89_REG = 0x00;
+                                                                              BKE0_8A_REG = 0x00;
+                                                                              BKE0_8B_REG = 0x00;
+                                                                              BKE0_8C_REG = 0x00;
+                                                                              BKE0_8D_REG = 0x00;
+                                                                              BKE0_8E_REG = 0x00;
+                                                                              BKE0_8F_REG = 0x00;     
+                                                                              BKE0_90_REG = 0x00;
+                                                                              BKE0_91_REG = 0x00;     
+                                                                              BKE0_92_REG = 0x00;
+                                                                              BKE0_93_REG = 0x00;
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 26  
+
+                                                                              BKE0_94_REG = 0x00;     
+                                                                              BKE0_95_REG = 0x00;
+                                                                              BKE0_96_REG = 0x00;     
+                                                                              BKE0_97_REG = 0x00;             
+                                                                              BKE0_98_REG = 0x00;     
+                                                                              BKE0_99_REG = 0x00;                     
+                                                                              BKE0_9A_REG = 0x00;             
+                                                                              BKE0_9B_REG = 0x00;     
+                                                                              BKE0_9C_REG = 0x00;             
+                                                                              BKE0_9D_REG = 0x00;             
+                                                                              BKE0_9E_REG = 0x00;     
+                                                                              BKE0_9F_REG = 0x00;                                                                                                                             
+                                                                              
+                                                                              BKE0_A0_REG = 0x00;
+                                                                              BKE0_A1_REG = 0x00;
+                                                                              BKE0_A2_REG = 0x00;     
+                                                                              BKE0_A3_REG = 0x00;             
+                                                                              BKE0_A4_REG = 0x00;     
+                                                                              BKE0_A5_REG = 0x00;     
+                                                                              BKE0_A6_REG = 0x00;             
+                                                                              BKE0_A7_REG = 0x00;     
+                                                                              BKE0_A8_REG = 0x00;             
+                                                                              BKE0_A9_REG = 0x00;                                                                             
+                                                                                                                                              
+                                                                              LTLog(LOG_INFO,"MIPIVidInfoClear!!!!!!");    
+                                                              
+                              break;
+                                                              
+                          case VIDEO_HDR_NOTIFY_EVENT :
+                                                                              SET_BIT(BKE0_84_REG, BIT2);//HDR_EN;                                                            
+              
+                                                                              BKE0_85_REG = 0x00;
+                                                              
+                                                                              BKE0_86_REG = BKF2_3C_REG;
+                                                                              BKE0_87_REG = BKF2_3D_REG;      
+                                                                              BKE0_88_REG = BKF2_3E_REG;
+                                                                              BKE0_89_REG = BKF2_3F_REG;
+                                                                              BKE0_8A_REG = BKF2_40_REG;
+                                                                              BKE0_8B_REG = BKF2_41_REG;
+                                                                              BKE0_8C_REG = BKF2_42_REG;
+                                                                              BKE0_8D_REG = BKF2_43_REG;
+                                                                              BKE0_8E_REG = BKF2_44_REG;
+                                                                              BKE0_8F_REG = BKF2_45_REG;      
+                                                                              BKE0_90_REG = BKF2_46_REG;
+                                                                              BKE0_91_REG = BKF2_47_REG;      
+                                                                              BKE0_92_REG = BKF2_48_REG;
+                                                                              BKE0_93_REG = BKF2_49_REG;
+                                                                              BKE0_94_REG = BKF2_4A_REG;              
+                                                                              BKE0_95_REG = BKF2_4B_REG;      
+                                                                              BKE0_96_REG = BKF2_4C_REG;              
+                                                                              BKE0_97_REG = BKF2_4D_REG;              
+                                                                              BKE0_98_REG = BKF2_4E_REG;      
+                                                                              BKE0_99_REG = BKF2_4F_REG;                      
+                                                                              BKE0_9A_REG = BKF2_50_REG;              
+                                                                              BKE0_9B_REG = BKF2_51_REG;      
+                                                                              BKE0_9C_REG = BKF2_52_REG;              
+                                                                              BKE0_9D_REG = BKF2_53_REG;              
+                                                                              BKE0_9E_REG = BKF2_54_REG;      
+                                                                              BKE0_9F_REG = BKF2_55_REG;      
+                                                                              BKE0_A0_REG = BKF2_56_REG;              
+                                                                              BKE0_A1_REG = BKF2_57_REG;      
+                                                                              BKE0_A2_REG = BKF2_58_REG;              
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 27  
+
+                                                                              BKE0_A3_REG = BKF2_59_REG;              
+                                                                              BKE0_A4_REG = BKF2_5A_REG;      
+                                                                              BKE0_A5_REG = BKF2_5B_REG;      
+                                                                              BKE0_A6_REG = BKF2_5C_REG;              
+                                                                              BKE0_A7_REG = BKF2_5D_REG;      
+                                                                              BKE0_A8_REG = BKF2_5E_REG;              
+                                                                              BKE0_A9_REG = BKF2_5F_REG;              
+                                                                                                      
+                                                              
+                              break;                                          
+                          default:
+                              break;
+                      }       
+                      
+              }
+              #endif
+              
+              
+              u8 Drv_DPRX_AudFs_Det(void)
+              {
+                      u8 Fs_Val;
+                      Fs_Val = BKC6_7C_REG;
+                  if((Fs_Val >= 0xbf)&&(Fs_Val <= 0xc1))
+                  {
+                              return AUD_FS_192K;
+                  }   
+                  else if((Fs_Val >= 0xaf)&&(Fs_Val <= 0xb1))
+                  {
+                              return AUD_FS_176K;
+                  }   
+                      else if((Fs_Val >= 0x5f)&&(Fs_Val <= 0x61)) 
+                      {
+                              return AUD_FS_96K;
+                      }
+                      else if((Fs_Val >= 0x57)&&(Fs_Val <= 0x59)) 
+                      {
+                              return AUD_FS_88K;
+                      }       
+                  if((Fs_Val >= 0x2f)&&(Fs_Val <= 0x31))
+                      {
+                              return AUD_FS_48K;
+                      }
+                      else if((Fs_Val >= 0x2b)&&(Fs_Val <= 0x2d))
+                      {
+                              return AUD_FS_44K;
+                      }
+                  else if((Fs_Val >= 0x1f)&&(Fs_Val <= 0x21))
+                  {
+                              return AUD_FS_32K;
+                  }
+                  else if(Fs_Val == 0x00)
+                  {
+                              return AUD_FS_ZERO;
+                  }
+                  else
+                  {
+                      return AUD_FS_VOID;
+                  }
+              }
+              
+              u8 Drv_DPRX_AudChannel(void)
+              {
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 28  
+
+                  static u8 ChNum;
+              //    ChNum = BKF2_63_REG & 0x07;
+                              ChNum = BKF2_F5_REG & 0x07;
+                  if(ChNum)
+                  {
+                      ChNum += 1;
+                  }
+                  else
+                  {
+                      if(BKF2_F1_REG & 0x08)
+                      {
+                          ChNum = 8;
+                      }
+                      else
+                      {
+                          ChNum = 2;
+                      }
+                  }
+                  return ChNum;
+              }
+              
+              
+              void Drv_Aud_Info_Update(u8 IsTrue)
+              {
+                      
+                      u8 ucFsValue, AudCh;
+                      ucFsValue = Drv_DPRX_AudFs_Det();       
+                      AudCh = Drv_DPRX_AudChannel();
+                  if(IsTrue != FALSE)
+                  {
+                                              SET_BIT(BKE0_84_REG, BIT1);//Audio;
+                                              CLEAR_BIT(BKE0_84_REG, BIT2);//Audio;   
+                      BKE0_A2_REG = AudCh;
+                      BKE0_90_REG = 0x00;
+                      BKE0_91_REG = ucFsValue;//Fs_value       
+                      LTLog(LOG_INFO,"AudInfoUpdate!!!!!!");       
+                  }
+                  else
+                  {
+                                              CLEAR_BIT(BKE0_84_REG, BIT1);//Audio;                           
+                      BKE0_A2_REG = 0x00;
+                      BKE0_90_REG = 0x00;
+                      BKE0_91_REG = 0x00;//Fs_value               
+                      //Drv_Print(1,"AudInfoClear\n");
+                  }
+                              
+                              if(ucFsValue == 0)
+                              {
+                                              CLEAR_BIT(BKE0_84_REG, BIT1);//Audio;                           
+                      BKE0_A2_REG = 0x00;
+                      BKE0_90_REG = 0x00;
+                      BKE0_91_REG = 0x00;//Fs_value                           
+                              }
+              }
+              
+              /**************For LT7911UXE INT**************/
+              #if CHIP_SEL == LT7911UXE_DP
+              u8 Drv_GPIO_INT_level_Get(void)
+              {
+                      
+                  if(BKA3_7F_REG & 0x01)
+                  {
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 29  
+
+                      return HIGH;
+                  }
+                  else
+                  {
+                      return LOW;
+                  }   
+              }
+              #endif
+              
+              /**************For LT6911GXD INT(GPIO25_PWM3) IO**************/
+              #if CHIP_SEL == LT6911GXD_DP
+              u8 Drv_GPIO25_PWM3_level_Get(void)
+              {
+                      
+                  if(BKA3_87_REG & 0x10)
+                  {
+                      return HIGH;
+                  }
+                  else
+                  {
+                      return LOW;
+                  }   
+              }
+              #endif
+              
+              
+              #endif
+1740          
+1741          
+1742          #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+              //EDID Flash address : 0x70000
+              void Custom_EDID_LoadFromFlash(void)
+              {
+                  u8 FlashEDID[512] = 0;
+                  u16 loop_training = 0;
+                  #if 0
+                  Drv_Sector_Erease(0x70000);
+                  Drv_Delay_ms(180);
+                  Drv_Flash_Wr(0x70000,g_ucszDPRX_EDID, sizeof( g_ucszDPRX_EDID ));
+                  #endif
+                  Drv_Flash_Rd(0x70000,FlashEDID,512);
+                  
+                  if((FlashEDID[0]==0x00)&&(FlashEDID[1]==0xFF)&&(FlashEDID[2]==0xFF)
+                              &&(FlashEDID[3]==0xFF)&&(FlashEDID[4]==0xFF)&&(FlashEDID[5]==0xFF)
+                              &&(FlashEDID[6]==0xFF)&&(FlashEDID[7]==0x00))
+                  {
+                                              #if 0
+                      LTLog(LOG_INFO,"\nFlash EDID:");
+                      for(loop_training = 0; loop_training < 128*(FlashEDID[0x7e]+1); loop_training++)
+                      {
+                          if((loop_training &0x0f) == 0)
+                          {
+                                  LTLog(LOG_INFO,"\n");
+                          }
+                          LTLog(LOG_INFO,"0x%02bx,",FlashEDID[loop_training]);
+                      }
+                                              #endif
+                                              LTLog(LOG_INFO,"\nFlash EDID Load");
+                      memcpy(szEdidData,FlashEDID,512);
+                  } 
+                  else
+                  {
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 30  
+
+                      LTLog(LOG_INFO,"\nFlash EDID not exsit:");
+                                              #if TX_PORT_SIGN == MIPI_PORT
+                                        memcpy(szEdidData,szMipiEdid,512);
+                                              #else
+                                              memcpy(szEdidData,szLvdsEdid,512);
+                                              #endif
+                  }
+              }
+              
+              void Drv_I2sGpio_1P8VSet(void)
+              {
+                              BKA3_77_REG = 0x54;     
+              }
+              
+              void Drv_PWM0_Sel(u16 CycleFreq , u16 Cycle)
+              {
+                  BKE6_10_REG |= BIT4_1;//pwm enable
+                  
+                  BKE6_11_REG = 0x00;//period(Hbyte) 
+                  BKE6_12_REG = CycleFreq>>8;//
+                  BKE6_13_REG = CycleFreq;//period(Lbyte)
+              
+                  BKE6_14_REG = 0x00;//High time(Hbyte)
+                  BKE6_15_REG = Cycle>>8;
+                  BKE6_16_REG = Cycle;//High time(Lbyte)
+              }
+              
+              void Drv_PWM1_Sel(u16 CycleFreq , u16 Cycle)
+              {
+                  BKE6_26_REG |= BIT4_1;//pwm enable
+                  
+                  BKE6_27_REG = 0x00;//period(Hbyte) 
+                  BKE6_28_REG = CycleFreq>>8;//
+                  BKE6_29_REG = CycleFreq;//period(Lbyte)
+              
+                  BKE6_2A_REG = 0x00;//High time(Hbyte)
+                  BKE6_2B_REG = Cycle>>8;
+                  BKE6_2C_REG = Cycle;//High time(Lbyte)
+              }
+              
+              void Drv_PWM2_Sel(u16 CycleFreq , u16 Cycle)
+              {
+                  BKE6_3C_REG |= BIT4_1;//pwm enable
+                  
+                  BKE6_3D_REG = 0x00;//period(Hbyte) 
+                  BKE6_3E_REG = CycleFreq>>8;//
+                  BKE6_3F_REG = CycleFreq;//period(Lbyte)
+              
+                  BKE6_40_REG = 0x00;//High time(Hbyte)
+                  BKE6_41_REG = Cycle>>8;
+                  BKE6_42_REG = Cycle;//High time(Lbyte)
+              }
+              
+              void Drv_PWM3_Sel(u16 CycleFreq , u16 Cycle)
+              {
+                  BKE6_52_REG |= BIT4_1;//pwm enable
+                  
+                  BKE6_53_REG = 0x00;//period(Hbyte) 
+                  BKE6_54_REG = CycleFreq>>8;//
+                  BKE6_55_REG = CycleFreq;//period(Lbyte)
+              
+                  BKE6_56_REG = 0x00;//High time(Hbyte)
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 31  
+
+                  BKE6_57_REG = Cycle>>8;
+                  BKE6_58_REG = Cycle;//High time(Lbyte)
+              }
+              
+              volatile u8 l_TXEventTrig;
+              volatile u8 l_TXEvent;
+              
+              void TX_Event_Init(void)
+              {
+                  l_TXEventTrig = FALSE;
+                  l_TXEvent = TX_SINK_UNPLUG_EVENT_2;    
+              }
+              
+              void TX_Event_Set(u8 TxEvent)
+              {
+                  l_TXEventTrig = TRUE;//g_RXEventTrig = TRUE
+                  l_TXEvent = TxEvent;
+                  LTLog(LOG_INFO,"TxEvent-%bd",TxEvent);
+              }
+              
+              u8 TX_Event_Trig(void)
+              {
+                  return l_TXEventTrig;
+              }
+              
+              void TX_Event_Clr(void)
+              {
+                  l_TXEventTrig = FALSE;
+              }
+              
+              u8 TX_Event_Get(void)
+              {
+                  return l_TXEvent;
+              }
+              #endif
+1872          
+1873          #if ((RX_PORT_SIGN == DP_PORT) &&(TX_PORT_SIGN == MIPI_PORT))
+              void Drv_Sys_LT7911gxe_MipiTx_PowerDomain(u8 b1IsPowerOn)
+              {
+                 if(b1IsPowerOn == TRUE)
+                 {
+                               
+                               //Dhtxphy
+                      BKA1_59_REG &= 0x3F;
+              
+                               //Dhtxrterm
+                      BKA1_5A_REG &= 0xF0;                     
+              
+                               //arc
+                      BKA2_98_REG &= 0xFC;
+                      BKA2_9E_REG &= 0xBF;
+                      BKA2_99_REG &= 0xBF;            
+                               
+                               //Earcpll
+                      BKA3_14_REG |= 0x10;
+                               
+                               //Secpcrpll
+                      BKA3_2F_REG |= 0x10;                     
+                               
+                               //HDMI RX
+                      BKC9_10_REG &= 0x00; 
+                      BKC9_11_REG &= 0x1F;     
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 32  
+
+                      BKC9_1C_REG &= 0xF3;
+                      BKCD_46_REG &= 0x00;
+                      
+                               //HDCP TX
+              //        BKE9_88_REG &= 0x7F;  
+              //        BKE9_88_REG &= 0x8F;  
+              //        BKE9_88_REG &= 0xF7;  
+              //        BKE9_88_REG &= 0xF8;  
+              //        BKE9_89_REG &= 0xF3;  
+              //        BKE9_89_REG &= 0xFC;  
+                      BKED_0B_REG &= 0x7C;    
+              
+                      BKE9_88_REG &= 0x00;
+                      BKE9_89_REG &= 0x00;                            
+                                              #if MIPITX_VID_PATTERN_MODE == NO_PATTERN
+                              //PTN   
+                      BKC9_17_REG &= 0x7F;
+                                              #endif
+                                              
+                              //CRC
+                      BKC9_17_REG &= 0xBF;
+              
+                              //EARC
+                      BKC9_19_REG &= 0xFC;    
+                      BKC9_1A_REG &= 0x3F;
+                      BKE1_22_REG &= 0xFC;
+              
+                              //CEC   
+                      BKE1_20_REG &= 0xFC;
+              
+                              //DHRX SECPCRPLL
+                      BKE1_25_REG &= 0x3F;    
+              
+                              //SECPCRPLL
+                      BKE1_33_REG &= 0x00;    
+              
+                              //DHTX
+              //        BKE1_26_REG &= 0x00;  
+              //        BKE1_27_REG &= 0x07;          
+              
+              //              //DHTXPLL
+                      BKE1_35_REG &= 0x03;    
+                      BKE1_35_REG &= 0xFC;
+                      BKE1_36_REG &= 0x7F;
+              
+                              //EARCPLL
+                      BKE1_36_REG &= 0x80;    
+                      BKE1_38_REG &= 0xF7;
+              
+                              //PWM SYS
+                      BKE1_38_REG &= 0x7F;    
+              
+                              //FRL
+                      BKEC_05_REG &= 0x00;    
+              
+                              //HDMITX20
+                                                      BKED_08_REG &= 0x80;    
+                                                      BKED_09_REG &= 0x00;
+                                                      BKED_0A_REG &= 0x7F;
+              
+                              //HDMITX21
+                      BKED_0A_REG &= 0x80;    
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 33  
+
+                                              
+                              //AFIFO
+                      BKED_0B_REG &= 0x80;            
+                                              
+                              //BYPASS SSC
+                      BKF9_BA_REG &= 0xE7;    
+                      BKF9_BA_REG &= 0xF9;
+                      BKF9_BB_REG &= 0x3F;
+                      BKF9_BD_REG &= 0xFB;            
+              
+                              //LVDS
+                      BKF9_BB_REG &= 0xDF;    
+                      
+                      
+                              #if 0   
+                              /*******************DPHY**************/ 
+                                              //PORT //1port out Disable another port 
+              //        BKF9_BB_REG &= 0x1B;
+              //        BKF9_BC_REG &= 0x22;
+              //        BKF9_B9_REG &= 0x11;          
+              //        BKE1_2B_REG &= 0xC0;  
+              
+                                                      //2port out  3D SBS
+              //                                      BKF9_BB_REG &= 0x1B;
+              //                                      BKF9_BC_REG &= 0xAA;
+              //                                      BKF9_B9_REG &= 0xFF;//0xAA or 0x55      Display anomaly 
+              //                                      BKE1_2B_REG &= 0xF0;
+                              #endif
+                      
+                                              
+                 }
+                 else
+                 {
+              
+                 } 
+              }
+              #endif
+1998          
+1999          #if  ((RX_PORT_SIGN == DP_PORT) && (TX_PORT_SIGN == LVDS_PORT))
+              void Drv_Sys_LT7911gxe_LvdsTx_PowerDomain(u8 b1IsPowerOn)
+              {
+                 if(b1IsPowerOn == TRUE)
+                 {
+                               
+                               //Dhtxphy
+                      BKA1_59_REG &= 0x3F;
+              
+                               //Dhtxrterm
+                      BKA1_5A_REG &= 0xF0;                     
+              
+                               //arc
+                      BKA2_98_REG &= 0xFC;
+                      BKA2_9E_REG &= 0xBF;
+                      BKA2_99_REG &= 0xBF;            
+                               
+                               //Earcpll
+                      BKA3_14_REG |= 0x10;
+                               
+                               //Secpcrpll
+                      BKA3_2F_REG |= 0x10;                     
+                               
+                               //HDMI RX
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 34  
+
+                      BKC9_10_REG &= 0x00; 
+                      BKC9_11_REG &= 0x1F;     
+                      BKC9_1C_REG &= 0xF3;
+                      BKCD_46_REG &= 0x00;
+                      
+                               //HDCP TX
+              //        BKE9_88_REG &= 0x7F;  
+              //        BKE9_88_REG &= 0x8F;  
+              //        BKE9_88_REG &= 0xF7;  
+              //        BKE9_88_REG &= 0xF8;  
+              //        BKE9_89_REG &= 0xF3;  
+              //        BKE9_89_REG &= 0xFC;  
+                      BKED_0B_REG &= 0x7C;    
+              
+                      BKE9_88_REG &= 0x00;
+                      BKE9_89_REG &= 0x00;                            
+                                              #if LVDXTX_VID_PATTERN_MODE == NO_PATTERN
+                              //PTN   
+                      BKC9_17_REG &= 0x7F;
+                                              #endif
+                              //CRC
+                      BKC9_17_REG &= 0xBF;
+              
+                              //EARC
+                      BKC9_19_REG &= 0xFC;    
+                      BKC9_1A_REG &= 0x3F;
+                      BKE1_22_REG &= 0xFC;
+              
+                              //CEC   
+                      BKE1_20_REG &= 0xFC;
+              
+                              //DHRX SECPCRPLL
+                      BKE1_25_REG &= 0x3F;    
+              
+                              //SECPCRPLL
+                      BKE1_33_REG &= 0x00;    
+                      
+              //              //DHTXPLL
+                      BKE1_35_REG &= 0x03;    
+                      BKE1_35_REG &= 0xFC;
+                      BKE1_36_REG &= 0x7F;
+              
+                              //EARCPLL
+                      BKE1_36_REG &= 0x80;    
+                      BKE1_38_REG &= 0xF7;
+              
+                              //PWM SYS
+                      BKE1_38_REG &= 0x7F;    
+              
+                              //FRL
+                      BKEC_05_REG &= 0x00;    
+              
+                              //HDMITX20
+                                              BKED_08_REG &= 0x80;    
+                                              BKED_09_REG &= 0x00;
+                                              BKED_0A_REG &= 0x7F;
+              
+                              //HDMITX21
+                      BKED_0A_REG &= 0x80;    
+                                              
+                              //AFIFO
+                      BKED_0B_REG &= 0x80;
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 35  
+
+              
+                              //DCS//3D
+                      BKF9_BC_REG &= 0xDF;    
+                      BKF9_BD_REG &= 0xEF;                                    
+              
+                 }
+                 else
+                 {
+              
+                 } 
+              }
+              #endif
+2097          
+2098          #if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD))
+              void Drv_Sys_LT6911GXE_PowerDomain()
+              {
+                               //Dhtxphy
+                      BKA1_59_REG &= 0x3F;
+              
+                               //Dhtxrterm
+                      BKA1_5A_REG &= 0xF0;
+              
+                               //arc
+                      BKA2_98_REG &= 0xFC;
+                      BKA2_9E_REG &= 0xBF;
+                      BKA2_99_REG &= 0xBF;
+              
+                               
+                               //Secpcrpll
+                      BKA3_2F_REG |= 0x10;                     
+                               
+              /*               //HDMI RX
+              //        BKC9_10_REG &= 0x00; 
+              //        BKC9_11_REG &= 0x1F;     
+              //        BKC9_1C_REG &= 0xF3;
+              //        BKCD_46_REG &= 0x00;
+              */
+                               
+                               //DP RX
+                      BKF1_A8_REG &= 0x00;
+                                              BKF1_A9_REG &= 0x00;
+                      BKF1_AA_REG &= 0x00;
+                      BKF1_AB_REG &= 0x00;
+                      BKF1_AC_REG &= 0x00;
+                                              BKF1_AD_REG &= 0x00;
+                                              BKF1_AE_REG &= 0x00;
+                      
+                               //HDCP TX      
+                      BKED_0B_REG &= 0x7C;
+                      BKE9_88_REG &= 0x00;
+                      BKE9_89_REG &= 0x00;
+                                              
+              #if LVDXTX_VID_PATTERN_MODE == NO_PATTERN
+                              //PTN   
+                      BKC9_17_REG &= 0x7F;
+              #endif
+                                              
+                              //CRC
+                      BKC9_17_REG &= 0xBF;
+                                              
+              //              //ACR
+              //        BKC9_18_REG &= 0x00;  
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 36  
+
+              //        BKC9_19_REG &= 0x00;  
+              //        BKC9_1A_REG &= 0x3F;
+                                              
+                              //CEC   
+                      BKE1_20_REG &= 0xFC;
+              
+              //              //SECPCRPLL
+              //        BKE1_33_REG &= 0x00;
+              
+              //              //DHRX SECPCRPLL
+              //        BKE1_22_REG &= 0x00;
+              ////                            BKE1_23_REG &= 0x00;
+              ////                            BKE1_24_REG &= 0x00;
+              //        BKE1_25_REG &= 0x3F;
+                                              
+                              //DSC DEC
+                                              BKE1_28_REG &= 0x00;
+                                              BKE1_29_REG &= 0x00;    
+              
+                              //DHTXPLL
+                      BKE1_35_REG &= 0x03;    
+                      BKE1_35_REG &= 0xFC;
+                      BKE1_36_REG &= 0x7F;
+              
+                              //EARCPLL
+                      BKE1_36_REG &= 0x80;    
+                      BKE1_38_REG &= 0xF7;
+                              //Earcpll
+                      BKA3_14_REG |= 0x10;
+                                              
+                              //PWM SYS
+                      BKE1_38_REG &= 0x7F;
+              
+                              //HDMITX20
+                                              BKED_08_REG &= 0x80;    
+                                              BKED_09_REG &= 0x00;
+                                              BKED_0A_REG &= 0x7F;
+              
+                              //HDMITX21
+                      BKED_0A_REG &= 0x80;    
+                                              
+                              //AFIFO
+                      BKED_0B_REG &= 0x80;    
+                                              
+                              //BYPASS SSC
+                      BKF9_BA_REG &= 0xE7;
+                      BKF9_BA_REG &= 0xF9;
+                      BKF9_BB_REG &= 0x3F;
+                      BKF9_BD_REG &= 0xFB;
+              
+              //              //DHTX
+              //                              BKE5_80_REG &= 0xCF;
+              //        BKE1_26_REG &= 0x00;
+              //        BKE1_27_REG &= 0x00;
+              
+              //              //DPTX
+              //        BKED_0C_REG &= 0x3C;  
+              //        BKF5_84_REG &= 0x00;
+              //        BKF5_85_REG &= 0x00;  
+              //        BKF5_86_REG &= 0x00;
+                                              
+              #if     (TX_PORT_SIGN == MIPI_PORT)
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 37  
+
+                              //LVDS
+                                              BKF9_BB_REG &= 0xDF;
+              #endif
+              
+              //              //FRL
+              //                              BKEC_05_REG &= 0x00;
+                      
+              /////////////////////////////////////////////////////////////////////////////////////////////////////////
+                                              
+              /*******************DPHY**************/                         
+                  //PORT //1port out Disable another port 
+              //        BKF9_BB_REG &= 0x1B;
+              //        BKF9_BC_REG &= 0x22;
+              //        BKF9_B9_REG &= 0x11;
+              //        BKE1_2B_REG &= 0xC0;
+              
+              //                              //2port out  3D SBS
+              //        BKF9_BB_REG &= 0x1B;
+              //        BKF9_BC_REG &= 0xAA;
+              //        BKF9_B9_REG &= 0xFF;          
+              //        BKE1_2B_REG &= 0xCC;
+              
+              /*******************CPHY**************/         
+                  //PORT //1port out Disable another port 
+              //        BKF9_BB_REG &= 0x1B;
+              //        BKF9_BC_REG &= 0x22;
+              //        BKF9_BD_REG &= 0x35;                                  
+              //        BKF9_B9_REG &= 0xFF;//0xAA or 0x55    Display anomaly 
+              //        BKE1_2B_REG &= 0xC0;  
+                              
+                                                      //2port out  3D SBS
+              //
+                                              
+                                              LTLog(LOG_INFO,"\nLT6911GXE Power Domain Done!");
+              }
+              
+              //void Drv_Sys_LT6911GXE_DHDPTX_PowerDomain_Restore(u8 b1IsPowerOn)
+              //{
+              //              if(b1IsPowerOn == TRUE)
+              //              {
+              //              //DHTX
+              //                              BKE5_80_REG |= 0xF0;
+              //        BKE1_26_REG |= 0xFF;
+              //        BKE1_27_REG |= 0xF8;  
+              
+              //              //DPTX
+              //        BKED_0C_REG |= 0xFE;  
+              //        BKF5_84_REG |= 0xFF;
+              //        BKF5_85_REG |= 0xFF;  
+              //        BKF5_86_REG |= 0xFF;
+              //              }
+              //}
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2276    ----
+   CONSTANT SIZE    =    129    ----
+   XDATA SIZE       =      1       6
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+C51 COMPILER V9.53.0.0   DRVSYSTEM                                                         02/13/2025 10:14:23 PAGE 38  
+
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,76 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: DrvDscEnc.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.06.01
+/******************************************************************************/
+#include "include.h"
+
+
+#if TX_PORT_SIGN == HDMI_PORT
+
+#if HDMITX_DSC_BYPASS_SUPPORT == ENABLED
+
+void Drv_HdmiTxDscBy_Init(void)
+{
+    Drv_System_SramPathSet(HDMITX_INIT_SET_PATH);
+
+    BKEA_4F_REG &= BIT3_0;//[0]rgd_hs_dis_en: 0-en
+    g_stHdmiTx.b1TxDscByEn = DISABLED;
+}
+
+void Drv_HdmiTxDscBy_PktSet(void)
+{
+    u8 ucSliceNum;
+    u16 usChunkSize;
+    LtTiming_S stTiming;
+    u16 usTemp,usPicwidth,usSliceWidth;
+
+    usTemp = 0;
+
+    #if RX_PORT_SIGN == DP_PORT
+    Drv_DpRx_RxTimingGet(&stTiming);//-wangtt- wait update
+    BKF2_05_REG = 0x02;//pps8-pps11
+    Ocm_Delay1ms(1);
+    usPicwidth   = PACK_16_BIT(BKF2_32_REG, BKF2_33_REG);
+
+    BKF2_05_REG = 0x03;//pps12-pps15
+    Ocm_Delay1ms(1);
+    usSliceWidth = PACK_16_BIT(BKF2_32_REG, BKF2_33_REG);
+    usChunkSize = PACK_16_BIT(BKF2_34_REG, BKF2_35_REG);
+    ucSliceNum  = usPicwidth / usSliceWidth;
+    #endif
+
+    #if RX_PORT_SIGN == HDMI_PORT
+    Drv_HdmiRx_RxTimingGet(&stTiming);//-wangtt- wait update
+    -warning- to ucSliceNum
+    #endif
+
+    Drv_System_SramPathSet(HDMITX_DSCBYPASS_PPS_PATH);
+    BKEA_1A_REG |= BIT0_1;//[0]rgd_pps_update_en: 1-hw
+    BKEA_59_REG |= BIT0_1;//[0]pps_timing_sw_en: 1-soft en
+
+    BKEA_30_REG = 0xff;//[7:0]sram offset addr
+    BKEA_31_REG = stTiming.usHfp;
+    BKEA_32_REG = stTiming.usHfp >> 8;
+    BKEA_33_REG = stTiming.usHsync;
+    BKEA_34_REG = stTiming.usHsync >> 8;
+    BKEA_30_REG = 0xfe;//[7:0]sram offset addr
+    BKEA_31_REG = stTiming.usHbp;
+    BKEA_32_REG = stTiming.usHbp >> 8;
+
+    //Hcactive cali
+    usTemp = usChunkSize * ucSliceNum;
+    BKEA_33_REG = usTemp;
+    BKEA_34_REG = usTemp >> 8;
+
+    BKEA_4F_REG |= BIT3_1;//[0]rgd_hs_dis_en: 1-dis hs
+    BKEA_1D_REG |= BIT0_1;//[0]emp pkt en for 121
+    g_stHdmiTx.b1TxDscByEn = ENABLED;
+    printLT(PRINT_PRIO_HIG, "\nHdmi tx dsc bypass pkt set");
+}
+
+#endif
+
+#endif

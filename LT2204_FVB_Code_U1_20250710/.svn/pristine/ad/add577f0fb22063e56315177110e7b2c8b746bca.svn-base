@@ -1,0 +1,14 @@
+C51 COMPILER V9.53.0.0   DRVRXTYPEC                                                        06/21/2023 17:27:59 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVRXTYPEC
+OBJECT MODULE PLACED IN .\Objects\DrvRxTypec.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvRxTypec.c LARGE OPTIMIZE(8,SIZE) OPTIMIZE(8,SIZE
+                    -) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG OB
+                    -JECTEXTEND PRINT(.\Listings\DrvRxTypec.lst) OBJECT(.\Objects\DrvRxTypec.obj)
+
+line level    source
+
+*** ERROR C318 OF ..\User\L2_Drive\DrvRxTypec.c: can't open file '..\User\L2_Drive\DrvRxTypec.c'
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  1 ERROR(S)

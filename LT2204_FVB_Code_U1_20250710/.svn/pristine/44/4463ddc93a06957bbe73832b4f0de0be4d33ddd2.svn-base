@@ -1,0 +1,615 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  BasicTypec.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+#define SWITCH_NO_15V  0
+#define SWITCH_15V_OK  1
+#define SWITCH_15V_NG  2
+
+#if TYPECTX_EN == ENABLED
+
+u16 Mod_AdapterCur_Set(u16 AdapterCur,u16 ValueSet)
+{
+    (AdapterCur>ValueSet)?(AdapterCur -= ValueSet):(AdapterCur = 50);
+    return AdapterCur;
+}
+#if DCCRequest_PointedVol == DISABLED
+//================================
+//
+//the function is recalculate DCC's power information
+//ucDataLength:adapter's sourcecap datalength
+//
+//================================
+void Mod_CC2SourceCap_Cal(u8 ucDataLength) //SOURCE CAP FOR THE SOURCE
+{
+    u8 Adtmp;
+	u8 AdapterTmpLenth= 0;
+    u8 loop_Adatper;
+    u16 Adapter_Cur_Cap;
+    u16 Adapter_Vol_Cap;
+//	u32 Adapter_Wat_Cap = 0x00;
+    #if NINTENDO_SWITCH == ENABLED
+    #if FORCE_NINTENDO_SWITCH == ENABLED
+    u8 b2CurrentChange;
+    #endif
+    #endif
+	#if PD_PPS_EN == ENABLED
+	u8 Loop_PPS_Cnt;
+	u8 PPS_Max_Vol = 0;
+	u8 PPS_Max_Cur = 0;
+	u16 PPS_Wat_Cap = 0;
+	Loop_PPS_Cnt = 0;
+	memset(DCCMSG.szPPS_Object,0x00,3);
+	#endif
+	#if NINTENDO_SWITCH_FORALL == ENABLED
+	CC1NINTENDOState.b2Switch_Ada_Online = SWITCH_ADAPTER_ALL;
+	#else
+    #if NINTENDO_SWITCH == ENABLED
+    CC1NINTENDOState.b2Switch_Ada_Online = NOT_SWITCH;
+    #endif
+	#endif
+	UCCMSG.szPDP_Value[0] = 0x07;
+	UCCMSG.szPDP_Value[1] = 0x07;
+	AdapterTmpLenth	= ucDataLength + 2;
+	//SWITCH  TEST
+    //memcpy(DCCMSG.szAdapterTmp,szCC_SourceCapFix,30);
+    DCCMSG.szAdapterTmp[0] &= 0x0F;
+    DCCMSG.szAdapterTmp[0] |= 0x40;
+    
+    DCCMSG.szAdapterTmp[4] &= 0x3f;//b23 b22 set to 0
+    
+
+    memcpy(DCCMSG.szAdapterTmpFor3A,DCCMSG.szAdapterTmp,sizeof(DCCMSG.szAdapterTmp));
+    
+	memcpy(DCCMSG.szAdapterCap_Ori,DCCMSG.szAdapterTmp,sizeof(DCCMSG.szAdapterTmp));
+	//SWITCH TEST
+    //memcpy(DCCMSG.szAdapterCap_Ori,szCC_SourceCapFix,30);
+    #if FORCE_NINTENDO_SWITCH == ENABLED
+    memcpy(DCCMSG.szSwitchTmp,DCCMSG.szAdapterTmp,sizeof(DCCMSG.szAdapterTmp));
+    #endif
+	#if PD_PPS_EN == ENABLED
+	memcpy(DCCMSG.szAdapterCap_For_PD30,DCCMSG.szAdapterTmp,sizeof(DCCMSG.szAdapterTmp));
+	#endif
+	for(Adtmp = 2; Adtmp < AdapterTmpLenth ; Adtmp += 4)
+	{
+        #if FORCE_NINTENDO_SWITCH == ENABLED
+        b2CurrentChange = SWITCH_NO_15V;
+        #endif
+		if((DCCMSG.szAdapterTmp[Adtmp+3]&0xc0) == 0xc0) //PPS Package
+		{		
+			for(loop_Adatper = Adtmp; (loop_Adatper+4) < AdapterTmpLenth; loop_Adatper++)
+			{
+				DCCMSG.szAdapterTmp[loop_Adatper] = DCCMSG.szAdapterTmp[loop_Adatper+4];
+			}		
+			#if PD_PPS_EN == ENABLED
+			if(DCCMSG.szAdapterCap_For_PD30[Adtmp] > 8)//reduce 400mA
+			{
+				DCCMSG.szAdapterCap_For_PD30[Adtmp] -= 8;
+			}
+			else
+			{
+				;
+			}
+            //if Min Vol is lower than 5V ,limit to 5V
+            if(DCCMSG.szAdapterCap_For_PD30[Adtmp+1] < 50)
+			{
+				DCCMSG.szAdapterCap_For_PD30[Adtmp+1] = 50;
+			}
+			//[0-6]:Cur;[8-15]:min Vol;[17-24]:max vol;
+			PPS_Max_Cur = DCCMSG.szAdapterCap_For_PD30[Adtmp]; 
+			PPS_Max_Vol = DCCMSG.szAdapterCap_For_PD30[Adtmp+3];
+			PPS_Max_Vol <<= 7;
+			PPS_Max_Vol = PPS_Max_Vol|(DCCMSG.szAdapterCap_For_PD30[Adtmp+2]>>1);
+			PPS_Wat_Cap = (u16)(PPS_Max_Vol)*(PPS_Max_Cur);
+			PPS_Wat_Cap = PPS_Wat_Cap / 200;//Watt
+			if(UCCMSG.szPDP_Value[1] > PPS_Wat_Cap)
+			{
+				;
+			}
+			else
+			{
+				UCCMSG.szPDP_Value[1] = PPS_Wat_Cap;
+			}
+			DCCMSG.szPPS_Object[Loop_PPS_Cnt] = (Adtmp>>2)+1;
+			Loop_PPS_Cnt++;
+			#else
+			//对于没有EMark的，干掉For 3A的PPS 
+			DCCMSG.szAdapterTmpFor3A[1] -= 0x10;
+			DCCMSG.szAdapterTmp[1] -= 0x10;
+            #if (NINTENDO_SWITCH_FORALL == ENABLED)
+            DCCMSG.szSwitchTmp[1] -= 0x10;
+            #endif
+			AdapterTmpLenth -=4;
+			(Adtmp == 2)?(Adtmp = 0xfe):(Adtmp -= 4);
+			#endif
+		}
+		else   //FIXED SUPPLY
+		{            
+            Adapter_Cur_Cap	= ((u16)(DCCMSG.szAdapterTmp[Adtmp+1]&0x03)<<8) + DCCMSG.szAdapterTmp[Adtmp] ;
+			Adapter_Vol_Cap = ((u16)(DCCMSG.szAdapterTmp[Adtmp+2]&0x0f)<<6) + ((DCCMSG.szAdapterTmp[Adtmp+1]&0xfc)>>2);	
+            //5V- 5W
+            //9V-5.5W
+            //12V-8W，限制3A
+            //15V-8W,不超过3A，优先保证SWITCH
+            //20V -47W以下扣除5W
+            //47-65W 扣除8W
+            //65W -93W扣除10W
+            //93W-100W扣除14W
+            //100W以上限制到98W
+			if(Adapter_Vol_Cap < 120)      //5v
+            {
+				Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,100);
+            }
+            else if(Adapter_Vol_Cap < 190) //9v
+            {
+                Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,61);
+            }
+            else if(Adapter_Vol_Cap < 280)//12v
+            {
+                Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,66);
+            } 
+            else if(Adapter_Vol_Cap == 300)//15v
+            {              
+                #if NINTENDO_SWITCH == ENABLED
+                if(Adapter_Cur_Cap >= 260)
+                {					
+                    Adapter_Cur_Cap = 260;
+                    CC1NINTENDOState.b2Switch_Ada_Online = SWITCH_ADAPTER; 
+                    #if FORCE_NINTENDO_SWITCH == ENABLED
+                    b2CurrentChange = SWITCH_15V_OK;
+                    #endif
+                }
+                else
+                {
+                    #if FORCE_NINTENDO_SWITCH == ENABLED
+                    Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,53);
+                    CC1NINTENDOState.b2Switch_Ada_Online = SWITCH_ADAPTER_15V; 
+                    #if FORCE_NINTENDO_SWITCH == ENABLED
+                    b2CurrentChange = SWITCH_15V_NG;
+                    #endif
+                    #else
+                    Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,53);
+                    #endif
+                }	
+                #else
+                Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,53);
+                #endif
+            }
+            else if(Adapter_Vol_Cap < 300)//15v
+            {                
+                Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,58);               
+            }
+            else if(Adapter_Vol_Cap == 400)						//20v
+            {
+                if(Adapter_Cur_Cap > 500)//>5A
+                {
+                    Adapter_Cur_Cap = 490;//4.9A
+                }
+                else if(Adapter_Cur_Cap > 465)//93W--14W
+                {
+                    Adapter_Cur_Cap -= 70;
+                }
+                else if(Adapter_Cur_Cap > 325)//65W<->93W--10W
+                {
+                    Adapter_Cur_Cap -= 50;
+                }
+                else if(Adapter_Cur_Cap > 325)//47W<->65W--8W
+                {
+                    Adapter_Cur_Cap -= 40;
+                }
+                else
+                {
+                    Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,25);
+                }
+            }
+            else
+            {
+                Adapter_Cur_Cap = Mod_AdapterCur_Set(Adapter_Cur_Cap,45);
+            }  
+            //limit current to 3A
+            if(Adapter_Vol_Cap != 400)	
+            {
+                if(Adapter_Cur_Cap > 300)
+                {
+                    Adapter_Cur_Cap = 300;
+                }
+            }
+			DCCMSG.szAdapterTmp[Adtmp] = Adapter_Cur_Cap;
+			DCCMSG.szAdapterTmp[Adtmp+1] &= 0xfc;
+			DCCMSG.szAdapterTmp[Adtmp+1] |= ((Adapter_Cur_Cap>>8)&0x03);           
+//            #if UCC_EMARK_SUPPORT == ENABLED
+            if(Adapter_Cur_Cap >= 300)//Current Bigger than 3A
+            {
+                Adapter_Cur_Cap = 300;
+                DCCMSG.szAdapterTmpFor3A[Adtmp] = Adapter_Cur_Cap;
+                DCCMSG.szAdapterTmpFor3A[Adtmp+1] &= 0xfc;
+                DCCMSG.szAdapterTmpFor3A[Adtmp+1] |= ((Adapter_Cur_Cap>>8)&0x03);
+            }
+            else
+            {
+                DCCMSG.szAdapterTmpFor3A[Adtmp] = DCCMSG.szAdapterTmp[Adtmp];
+                DCCMSG.szAdapterTmpFor3A[Adtmp+1] = DCCMSG.szAdapterTmp[Adtmp+1];
+            }	
+//            #endif            
+			#if PD_PPS_EN == ENABLED
+			DCCMSG.szAdapterCap_For_PD30[Adtmp] = DCCMSG.szAdapterTmp[Adtmp];
+			DCCMSG.szAdapterCap_For_PD30[Adtmp+1] = DCCMSG.szAdapterTmp[Adtmp+1];
+			DCCMSG.szAdapterCap_For_PD30[5] = DCCMSG.szAdapterTmp[5];//Externally Powered	
+			DCCMSG.szAdapterCap_For_PD30[5] &= 0xfe;//Unchunked Extended Messages Not Supported			
+            #endif
+            
+			#if NINTENDO_SWITCH_FORALL == ENABLED
+            if(b2CurrentChange == SWITCH_15V_NG)
+            {
+                Adapter_Cur_Cap = 260; 
+            }			
+            DCCMSG.szSwitchTmp[Adtmp] = Adapter_Cur_Cap;
+            DCCMSG.szSwitchTmp[Adtmp+1] &= 0xfc;
+            DCCMSG.szSwitchTmp[Adtmp+1] |= ((Adapter_Cur_Cap>>8)&0x03); 
+			#else
+            #if FORCE_NINTENDO_SWITCH == ENABLED
+            if(b2CurrentChange == SWITCH_15V_NG)
+            {
+                Adapter_Cur_Cap = 260; 
+            }
+            DCCMSG.szSwitchTmp[Adtmp] = Adapter_Cur_Cap;
+			DCCMSG.szSwitchTmp[Adtmp+1] &= 0xfc;
+			DCCMSG.szSwitchTmp[Adtmp+1] |= ((Adapter_Cur_Cap>>8)&0x03); 
+            #endif
+            #endif
+//            Adapter_Wat_Cap = (u32)(Adapter_Vol_Cap)*(Adapter_Cur_Cap);
+//            Adapter_Wat_Cap = (Adapter_Wat_Cap/2000);//Watt
+//			if(UCCMSG.szPDP_Value[0] > Adapter_Wat_Cap)
+//			{
+//				;
+//			}
+//			else
+//			{
+//				UCCMSG.szPDP_Value[0] = Adapter_Wat_Cap;
+//			}
+            
+/*			Adapter_Cur_Cap	= ((u16)(DCCMSG.szAdapterTmp[Adtmp+1]&0x03)<<8) + DCCMSG.szAdapterTmp[Adtmp] ;
+			Adapter_Vol_Cap = ((u16)(DCCMSG.szAdapterTmp[Adtmp+2]&0x0f)<<6) + ((DCCMSG.szAdapterTmp[Adtmp+1]&0xfc)>>2);	
+			Adapter_Wat_Cap = (u32)(Adapter_Vol_Cap)*(Adapter_Cur_Cap);
+			Adapter_Wat_Cap -= 16000;                                 // 8W in 0.5mW each divide
+			Adapter_Cur_Cap = (Adapter_Wat_Cap/Adapter_Vol_Cap);
+			
+			DCCMSG.szAdapterTmp[Adtmp] = Adapter_Cur_Cap;
+			DCCMSG.szAdapterTmp[Adtmp+1] &= 0xfc;
+			DCCMSG.szAdapterTmp[Adtmp+1] |= ((Adapter_Cur_Cap>>8)&0x03);
+            DCCMSG.szAdapterTmp[5] = 0x2e;//Externally Powered	
+//			DCCMSG.szAdapterTmp[5] = ((DCCMSG.szAdapterTmp[5]&BIT3_1)|0x3e);//Externally Powered	
+//			DCCMSG.szAdapterTmp[5] &= 0xee;                               //Unchunked Extended Messages Not Supported
+			#if PD_PPS_EN == ENABLED
+			DCCMSG.szAdapterCap_For_PD30[Adtmp] = DCCMSG.szAdapterTmp[Adtmp];
+			DCCMSG.szAdapterCap_For_PD30[Adtmp+1] = DCCMSG.szAdapterTmp[Adtmp+1];
+            DCCMSG.szAdapterCap_For_PD30[5] = 0x2e;
+//			DCCMSG.szAdapterCap_For_PD30[5] = DCCMSG.szAdapterTmp[5];//Externally Powered	
+//			DCCMSG.szAdapterCap_For_PD30[5] &= 0xfe;//Unchunked Extended Messages Not Supported			
+            #endif
+            Adapter_Wat_Cap = (Adapter_Wat_Cap/2000);//Watt
+			if(UCCMSG.szPDP_Value[0] > Adapter_Wat_Cap)
+			{
+				;
+			}
+			else
+			{
+				UCCMSG.szPDP_Value[0] = Adapter_Wat_Cap;
+			}   
+*/            
+		}
+	}
+    #if NINTENDO_SWITCH_FORALL == ENABLED
+    if(CC1NINTENDOState.b2Switch_Ada_Online == SWITCH_ADAPTER_ALL)
+    {
+        memcpy(&DCCMSG.szSwitchTmp,&szNintendoSwitch_SourceCap_Msg,10);                
+    }
+    #endif
+    DCCMSG.szAdapterTmp[5] = ((DCCMSG.szAdapterTmp[5]&BIT3_1)|0x3e);//Externally Powered	
+    DCCMSG.szAdapterTmp[5] &= 0xee;                               //Unchunked Extended Messages Not Supported
+
+    DCCMSG.szAdapterTmpFor3A[5] = ((DCCMSG.szAdapterTmpFor3A[5]&BIT3_1)|0x3e);//Externally Powered	
+    DCCMSG.szAdapterTmpFor3A[5] &= 0xee;                               //Unchunked Extended Messages Not Supported
+	#if PD_PPS_EN == ENABLED
+	if(UCCMSG.szPDP_Value[0] >= UCCMSG.szPDP_Value[1])
+	{
+		;
+	}
+	else
+	{
+		UCCMSG.szPDP_Value[0] = UCCMSG.szPDP_Value[1];
+	}
+	#endif
+}
+#endif
+//void Mod_CC2Msg_Send(void)
+//{
+//    u8 ucSendData;
+//	u8 ucSendMegSndDataOffset;
+//	static u8 ucMessage_ID_Send = 0x00;
+//	DCCMSG.pBuffer_Order = DCCMSG.pDataOrder;
+//    DCCMSG.TotalData = 2;
+//    for(ucSendMegSndDataOffset=0; ucSendMegSndDataOffset<DCCMSG.TotalData; ucSendMegSndDataOffset++)
+//    {
+//        ucSendData = *DCCMSG.pDataOrder;
+//        DCCMSG.pDataOrder++;
+//        if(ucSendMegSndDataOffset==1)
+//        {			
+//            DCCMSG.TotalData = ((ucSendData & 0x70)>>2)+2;
+//            ucSendData &=0xF0;
+//			if(DCCStatus.b1Msg_ID_Change == 1)
+//			{
+//				ucMessage_ID_Send = DCCMSG.ucMessageID;
+//				DCCMSG.ucMessageID = Chip_Sum(DCCMSG.ucMessageID);	
+//			}
+//			else
+//			{
+//				;
+//			}
+//			ucSendData=(ucSendData|ucMessage_ID_Send);
+//            (DCCStatus.b1PowerRole)?(ucSendData |= 0x01):(ucSendData &= 0xfe);
+//        }
+//		
+//        else if(ucSendMegSndDataOffset == 0)
+//        {
+//            ucSendData &= 0x1F;//ufp pd2.0
+//			#if PD_PPS_EN == 1
+//			if(DCCMSG.ucCcVersion < 0x02)
+//            {
+//				ucSendData |=  0x40;
+//            }
+//            else
+//            {
+//				ucSendData |=  0x80;
+//            }
+//			#else
+//            ucSendData |= 0x40;
+//			#endif
+//            (DCCStatus.b1DataRole)?(ucSendData|=0x20):(ucSendData &= 0xdf);
+//        }
+//        BKD0_1A_REG	= ucSendData;
+//    }
+//    BKD0_23_REG = 0x01; //clr rx fifo
+//    BKD0_18_REG = 0x08;	  //mark all data done
+//    Ocm_Delay1us(1);
+//    BKD0_18_REG = 0x00;
+//    BKD0_19_REG = 0x09;
+//	Chip_CC_Message_Resend(DCC);		
+//}
+//================================
+//the function is used to send DCC message;
+//if length is shorter than 10bytes,the data is sent once together;
+//if longer than 10bytes,data is sent two times
+//
+//
+//================================
+void Mod_CC2Msg_Send(void)
+{
+    u8 ucSendData;
+	u8 ucSendMegSndDataOffset;
+    static u8 ucDccTotalData;
+	static u8 ucMessage_ID_Send = 0x00;
+	DCCMSG.pBuffer_Order = DCCMSG.pDataOrder;
+	ucDccTotalData = ((DCCMSG.pDataOrder[1] & 0x70)>>2)+2;
+    for(ucSendMegSndDataOffset=0; ucSendMegSndDataOffset<ucDccTotalData; ucSendMegSndDataOffset++)
+    {
+        ucSendData = *DCCMSG.pDataOrder;
+        DCCMSG.pDataOrder++;
+        if(ucSendMegSndDataOffset < 10)
+        {
+            if(ucSendMegSndDataOffset == 1)
+            {		
+                ucSendData &=0xF0;
+                if(DCCStatus.b1Msg_ID_Change == TRUE)
+                {
+                    ucMessage_ID_Send = DCCMSG.ucMessageID;
+                    DCCMSG.ucMessageID = Mod_CCPortMsgId_Cal(DCCMSG.ucMessageID);	
+                }
+                else
+                {
+                    ;
+                }
+                ucSendData=(ucSendData|ucMessage_ID_Send);
+                (DCCStatus.b1PowerRole)?(ucSendData |= BIT0_1):(ucSendData &= BIT0_0);
+            }
+		
+            else if(ucSendMegSndDataOffset == 0)
+            {
+                ucSendData &= 0x1F;       //ufp pd2.0
+                #if PD_PPS_EN == ENABLED
+                if(DCCMSG.ucCcVersion < PD30)
+                {
+                    ucSendData |=  BIT6_1;
+                }
+                else
+                {
+                    ucSendData |=  BIT7_1;
+                }
+                #else
+                ucSendData |= BIT6_1;
+                #endif
+                (DCCStatus.b1DataRole)?(ucSendData|= BIT5_1):(ucSendData &= BIT5_0);
+            }
+        }
+		else if(ucSendMegSndDataOffset==10)
+        {        
+            BKFC_99_REG = 0x09; 
+        }
+        BKFC_9A_REG	= ucSendData;   
+    }
+	if(ucSendMegSndDataOffset > 10)
+    {
+        ;
+    }
+    else
+    {
+        BKFC_99_REG = 0x09; 
+    }
+    BKFC_A3_REG = 0x01; //clr rx fifo
+    BKFC_98_REG |= BIT3_1;	  //mark all data done
+    BKFC_98_REG &= BIT3_0;
+	Mod_CCPortMsg_Retry(DCC);	
+}
+//================================
+//
+//the function is handle DCC VDM message
+//ucMsg_Type:VDM type
+//
+//================================
+void Mod_CC2VdmMsg_Analysis(void)
+{
+    switch(DCCMSG.szRcvDate[0]&0x1F)  //Command
+    {
+        case Discover_Identity :
+            Mod_DiscoverID_Handle(DCCMSG.ucCcVersion,DCCMSG.szRcvDate,PDACK);
+            DCCMSG.pDataOrder = szCC_DiscoverIDMsg;
+            Mod_CC2Msg_Send();
+            break;
+        case Discover_SVIDs :
+			//================================
+			//remove DP alt mode from message in case of DP alt mode commuication happens 
+			//================================
+            memcpy(DCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[2],10);
+            DCCMSG.szCC_ModeMsg_Buffer[8] = 0x00; 
+            DCCMSG.pDataOrder = DCCMSG.szCC_ModeMsg_Buffer;
+            Mod_CC2Msg_Send();
+            break;
+        default :
+            break;
+    }
+}
+//================================
+//
+//the function is handle DCC message
+//ucMsg_Type:message type;control,data,chunked
+//ucLength:Control or data message
+//ucExt:extended and not extended message
+//================================
+void Mod_CC2Msg_Deal(u8 ucMsg_Type,u8 ucLength,u8 ucExt)  //DFP message
+{
+    if(ucExt == 0x00)//Not Extended message
+    {
+        if(ucLength == 0x00)   //Control Message
+        {
+            switch(ucMsg_Type)
+            {
+                case GoodCRC      	            :
+                case GotoMin                    ://Goto Mim
+                case Accept                     :
+                case Reject                     :
+                case Ping                       :
+                case Wait                       :               
+                case Not_Support                :                                          
+                        break;
+                case PS_RDY                     :
+                    if(DCCStatus.ucFlow_Step == 2)
+                    {
+                        DCCStatus.ucFlow_Step = 1;//Nego Done
+                    }
+                    if((Drv_CC2On_Det(SINK) == TRUE)&&(UCCStatus.ucPRSended == 0)&&(UCCStatus.b1PowerRole == FALSE))//DCC IS IN
+                    {
+                        if(Mod_CC1DetOff_Judge() == FALSE)
+                        {
+                            UCCStatus.ucPRSended = 1;
+                        }
+                    }
+                    if((!UCCStatus.b1PsRdy_Send)&&(UCCStatus.b1PrDone)) //DFP_SOURCE 4 UFP_SINK 7
+                    {
+                        #if VCONNSWAP_SUPPORT == ENABLED     
+                        if(((UCCStatus.ucSwap_Sent&Vconn_Sent) == 0)&&(UCCStatus.b1IsVconnSource == TRUE))
+                        {
+                            UCCStatus.b1VconnSwap_En = TRUE;
+                        }
+                        else
+                        {
+                            Mod_Cc1DrSwap_Set();
+                        }
+                        #else
+                    	if((UCCStatus.ucSwap_Sent & DR_Sent)== 0)
+                        {
+                            Mod_Cc1DrSwap_Set();
+                        }
+                        #endif
+                        UCCStatus.b1PsRdy_Send = TRUE;
+                        Ocm_Timer2ForPsRdy_Set();
+                    }
+                    break;                  
+                case DR_Swap                    :   
+                case PR_Swap                    :  
+                case FR_Swap                    :
+                case VCONN_Swap                 :
+                case Get_Source_Cap             :
+//Reject                    
+                    DCCMSG.pDataOrder = szCCCtrl_Reject; //send Reject
+                    Mod_CC2Msg_Send();
+                    UCCMSG.ucLastMsgType = 0xFF;
+                    break;
+                case Get_Source_Cap_Extended    :
+                case Get_Status                 :
+                case Get_PPS_Status             :
+                case Get_Country_Codes          :
+//Not Support
+                    DCCMSG.pDataOrder = szCCCtrl_NotSupport; //send Not Support
+                    Mod_CC2Msg_Send();
+                    UCCMSG.ucLastMsgType = 0xFF;
+                    break;               
+                case Get_Sink_Cap   :
+                    DCCMSG.pDataOrder = szCC_DataMsg[13];
+                    Mod_CC2Msg_Send();
+                    break;
+                case Soft_Reset     :
+                    DCCMSG.ucMessageID = 0;
+                    DCCMSG.pDataOrder = szCCCtrl_Accept;
+                    Mod_CC2Msg_Send();
+                    break;
+                default         :
+                    break;
+            }
+        }
+        else//Data Message
+        {
+            switch (ucMsg_Type)
+            {
+                case Source_Capabilities   :
+                    #if PD_PPS_EN == ENABLED
+                    DCCMSG.ucCcVersion = (DCCMSG.szHeader[0]&0xc0)>>6;
+                    #endif
+                    DCCStatus.b1AdapterWithPD = TRUE; //20210804
+				    //如果适配器是可变功率，在充电完成后发新的sourcecap，程序会进入FRSwap导致流程异常；
+                    //此处做一下限制，将电压检测拉低避免出现电压跌落问题从而触发FR Swap，如果有中断也可以关掉中断
+                    DCCStatus.ucFlow_Step = 2;
+                    BKA2_BA_REG = 0x08;//400mv
+					#if DCCRequest_PointedVol == ENABLED
+					Mod_CCPortSaveDataToTmp(&DCCMSG,ucLength);
+					Mod_CCPortToPointedPdo(&DCCMSG,ucLength,&DCCStatus);
+					Mod_CCPortRequestMsg_Cal(&DCCMSG,0x00,DCCStatus.ucRequestPdo);//unchunked
+					#else
+					Mod_CCPortSaveDataToTmp(&DCCMSG,ucLength);
+					Mod_CCPortRequestMsg_Cal(&DCCMSG,0x00,DCCStatus.ucRequestPdo);//unchunked
+                    Mod_CC2SourceCap_Cal(ucLength);
+					#endif					
+                    DCCMSG.pDataOrder = DCCMSG.szRequest_Buffer; //send Request
+                    Mod_CC2Msg_Send();
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Data_Msg,Request,StrVdm);
+                    break;
+                case Request               :
+                    #if PD_PPS_EN == ENABLED
+                    DCCMSG.ucCcVersion = (DCCMSG.szHeader[0]&0xc0)>>6;
+                    #endif
+                    break;
+                case Vendor_Defined        :
+                    Mod_CC2VdmMsg_Analysis();
+                    break;
+                default                    :
+                    break;
+            }
+        }
+    }
+}
+
+
+#endif

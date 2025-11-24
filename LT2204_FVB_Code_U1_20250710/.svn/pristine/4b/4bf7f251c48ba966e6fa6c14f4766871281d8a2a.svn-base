@@ -1,0 +1,1223 @@
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVHDMITX
+OBJECT MODULE PLACED IN .\Objects\DrvHdmiTx.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvHdmiTx.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE) 
+                    -REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRIN
+                    -T(.\Listings\DrvHdmiTx.lst) OBJECT(.\Objects\DrvHdmiTx.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  HdmiTx.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          
+   8          #include "Include.h"
+   9          
+  10          #if TX_PORT_SIGN == HDMI_PORT
+              
+              void Drv_HdmiTx_DdcInit(void)
+              {
+                  BKE9_CB_REG = 0xd0;//
+                  BKE9_A5_REG |= BIT0_1;//[0]rgd_tx_ddc_rr_en: 1-en, 0-dis
+              
+                  #if HDMITX_CTS_SUPPORT == ENABLED
+                  BKE9_A5_REG |= BIT2_1;//[2]a820 or a810 state interrupt en
+                  BKE9_A5_REG |= BIT3_1;//[3]a820 or a810 int clr en
+                  BKE9_A5_REG &= BIT3_0;//[3]a820 or a810 int clr dis
+                  #endif
+                  
+                  BKE9_DE_REG |= BIT2_1;//HDCP14TX_RG_TIME_OUT_EN
+                  #if SYSCLK == SYS_CLK_48M
+                  BKE9_DF_REG = 0x17;//Fsys_clk/(80*25)-1. ddc speed 
+                  #endif
+              
+                  #if SYSCLK == SYS_CLK_40M
+                  BKE9_DF_REG = 0x11;//Fsys_clk/(80*25)-1. ddc speed 
+                  #endif
+              }
+              
+              void Drv_HdmiTx_DebounceSet(void)
+              {
+                  BKE6_E9_REG |= BIT3_1;//[3]debounce en
+                  
+                      BKE6_EA_REG |= BIT6_1;//HPD IO
+                      BKE6_E9_REG |= 0x06;//sel TX3 TMDS CLOCK
+                      BKA1_67_REG |= BIT0_1;//TX TMDS CLOCK channel dc_det enable
+                      
+                  #if SYSCLK == SYS_CLK_48M
+                  BKE6_EC_REG = 0xbb; //dc debouance det
+                  BKE6_ED_REG = 0x80; //dc debouance det
+                  #endif
+              
+                  #if SYSCLK == SYS_CLK_40M
+                  BKE6_EC_REG = 0x9c; //dc debouance det
+                  BKE6_ED_REG = 0x40; //dc debouance det
+                  #endif
+              }
+              
+              //Just Detect HPD IO (Debounced)
+              u8 Drv_HdmiTx_HpdDet(void)
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 2   
+
+              {
+                  if (BKE5_55_REG & BIT4_1)//[4]ad_dhtx_debounce_hpd: 1-high, 0-low
+                  {
+                      return HIGH;
+                  }
+                  else
+                  {
+                      return LOW;
+                  }
+              }
+              
+              u8 Drv_HdmiTx_ResenState(void)
+              {
+                  if (BKE5_9C_REG & BIT5_1)//[0]AD_DHTX_TX3_DC_DET: 1-high, 0-low
+                  {
+                      return HIGH;
+                  }
+                  else
+                  {
+                      return LOW;
+                  }
+              }
+              
+              void Drv_HdmiTx_RtermCali(u8 TxRtermSel)
+              {
+                  u8 ucNum;
+                  BKA1_58_REG &= 0xf8;
+                  BKA1_58_REG |= TxRtermSel;
+                  BKA1_58_REG |= BIT7_1;//hdmitx phy enable control: 1-en,  0-dis
+              
+                  ucNum = 0;
+                  while(ucNum < 10)
+                  {
+                      ucNum++;
+                      BKE2_09_REG &= BIT0_0;//rterm calibration enable, dis
+                      Ocm_Delay1ms(1);
+                      BKE2_09_REG |= BIT0_1;//rterm calibration enable,  en
+                      Ocm_Delay1ms(2);
+                      if(0x02 == (BKE2_10_REG & 0x03))//rterm calibration done status
+                      {
+                          printLT(PRINT_PRIO_TEST, "\nHdmiTx Rterm = 0x%02bx", BKE2_11_REG);
+                          break;
+                      }
+                  }
+              }
+              
+              void Drv_HdmiTx_DataSel(void)
+              {
+                  BKED_21_REG &= 0x0f;//[7:4]rgd_dhtx_d0(~d3)_pn_swap_en: 0-dis
+                  BKED_22_REG = 0x21;//[6:4]rgd_dhtx_d0_src_sel; //[2:0]rgd_dhtx_d1_src_sel
+                  BKED_23_REG = 0x03;//[6:4]rgd_dhtx_d2_src_sel; //[2:0]rgd_dhtx_d3_src_sel
+              }
+              
+              void Drv_HdmiTx_Reset(EnumHdmiTxRstType ucOpt,u8 ucFunctional)
+              {
+                  switch(ucOpt)
+                  {
+                      case HDMI_TX_AFIFO_RST:
+                          (ucFunctional == ENABLED)?(BKED_02_REG &= BIT5_0):(BKED_02_REG |= BIT5_1);//[5]SW_DHTX_PHY_AFI
+             -FO_RST_N
+                         break;
+                      case HDMI_TX_21PKT_RST:
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 3   
+
+                          (ucFunctional == ENABLED)?(BKED_01_REG &= BIT6_0):(BKED_01_REG |= BIT6_1);//[6]SW_HTX21_PKT_RS
+             -T_N
+                          break;
+                      case HDMI_TX_20DC_RST:
+                          (ucFunctional == ENABLED)?(BKED_00_REG &= BIT5_0):(BKED_00_REG |= BIT5_1);//[5]SW_HTX20_DC_RST
+             -_N
+                          break;
+                      case HDMI_TX_20VID_RST:
+                          (ucFunctional == ENABLED)?(BKED_00_REG &= BIT1_0):(BKED_00_REG |= BIT1_1);//[1]SW_HTX20_VID_RS
+             -T_N
+                          break;             
+                      default:
+                          break;
+                  }
+              }
+              void Drv_HdmiTx_PhyDis(void)
+              {
+                      static u8 ucState = 0;
+                      static u8 ucErrCnt[9];
+                  BKA1_5A_REG = 0x00; //rg_dhtx_tx_en
+                  BKA1_5B_REG = 0x00; //tx tap_main enable
+                  BKA1_5C_REG = 0x00; //tx tap_main enable
+                  
+                  //dig hdmi2.1
+                  BKE9_DD_REG &= 0xfc;//
+                  BKE9_E1_REG &= BIT5_0;//HDMI21 TX enable for TX ddc msater.
+                  
+                  //pkt
+                  BKEA_18_REG = 0x00;//[6]vsif1 hdr10+ dp in;  [2]rgd_s_hdr_dp_in; [1]rgd_d_hdr_dp_in;
+                      
+                  //for case of Amlogic 311D2
+                  BKEB_18_REG = 0x20;//[5]hdmi acr pkt en: 1-en
+              //    BKEB_18_REG = 0x00;//[5]hdmi acr pkt en: 1-en
+                      BKEB_19_REG = 0x00;//
+                  BKEA_1D_REG = 0x00;//[6]vsif1 hdr10+ pkt en; [2]rgd_s_hdr_pkt_en; [1]rgd_d_hdr_pkt_en;
+                  
+              //    Drv_HdmiTx_WriteI2CByte(0xA831,0x00); 
+              
+                      if(g_stHdmiEdidInfo.ucMaxFrlRate ||g_stHdmiEdidInfo.ucMaxFrlDscRate)
+                      {               
+                              //needed
+                              Drv_HdmiTx_WriteI2CByte(0xa831,0x00);//a831[7:4]ffe lvl, [3:0]frl rate
+                              
+                              ucState = Drv_HdmiTx_ReadI2CByte(0xa810);//
+                              if(ucState & BIT1_1)
+                              {
+                                      Drv_HdmiTx_ReadI2CByteN(0x00,0xA850,&ucErrCnt[0],7);
+                              }
+                              if(ucState & BIT6_1)
+                              {
+                                      Drv_HdmiTx_ReadI2CByteN(0x00,0xA859,&ucErrCnt[7],2);
+                              }       
+                              Drv_HdmiTx_WriteI2CByte(0xa810,ucState);
+                      }   
+              }
+              void Drv_HdmiTx_GcpSet(u8 b1En)
+              {
+                  if(b1En == ENABLED)
+                  {
+                      BKEB_18_REG |= BIT4_1;
+                  }
+                  else
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 4   
+
+                  {
+                      BKEB_18_REG &= BIT4_0;
+                  }
+              }
+              void Drv_HdmiTx_SpdSet(u8 b1En)
+              {
+                  if(b1En == ENABLED)
+                  {
+                      BKEB_19_REG |= BIT2_1;
+                  }
+                  else
+                  {
+                      BKEB_19_REG &= BIT2_0;
+                  }
+              }
+              void Drv_HdmiTx_VicUD0Set(u8 b1En)
+              {
+                  if(b1En == ENABLED)
+                  {
+                      BKEB_19_REG |= BIT5_1;
+                  }
+                  else
+                  {
+                      BKEB_19_REG &= BIT5_0;
+                  }
+              }
+              void Drv_HdmiTx_VicSet(u8 b1En)
+              {
+                  if(b1En == ENABLED)
+                  {
+                      BKEB_19_REG |= BIT3_1;
+                  }
+                  else
+                  {
+                      BKEB_19_REG &= BIT3_0;
+                  }
+              }
+              
+              void Drv_HdmiTx_AviInfoSet(HdmiTx_S pstHdmiTx)
+              {
+                  u8 ucAviCheckSum;
+                  BKEB_60_REG = 0x82;//hb0 reference 1901 eb3f
+                  BKEB_62_REG = 0x0d;//hb2 reference 1901 eb41
+                  
+                  //HFR1-50 AVI infoframe version-XHZMARK
+                  if(pstHdmiTx.ucszAviPkt[3] >= 128)
+                  {
+                      BKEB_61_REG = 0x03;//hb1 reference 1901 eb40
+                      ucAviCheckSum = 0x92;
+                  }
+                  else
+                  {
+                      BKEB_61_REG = 0x02;//hb1 reference 1901 eb40
+                      ucAviCheckSum = 0x91;
+                  }
+              //    memcpy(&BKEB_64_REG,pstHdmiTx.ucszAviPkt,5);
+                  BKEB_64_REG = pstHdmiTx.ucszAviPkt[0];//PB1
+                  BKEB_65_REG = pstHdmiTx.ucszAviPkt[1];//PB2
+                  BKEB_66_REG = pstHdmiTx.ucszAviPkt[2];//PB3
+                  BKEB_67_REG = pstHdmiTx.ucszAviPkt[3];//PB4
+                  BKEB_68_REG = pstHdmiTx.ucszAviPkt[4];//PB5
+              
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 5   
+
+                  ucAviCheckSum += BKEB_64_REG;
+                  ucAviCheckSum += BKEB_65_REG;
+                  ucAviCheckSum += BKEB_66_REG;
+                  ucAviCheckSum += BKEB_67_REG;
+                  ucAviCheckSum += BKEB_68_REG;
+                  BKEB_63_REG = 0x100 - ucAviCheckSum;//PB0
+                  Drv_HdmiTx_VicSet(ENABLED);   //avi pkt enable
+                  
+                  if(pstHdmiTx.ucHdmiVic > 0x00)
+                  {
+                      BKEB_73_REG = 0x81;
+                      BKEB_74_REG = 0x01;
+                      BKEB_75_REG = 0x05;//ucLength
+                      BKEB_76_REG = 0x4a - g_stHdmiTx.ucHdmiVic;//check sum
+                      BKEB_77_REG = 0x03;
+                      BKEB_78_REG = 0x0c;
+                      BKEB_79_REG = 0x00;
+                      BKEB_7A_REG = 0x20;
+                      BKEB_7B_REG = pstHdmiTx.ucHdmiVic;
+                      Drv_HdmiTx_VicUD0Set(ENABLED);
+                  }
+                  else
+                  {
+                      Drv_HdmiTx_VicUD0Set(DISABLED);
+                  }
+              }
+              
+              #if SPD_SUPPORT  == ENABLED
+              void Drv_HdmiTx_SpdInfoSet(void)
+              {
+                  u8 ucHDR_PL;
+                  u8 ucHDR_Checksum = 0x00;
+                  if(Drv_DpRxSpdVer_Get() == HDR_SDPNone)
+                  {
+                      Drv_HdmiTx_SpdSet(DISABLED);
+                  }
+                  else 
+                  {
+                      BKEB_BF_REG = 0x83;
+                      BKEB_C0_REG = 0x01;
+                      BKEB_C1_REG = 0x1b;
+                      if(Drv_DpRxSpdVer_Get() == HDR_SDPVer13)
+                      {           
+                          memcpy(&BKEB_C3_REG,&BKF2_8C_REG,BKF2_8B_REG);
+                          ucHDR_Checksum = 0x9F;//equal = BKD6_BF_REG+BKD6_C0_REG+BKD6_C1_REG;
+                          for(ucHDR_PL =0; ucHDR_PL < BKF2_8B_REG ;ucHDR_PL++)
+                          {
+                              ucHDR_Checksum += *((&BKEB_C3_REG)+ucHDR_PL);
+                          }            
+                      }
+                      else if(Drv_DpRxSpdVer_Get() == HDR_SDPVer12)
+                      {
+                          memcpy(&BKEB_C3_REG,&BKF2_8A_REG,BKEB_C1_REG);
+                          ucHDR_Checksum = 0x9F;
+                          for(ucHDR_PL =0; ucHDR_PL < BKEB_C1_REG ;ucHDR_PL++)
+                          {
+                              ucHDR_Checksum += *((&BKEB_C3_REG)+ucHDR_PL);
+                          }           
+                      }
+                      BKEB_C2_REG = 256 - ucHDR_Checksum;
+                      Drv_HdmiTx_SpdSet(ENABLED);
+                  }
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 6   
+
+              }
+              #endif
+              
+              u8 Drv_HdmiTx_FrlUpdateChg(void)
+              {
+                  #if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT
+                  if (BKEC_43_REG & BIT5_1)//
+                      return TRUE;
+                  else
+                      return FALSE;
+                  #else
+                  return FALSE;
+                  #endif
+              }
+              void Drv_HdmiTx_TxPllInit(void)
+              {
+                  BKA1_48_REG = 0x50;//[7]rg_dhtxpll_pd: 0-normal work
+                                     //[6]rg_dhtxpll_rst_n: 1-normal work
+                                     //[5]rg_dhtxpll_ptat_rst: 0-normal work
+                                     //[4]rg_dhtxpll_ibias_en: 1-en
+                                     //[1:0]rg_dhtxpll_ref_sel[1:0] :25M.
+                  BKA1_49_REG = 0x01;//[4:0]rg_dhtxpll_cpcur_sel
+                                     //[5:4]rg_dhtxpll_pre_divset: 10-/1
+              
+                  BKE3_30_REG = 0x02;//ks = 2:
+                  BKE3_38_REG = 0x00;//[3:2]rgd_dhtxpll_cal_hdmidp_sel[1:0] : 01(00)-hdmi14/20, 10-hdmi2.1, 11-dp;
+              
+              }
+              
+              void Drv_HdmiTx_TmdsDivLinkClkSet(void)
+              {
+                   //ad_dhtx_div_link_clk src set
+                  BKA2_00_REG = 0x02;//enable lmtxpll, ref clk sel dhtx_read_clk ,to get ad_dhtx_div_link_clk.
+                  BKA2_01_REG &=0xe0;//lmtxpll pre div = 1
+                  BKA2_03_REG = 0x00;//sel ref clk
+              }
+              void Drv_HdmiTx_ParaSet(OUT HdmiTx_S *pstHdmiTx)
+              {
+                  u8 b1IsHdmiMode,ucVersion;
+                  u8 ucColorDepth, ucTxPixelEncoding;
+                  b1IsHdmiMode      = pstHdmiTx -> b1HdmiMode;
+                  ucVersion         = pstHdmiTx -> ucHdmiVersion;
+                  ucColorDepth      = pstHdmiTx -> ucColorDepth;
+                  ucTxPixelEncoding = pstHdmiTx -> ucTxPixelEncoding;
+                  if(ucVersion == HDMI21)
+                  {
+                      BKEA_01_REG = 0x24; //HDMI MODE
+                  }
+                  else
+                  {
+                      if(b1IsHdmiMode == HDMI_MODE)
+                      {
+                          BKEA_01_REG |= BIT2_1; //HDMI MODE
+                      }
+                      else if(b1IsHdmiMode == DVI_MODE)
+                      {
+                          BKEA_01_REG &= BIT2_0; //DVI MODE
+                      }
+              
+                      if(ucVersion == HDMI14)
+                      {
+                          BKEA_01_REG &=BIT4_0; //output hdmi1.4 clock.
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 7   
+
+                          BKEA_01_REG &=BIT3_0; //scramble disable.
+                      }
+                      else if(ucVersion == HDMI20)
+                      {
+                          BKEA_01_REG |=BIT4_1; //output hdmi1.4 clock.
+                          BKEA_01_REG |=BIT3_1; //scramble disable.
+                      }
+                  }
+                  if (ucTxPixelEncoding == YCbCr422_1)
+                  {
+                      BKEA_03_REG = 0x08;//[7:4]rgd_hdmitx_vdp_cd; [2:0]rgd_color_depth
+                  }
+                  else
+                  {
+                      switch(ucColorDepth)
+                      {
+                          case DEEP_10BIT:
+                              BKEA_03_REG = 0x55;
+                              break;
+                          case DEEP_12BIT:
+                              BKEA_03_REG = 0x66;
+                              break;
+                          case DEEP_8BIT:
+                          default:
+                              BKEA_03_REG = 0x00;
+                              break;
+                      }
+                  }
+              }
+              
+              void Drv_HdmiScdc_Scan(u8 b1IsHdmi20,u8 b1ScdcCheckEn,u8 b1ScdcPresent)
+              {
+                  u8 ucScdcCheckCnt = 0;
+                      //HF 1-27
+                      if(b1ScdcPresent == FALSE)
+                      {
+                              printLT(PRINT_PRIO_TEST, "\nSCDC NOTSUPPORT");
+                              return;
+                      }
+                  if(b1IsHdmi20 == HDMI14)
+                  {
+                      Drv_HdmiTx_WriteI2CByte(0xA820,0x00);
+                  }
+                  else if(b1IsHdmi20 == HDMI20)
+                  {
+                      Drv_HdmiTx_WriteI2CByte(0xA820,0x03);
+                      Ocm_Delay1ms(2);
+                      for(ucScdcCheckCnt=0;ucScdcCheckCnt<5;ucScdcCheckCnt++)
+                      {
+                          if(b1ScdcCheckEn == TRUE)
+                          {
+                              if(Drv_HdmiTx_ReadI2CByte(0xA821) != 0x01)
+                              {
+                                  Drv_HdmiTx_WriteI2CByte(0xA820,0x03);
+                                  Ocm_Delay1ms(2);
+                              }
+                              else
+                              {
+                                  break;
+                              }
+                          }
+                          else
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 8   
+
+                          {
+                              if(Drv_HdmiTx_ReadI2CByte(0xA820) != 0x03)
+                              {
+                                  Drv_HdmiTx_WriteI2CByte(0xA820,0x03);
+                                  Ocm_Delay1ms(2);
+                              }
+                              else
+                              {
+                                  break;
+                              }
+                          }
+                      }
+                  }
+              }
+              
+              void Drv_HdmiTx_PhySet(HdmiTx_S *pstHdmiTx,u8 b1ScdcPresent)
+              {    
+                  u8 ucVersion;
+                      static u8 ucState = 0;
+                      static u8 ucErrCnt[9];
+                      pstHdmiTx->b1ScdcCheck_En = FALSE;
+              
+                  ucVersion = pstHdmiTx->ucHdmiVersion;
+                      if(g_stHdmiEdidInfo.ucMaxFrlRate ||g_stHdmiEdidInfo.ucMaxFrlDscRate)
+                      {               
+                              Drv_HdmiTx_WriteI2CByte(0xa831,0x00);//a831[7:4]ffe lvl, [3:0]frl rate
+                              ucState = Drv_HdmiTx_ReadI2CByte(0xa810);//a810[4]flt_start
+                              if(ucState & BIT1_1)
+                              {
+                                      Drv_HdmiTx_ReadI2CByteN(0x00,0xA850,&ucErrCnt[0],7);
+                              }
+                              if(ucState & BIT6_1)
+                              {
+                                      Drv_HdmiTx_ReadI2CByteN(0x00,0xA859,&ucErrCnt[7],2);
+                              }       
+                              Drv_HdmiTx_WriteI2CByte(0xa810,ucState);//a831[7:4]ffe lvl, [3:0]frl rate
+                      }
+                      Ocm_Delay1ms(2);
+                      
+                      Drv_HdmiScdc_Scan(ucVersion,FALSE,b1ScdcPresent);
+              //      BKA2_06_REG = 0x00;//POSTDIV_SEL= 1
+              //      BKEA_01_REG |= BIT0_1;
+              
+                  Ocm_Delay1ms(20);//needed for LeTV for its EQ scan logic,solve its flicker issue
+              
+                  BKA1_58_REG &= BIT6_0;//div reset
+                  BKA1_58_REG |= BIT4_1;//DHTX divider reset signal select: 1 = RG_DHTX_RST_N.
+                  BKA1_58_REG &= BIT5_0;//hdmi2.0 mode
+                  BKA1_59_REG &= BIT5_0;//DHTX ibias X1.5 enable control,used for output current improvement:
+                  
+                  if(ucVersion == HDMI14)
+                  {  
+                      Drv_HdmiTx_RtermCali(TXRTERM_80);
+                      BKA1_70_REG = 0x01;//tx0 main enable
+                      
+                      BKA1_72_REG = 0x82;//tx0_post
+                      
+                      BKA1_74_REG = 0x01;//tx1 main enable
+                      
+                      BKA1_76_REG = 0x82;//tx1_post
+                      
+                      BKA1_78_REG = 0x01;//tx2 main enable
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 9   
+
+                      
+                      BKA1_7A_REG = 0x82;//tx2_post
+                      
+                      BKA1_7C_REG = 0x01;//tx3 main enable
+                      
+                      BKA1_7E_REG = 0x80;//tx3_post    
+                      if(pstHdmiTx->ulTxTmdsClk > 165000)
+                      {
+                          printLT(PRINT_PRIO_TEST, "\nHd1.4");
+                          BKA1_71_REG = 0x78;//tx0 main vaule
+                          BKA1_75_REG = 0x78;//tx1 main vaule
+                          BKA1_79_REG = 0x78;//tx2 main vaule
+                          BKA1_7D_REG = 0x78;//tx3 main vaule
+                      }
+                      else
+                      {
+                          printLT(PRINT_PRIO_TEST, "\nHd1.3");
+                          BKA1_71_REG = 0x70;//tx0 main vaule
+                          BKA1_75_REG = 0x70;//tx1 main vaule
+                          BKA1_79_REG = 0x70;//tx2 main vaule
+                          BKA1_7D_REG = 0x70;//tx3 main vaule
+                      }
+                              
+                              BKA1_5A_REG = 0xff; //rg_dhtx_tx_en     
+                  }
+                  else if(ucVersion == HDMI20)
+                  {           
+                      Drv_HdmiTx_RtermCali(TXRTERM_50);
+                          
+                      BKA1_70_REG = 0x01;//tx0 main enable
+                      BKA1_71_REG = 0xA0;//tx0 main vaule
+                      BKA1_72_REG = 0x88;//tx0_post
+                      
+                      BKA1_74_REG = 0x01;//tx1 main enable
+                      BKA1_75_REG = 0xA0;//tx1 main vaule
+                      BKA1_76_REG = 0x88;//tx1_post
+                      
+                      BKA1_78_REG = 0x01;//tx2 main enable
+                      BKA1_79_REG = 0xA0;//tx2 main vaule
+                      BKA1_7A_REG = 0x88;//tx2_post
+                      
+                      BKA1_7C_REG = 0x01;//tx3 main enable
+                      BKA1_7D_REG = 0x80;//tx3 main vaule
+                      BKA1_7E_REG = 0x80;//tx3_post
+                              
+                              printLT(PRINT_PRIO_TEST, "\nHd2.0");
+                              BKA1_5A_REG = 0xff; //rg_dhtx_tx1_en
+                              pstHdmiTx->b1ScdcCheck_En = TRUE;
+                     
+                  }
+                  
+                  Drv_HdmiTx_Reset(HDMI_TX_AFIFO_RST,ENABLED);
+                  Drv_HdmiTx_Reset(HDMI_TX_AFIFO_RST,DISABLED);
+                  
+                  BKA1_5B_REG = 0x33; //tx tap_main enable
+                  BKA1_5C_REG = 0x33; //tx tap_main enable
+                  
+                  BKA1_58_REG |= BIT6_1;//div reset   
+                      Drv_HdmiScdc_Scan(ucVersion,TRUE,b1ScdcPresent);
+              }
+              u8 Drv_HdmiTx_TxpllDivCal(u8 ucDiv)
+              {
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 10  
+
+                  u8 ucValue = 0;
+                  if(ucDiv ==1)
+                  {
+                      ucValue = 2;
+                  }
+                  if(ucDiv == 2)
+                  {
+                      ucValue = 1;
+                  }
+                  if(ucDiv ==3)
+                  {
+                      ucValue = 3;
+                  }    
+                  if(ucDiv ==4)
+                  {
+                      ucValue = 0;
+                  }
+                  return ucValue;
+              }
+              //tmds input dsctx_out_clk ,output 10/12.5/15 tmds clk
+              void Drv_HdmiTx_TmdsTxPllCal(OUT HdmiTx_S *pstHdmiTx)
+              {
+                  u8 ucColorDepth;
+                  u8 ucCalCnt, ucLockCnt;
+                  u8 ucDivN1,ucDivM1,ucDivM2,ucDivM3,ucDivM4;
+                  u32 ulTmdsCharacterRate; 
+                  ucColorDepth         = pstHdmiTx->ucColorDepth; 
+                  ulTmdsCharacterRate  = pstHdmiTx->ulTxTmdsClk>>1;
+                  BKA1_48_REG  &= 0xfc;//
+                  BKA1_48_REG  |= 0x02;//sel dhtxpll ref clk
+                  BKA1_49_REG  &= BIT7_0;//500-4G
+                  
+                  BKA3_45_REG &= 0x1f;//default
+                  BKA3_45_REG |= 0xc0;//[7:5]rg_clkgen_dhtxpll_refsel[2:0]: 110-From aa_dsctx_dsc_out_clk.
+                  //to make vco working over than 500Mhz.
+                  //TMDS_CLOCK*5*M4 = F_CLK(0.5G-6G)
+                  //M4 = F_CLK/TMDS_CLOCK/5 = F_CLK/Half_TMDS_CLOCK/10
+                  //M4 > 50000/Half_TMDS_CLOCK
+                  if(ulTmdsCharacterRate >=100000)//0.5
+                  {
+                      ucDivM4 = 1;
+                      ucDivN1 = 4;
+                  }
+                  else if(ulTmdsCharacterRate >= 50000)//0.5-1
+                  {
+                      ucDivM4 = 2;
+                      ucDivN1 = 2;
+                  }
+                  else//>1
+                  {
+                       ucDivM4 = 4;
+                       ucDivN1 = 1;
+                  }
+              
+                  //to make the input clock frequency of M2 is less than 2GHz. ref_clk*M1*M2*M3/N1/M4
+                  //FCLK/M1 <= 2000Mhz
+                  //TMDS_CLOCK*5*M4/M1 = Half_TMDS_CLOCK*M4*10/M1 <= 2000Mhz
+                  //Half_TMDS_CLOCK*M4/M1 <= 200000Khz
+                  //M1 >= Half_TMDS_CLOCK*M4/200000Khz
+                  if(ulTmdsCharacterRate*ucDivM4 > 200000) 
+                  {
+                     ucDivM1 = ucDivM4 * 2; //M1 is double, so M3 should half.
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 11  
+
+                     ucDivM3 = ucDivN1/2;   
+                  }
+                  else
+                  {
+                     ucDivM1 = ucDivM4;
+                     ucDivM3 = ucDivN1;
+                  }
+                  //to get righ link clock in all color depth.
+                  if(ucColorDepth == DEEP_8BIT)
+                  {
+                      ucDivM2 = 10;
+                  }
+                  else if(ucColorDepth == DEEP_10BIT)
+                  {
+                      ucDivM2 = 25; //M2 shoud be 12.5,but it is double, so M3 or M1 should half.
+                      (ucDivM3 > 1)?(ucDivM3 >>=1):(ucDivM1 >>=1);//if M3 is 1,we can not half M3, 
+                                                                  //but M1 must be large than 1, then we can half M1.
+                  }
+                  else if(ucColorDepth == DEEP_12BIT)
+                  {
+                      ucDivM2 = 15;
+                  }
+              
+                  //M1*M2*M3的值看上去始终是40(8BIT),50(10BIT),60(12BIT);
+                  printLT(PRINT_PRIO_HIG, "\nucDivN1[%bd],ucDivM3[%bd],ucDivM2[%bd],ucDivM1[%bd],ucDivM4[%bd]", ucDivN1,
+             -ucDivM3,ucDivM2,ucDivM1,ucDivM4);
+                  ucDivN1 = Drv_HdmiTx_TxpllDivCal(ucDivN1);
+                  ucDivM3 = Drv_HdmiTx_TxpllDivCal(ucDivM3);
+                  ucLockCnt = 0;
+                  do
+                  {
+                      BKA1_4B_REG = 0x00; //RG_DHTXPLL_PRE_DIVSET
+                      BKA1_50_REG = 0x00;// RG_DHTXPLL_FB_DIVSET
+                      BKA1_51_REG = 0x00; //RG_DHTXPLL_LOOP_DIVSET
+                      BKA1_54_REG = 0x00; //RGD_SW_DHTXPLL_FREQ_SET
+                      BKA1_55_REG = 0x1e; //default value
+              
+                      BKA1_4B_REG |= BIT6_1|(ucDivN1<<4); //[6]g_dhtxpll_pre_divsel: 
+                      BKA1_50_REG |= 0x11 | (ucDivM3<<1); //[4]rgd_sw_en_dhtxpll_fb_divsel: 
+                                                          //[0]g_dhtxpll_loop_divsel: 
+                      BKA1_51_REG = ucDivM1>>1; //rg_dhtxpll_loop_divset
+                      BKA1_52_REG |= BIT4_1;//[4]rgd_sw_en_dhtxpll_freq_set: 
+                      BKA1_54_REG |= BIT4_1|(ucDivM4>>1);//[4]rgd_sw_en_dhtxpll_div_set:   bit1:0 sw freq_set_value
+                      BKA1_55_REG = ucDivM2;
+                      ucCalCnt = 0;
+                      do
+                      {
+                          BKE1_06_REG &= 0xf4;  //[3]rgd_sw_dhtxpll_div_tuner_rst_n
+                                                //[1]rgd_sw_dhtxpll_pll_lock_rst_n
+                                                //[0]rgd_sw_dhtxpll_cal_rst_n
+                          BKA1_48_REG &= BIT6_0;//[6]rg_dhtxpll_rst_n: 0-reset
+                          BKE3_2F_REG &= BIT0_0;//[0]rgd_dhtxpll_cal_pll_cal_en: 0-dis
+                          Ocm_Delay1ms(1);
+                          BKE1_06_REG |= 0x0b;
+                          BKA1_48_REG |= BIT6_1;//[6]rg_dhtxpll_rst_n: 1-normal
+                          BKE3_2F_REG |= BIT0_1;//[0]rgd_dhtxpll_cal_pll_cal_en: 1-en
+                          Ocm_Delay1ms(2);
+                          ucCalCnt++;
+                      }while((ucCalCnt < 3) && ((BKE3_4E_REG & 0x18) != 0x08));
+                      Ocm_Delay1ms(1);
+                      printLT(PRINT_PRIO_HIG, "\nTmdsTxpll band = 0x%02bx", BKE3_58_REG);
+                              ucLockCnt++;
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 12  
+
+                  }while((ucLockCnt < 3) && ((BKE3_62_REG & 0x01) == 0x00));
+                  
+                  if (BKE3_62_REG & BIT0_1)
+                  {
+                      printLT(PRINT_PRIO_HIG, "\nhdmi tmds mode tx pll lock");
+                  }
+                  else
+                  {
+                      printLT(PRINT_PRIO_HIG, "\nhdmi tmds mode tx pll unlock");
+                  }
+              }
+              
+              void Drv_HdmiTx_FrlTxPhySet(u8 ucFrlRate)
+              {
+                  BKA1_58_REG &= BIT6_0;//div reset
+                  BKA1_58_REG |= BIT4_1;//DHTX divider reset signal select: 1 = RG_DHTX_RST_N.
+                  BKA1_58_REG |= BIT5_1;//Divided by 9,used in HDMI2.1 mode.
+                  if(ucFrlRate <= FRL_8G4LANE)
+                  {
+                      BKA1_59_REG &= BIT5_0;//DHTX ibias X1.5 enable control,used for output current improvement:  
+                  }
+                  else
+                  {
+                      BKA1_59_REG |= BIT5_1;//DHTX ibias X1.5 enable control,used for output current improvement: 
+                  }
+                  BKA1_5A_REG = 0xff; //rg_dhtx_tx1_en
+                  BKA1_5B_REG = 0x77; //tx tap_main enable
+                  BKA1_5C_REG = 0x77; //tx tap_main enable
+                  
+                  BKA1_70_REG = 0x00;//tx0 main enable
+                  BKA1_71_REG = 0x00;//tx0 main vaule
+                  BKA1_72_REG = 0x00;//tx0_post
+                  
+                  BKA1_74_REG = 0x00;//tx1 main enable
+                  BKA1_75_REG = 0x00;//tx1 main vaule
+                  BKA1_76_REG = 0x00;//tx1_post
+                  
+                  BKA1_78_REG = 0x00;//tx2 main enable
+                  BKA1_79_REG = 0x00;//tx2 main vaule
+                  BKA1_7A_REG = 0x00;//tx2_post
+                  
+                  BKA1_7C_REG = 0x00;//tx3 main enable
+                  BKA1_7D_REG = 0x00;//tx3 main vaule
+                  BKA1_7E_REG = 0x00;//tx3_post
+                  
+                  BKA1_58_REG |= BIT6_1;//div reset
+              }
+              
+              
+              void Drv_HdmiTx_FrlTxPllCal(u8 ucFrlRate)
+              {
+                  u8 ucCalCnt, ucLockCnt;
+                  BKA1_48_REG  &= 0xfc;//
+                  do 
+                  {        
+                      BKA1_4B_REG = 0x00; //RG_DHTXPLL_PRE_DIVSET
+                      BKA1_50_REG = 0x00;// RG_DHTXPLL_FB_DIVSET
+                      BKA1_51_REG = 0x00; // RG_DHTXPLL_LOOP_DIVSET
+                      BKA1_54_REG = 0x00; //RGD_SW_DHTXPLL_FREQ_SET
+                      BKA1_55_REG = 0x1e; //default value
+                      switch(ucFrlRate)
+                      {
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 13  
+
+                          case FRL_3G3LANE: //
+                              BKA1_49_REG  &= BIT7_0;//500-4G
+                              BKA1_4B_REG = 0x20; //RG_DHTXPLL_PRE_DIVSET   = 1;
+                              BKA1_50_REG = 0x04;  // RG_DHTXPLL_FB_DIVSET  = 1;
+                              BKA1_51_REG = 0x00; // RG_DHTXPLL_LOOP_DIVSET = 1
+                              BKA1_54_REG = 0x00;//RGD_SW_DHTXPLL_FREQ_SET =  1
+                              BKA1_55_REG = 0x3C;//txpll divset_set        = 60 
+                              break;
+                          case FRL_6G3LANE: //
+                          case FRL_6G4LANE: //  
+                              BKA1_49_REG  &= BIT7_0;//500-4G    
+                              BKA1_4B_REG = 0x20; //RG_DHTXPLL_PRE_DIVSET   = 1;
+                              BKA1_50_REG = 0x04;  // RG_DHTXPLL_FB_DIVSET  = 1;
+                              BKA1_51_REG = 0x01; // RG_DHTXPLL_LOOP_DIVSET = 2
+                              BKA1_54_REG = 0x00;//RGD_SW_DHTXPLL_FREQ_SET =  1
+                              BKA1_55_REG = 0x3c;//txpll divset_set         = 60
+                              break;
+                          case FRL_8G4LANE: // 
+                              BKA1_49_REG  &= BIT7_0;//500-4G
+                              BKA1_4B_REG = 0x20; //RG_DHTXPLL_PRE_DIVSET  =  1;
+                              BKA1_50_REG = 0x04;  // RG_DHTXPLL_FB_DIVSET  = 1;
+                              BKA1_51_REG = 0x01; // RG_DHTXPLL_LOOP_DIVSET = 2
+                              BKA1_54_REG = 0x00;//RGD_SW_DHTXPLL_FREQ_SET =  1
+                              BKA1_55_REG = 0x50;//txpll divset_set         = 80  
+                              break;
+                          case FRL_10G4LANE: //
+                              BKA1_49_REG |= BIT7_1;//4G-5G   
+                              BKA1_4B_REG = 0x20; //RG_DHTXPLL_PRE_DIVSET  =  1;
+                              BKA1_50_REG = 0x04;  // RG_DHTXPLL_FB_DIVSET  = 1;
+                              BKA1_51_REG = 0x02; // RG_DHTXPLL_LOOP_DIVSET = 4
+                              BKA1_54_REG = 0x00;//RGD_SW_DHTXPLL_FREQ_SET =  1
+                              BKA1_55_REG = 0x32;//txpll divset_set        = 50 
+                              break;
+                          case FRL_12G4LANE: // 
+                              BKA1_49_REG |= BIT7_1;//4G-5G  
+                              BKA1_4B_REG = 0x20; //RG_DHTXPLL_PRE_DIVSET   = 1;
+                              BKA1_50_REG = 0x04;  // RG_DHTXPLL_FB_DIVSET  = 1;
+                              BKA1_51_REG = 0x02; // RG_DHTXPLL_LOOP_DIVSET = 4
+                              BKA1_54_REG = 0x00;//RGD_SW_DHTXPLL_FREQ_SET  =  1
+                              BKA1_55_REG = 0x3c;//txpll divset_set         = 60  
+                              break;
+                          default:        
+                              break;
+                      }
+                      BKA1_4B_REG |= BIT6_1;//[6]g_dhtxpll_pre_divsel: 
+                      BKA1_50_REG |= 0x11;  //[4]rgd_sw_en_dhtxpll_fb_divsel: 
+                                            //[0]g_dhtxpll_loop_divsel: 
+                      BKA1_52_REG |= BIT4_1;//[4]rgd_sw_en_dhtxpll_freq_set: 
+                      BKA1_54_REG |= BIT4_1;//[4]rgd_sw_en_dhtxpll_div_set: 
+                      ucCalCnt = 0;
+                      do
+                      {
+                          BKE1_06_REG &= 0xf4;//[3]rgd_sw_dhtxpll_div_tuner_rst_n
+                                              //[1]rgd_sw_dhtxpll_pll_lock_rst_n
+                                              //[0]rgd_sw_dhtxpll_cal_rst_n
+                          BKA1_48_REG &= BIT6_0;//[6]rg_dhtxpll_rst_n: 0-reset
+                          BKE3_2F_REG &= BIT0_0;//[0]rgd_dhtxpll_cal_pll_cal_en: 0-dis
+                          Ocm_Delay1ms(1);
+                          BKE1_06_REG |= 0x0b;
+                          BKA1_48_REG |= BIT6_1;//[6]rg_dhtxpll_rst_n: 1-normal
+                          BKE3_2F_REG |= BIT0_1;//[0]rgd_dhtxpll_cal_pll_cal_en: 1-en
+                          Ocm_Delay1ms(2);
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 14  
+
+                          ucCalCnt++;
+                      }while((ucCalCnt < 3) && ((BKE3_4E_REG & 0x18) != 0x08));
+                      Ocm_Delay1ms(1);
+                      printLT(PRINT_PRIO_HIG, "\nFrlTxpll band = 0x%02bx", BKE3_58_REG);
+                  }while((ucLockCnt < 3) && ((BKE3_62_REG & 0x01) == 0x00));
+              }
+              
+              void Drv_HdmiTx_FrlFecLinClkCal(OUT HdmiTx_S *pstHdmiTx)
+              {
+                  u8 ucFecCalCnt, ucFecLockCnt;
+                  u8 ucColorDepth;
+                  u32 ulHalfPixelClk;
+              
+                  ucColorDepth   = pstHdmiTx->ucColorDepth; 
+                  ulHalfPixelClk = pstHdmiTx->ulTxPixelClk >> 1;
+              
+                  printLT(PRINT_PRIO_TEST, "\nHalfPixelClk = %ld", ulHalfPixelClk);
+                  BKA2_00_REG = 0x03;//[1:0]rg_lmtxpll_ref_sel: Aa_lmtxpll_ref_clk3
+                  BKA3_44_REG = 0x30;//ref clk sel dsctx_out_clk
+                  
+                  BKA2_01_REG &=0xe0;
+                  BKA2_02_REG = 0xa8;//[7:4]rg_lmtxpll_cpcur_sel
+                  BKA2_03_REG = 0x00;
+                  BKE2_63_REG = 0x30;// ks= 2;
+                  BKE2_63_REG &= BIT3_0;//[3]rgd_lmtxpll_pll_cal_en: 0-dis
+                  
+                  switch(ucColorDepth)
+                  {
+                      case DEEP_10BIT: //vco out clk  = 1.25* ref_clk
+                           BKA2_03_REG = 0x30; //aa_pll_fec_clk
+                          if(ulHalfPixelClk < 15000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0xd0;//[7]rgd_sw_en_lmtxpll_div_set: div = 80
+                              BKA2_06_REG = 0x40;//rg_lmtxpll_tmds_freq_set = 16;   
+                              BKA2_06_REG |= 0x07;//rg_lmtxpll_defec_divsel =  8;
+                          }
+                          else if(ulHalfPixelClk < 30000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0xa8;//[7]rgd_sw_en_lmtxpll_div_set: div = 40
+                              BKA2_06_REG = 0x30;//rg_lmtxpll_tmds_freq_set = 8;   
+                              BKA2_06_REG |= 0x07;//rg_lmtxpll_defec_divsel =  8;
+                          }
+                          else if(ulHalfPixelClk < 60000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x94;//[7]rgd_sw_en_lmtxpll_div_set: div = 20
+                              BKA2_06_REG = 0x20;//rg_lmtxpll_tmds_freq_set =  4;   
+                              BKA2_06_REG |= 0x07;//rg_lmtxpll_defec_divsel =  8;
+                          }
+                          else if(ulHalfPixelClk < 120000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x8a;//[7]rgd_sw_en_lmtxpll_div_set: div = 10
+                              BKA2_06_REG = 0x10;//rg_lmtxpll_tmds_freq_set =  2;   
+                              BKA2_06_REG |= 0x07;//rg_lmtxpll_defec_divsel =  8;
+                          }
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 15  
+
+                          else if(ulHalfPixelClk < 240000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x85;//[7]rgd_sw_en_lmtxpll_div_set: div = 5
+                              BKA2_06_REG = 0x00;//rg_lmtxpll_tmds_freq_set =  1;   
+                              BKA2_06_REG |= 0x07;//rg_lmtxpll_defec_divsel =  8;
+                          }
+                          else if(ulHalfPixelClk < 480000)
+                          {
+                              BKA2_01_REG |=0x01;// predivset   = 2
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x85;//[7]rgd_sw_en_lmtxpll_div_set: div = 5
+                              BKA2_06_REG = 0x00;//rg_lmtxpll_tmds_freq_set =  1;   
+                              BKA2_06_REG |= 0x03;//rg_lmtxpll_defec_divsel =  4;
+                          }
+                          else if(ulHalfPixelClk < 960000)
+                          {
+                              BKA2_01_REG |=0x03;// predivset   = 4
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x85;//[7]rgd_sw_en_lmtxpll_div_set: div = 5
+                              BKA2_06_REG = 0x00;//rg_lmtxpll_tmds_freq_set = 1;   
+                              BKA2_06_REG |= 0x01;//rg_lmtxpll_defec_divsel = 2;
+                          }
+                          else //960-1920M
+                          {
+                              BKA2_01_REG |=0x07;// predivset   = 8
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x85;//[7]rgd_sw_en_lmtxpll_div_set: div = 5
+                              BKA2_06_REG = 0x00;//rg_lmtxpll_tmds_freq_set = 1;   
+                              BKA2_06_REG |= 0x00;//rg_lmtxpll_defec_divsel = 1;
+                          }
+                          break;
+                      case DEEP_12BIT: //vco out clk  = 1.5* ref_clk
+                          BKA2_03_REG = 0x30; //aa_pll_fec_clk
+                          if(ulHalfPixelClk < 25000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0xb0;//[7]rgd_sw_en_lmtxpll_div_set: div = 48
+                              BKA2_06_REG = 0x40;//rg_lmtxpll_tmds_freq_set = 16;   
+                              BKA2_06_REG |= 0x03;//rg_lmtxpll_defec_divsel =  4;
+                          }
+                          else if(ulHalfPixelClk < 50000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x98;//[7]rgd_sw_en_lmtxpll_div_set: div = 24
+                              BKA2_06_REG = 0x30;//rg_lmtxpll_tmds_freq_set = 8;   
+                              BKA2_06_REG |= 0x03;//rg_lmtxpll_defec_divsel = 4;
+                          }
+                          else if(ulHalfPixelClk < 100000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x8c;//[7]rgd_sw_en_lmtxpll_div_set: div = 12
+                              BKA2_06_REG = 0x20;//rg_lmtxpll_tmds_freq_set = 4;   
+                              BKA2_06_REG |= 0x03;//rg_lmtxpll_defec_divsel = 4;
+                          }
+                          else if(ulHalfPixelClk < 200000)
+                          {
+                              BKA2_01_REG &=0xe0;// predivset   = 1
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 16  
+
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x86;//[7]rgd_sw_en_lmtxpll_div_set: div = 6
+                              BKA2_06_REG = 0x10;//rg_lmtxpll_tmds_freq_set = 2;   
+                              BKA2_06_REG |= 0x03;//rg_lmtxpll_defec_divsel = 4;
+                          }
+                          else if(ulHalfPixelClk < 400000)
+                          {
+                              BKA2_01_REG |=0x01;// predivset   = 2
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x86;//[7]rgd_sw_en_lmtxpll_div_set: div = 6
+                              BKA2_06_REG = 0x00;//rg_lmtxpll_tmds_freq_set = 1;   
+                              BKA2_06_REG |= 0x03;//rg_lmtxpll_defec_divsel = 4;
+                          }
+                          else if(ulHalfPixelClk < 800000)
+                          {
+                              BKA2_01_REG |=0x03;// predivset   = 4
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x86;//[7]rgd_sw_en_lmtxpll_div_set: div = 6
+                              BKA2_06_REG = 0x00;//rg_lmtxpll_tmds_freq_set = 1;   
+                              BKA2_06_REG |= 0x01;//rg_lmtxpll_defec_divsel = 2;
+                          }
+                          else //800-1600M
+                          {
+                              BKA2_01_REG |=0x07;// predivset   = 8
+                              BKA2_00_REG |=BIT2_1;//POSTDIV_SEL= 2
+                              BKA2_0A_REG = 0x86;//[7]rgd_sw_en_lmtxpll_div_set: div = 6
+                              BKA2_06_REG = 0x00;//rg_lmtxpll_tmds_freq_set = 1;   
+                              BKA2_06_REG |= 0x00;//rg_lmtxpll_defec_divsel = 1;
+                          }
+                          break;
+                      case DEEP_8BIT:
+                      default:
+                          BKA2_00_REG &=BIT2_0;//POSTDIV_SEL= 1
+                          BKA2_06_REG = 0x00;//rg_lmtxpll_tmds_freq_set =  1;  
+                          BKA2_01_REG &=0xe0;// predivset   = 1
+                          BKA2_03_REG = 0x00; //pll ref clk
+                          BKA2_0A_REG = 0x00;//[7]rgd_sw_en_lmtxpll_div_set: div = 1
+                          break;
+                  }
+                  if(ucColorDepth > DEEP_8BIT)
+                  {
+                      ucFecCalCnt = 0;
+                      do
+                      { 
+                          BKE1_07_REG &= 0xfc;//[3]rgd_sw_lmtxpll_div_tuner_rst_n
+                                              //[1]rgd_sw_lmtxpll_pll_lock_rst_n
+                                              //[0]rgd_sw_lmtxpll_cal_rst_n
+                          BKE1_0F_REG &= BIT4_0;//[4]rg_sw_lmtxpll_rst_n: 0-en 
+                          BKE2_63_REG &= BIT3_0;//[3]rgd_lmtxpll_pll_cal_en: 0-dis
+                          Ocm_Delay1ms(1);
+                          BKE1_07_REG |= 0x03;//[3]rgd_sw_lmtxpll_div_tuner_rst_n
+                                              //[1]rgd_sw_lmtxpll_pll_lock_rst_n
+                                              //[0]rgd_sw_lmtxpll_cal_rst_n
+                          BKE1_0F_REG |= BIT4_1;//[4]rg_sw_lmtxpll_rst_n: 1-dis 
+                          Ocm_Delay1ms(1);      //necessary for txpll cal,lmtxpll rst will cause wrong band value
+                          BKE2_63_REG |= BIT3_1;//[3]rgd_lmtxpll_pll_cal_en: 1-en
+                          Ocm_Delay1ms(2);
+                          ucFecCalCnt++;
+                      }while((ucFecCalCnt < 3)&&((BKE2_6D_REG & 0x03) != 0x02));//
+                      printLT(PRINT_PRIO_HIG, "\nfecpllband =  0x%02bx", BKE2_74_REG);
+                      ucFecLockCnt = 0;
+                      while((!(BKE2_28_REG & BIT2_1)) && (ucFecLockCnt < 6))  //PLL lock output lock status
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 17  
+
+                      {
+                          ucFecLockCnt++;
+                          Ocm_Delay1ms(1);
+                      } 
+                  }
+              }
+              
+              void Drv_HdmiTx_FrlTxRst(u8 b1ResetEn)
+              {
+                  Drv_HdmiTx_Reset(HDMI_TX_21PKT_RST,b1ResetEn);
+                  Drv_HdmiTx_Reset(HDMI_TX_20VID_RST,b1ResetEn);
+              }
+              
+              void Drv_HdmiTx_FrlVidSet(void)
+              {
+                  BKEC_2D_REG &= BIT7_0;//RGD_MAP1_EN solve the 4K120 video not stable issue
+              }
+              
+              void Drv_HdmiTx_DoblyHdrEnable(void)
+              {
+                  #if DOBLY_VISION_SUPPORT == ENABLED
+                  Drv_System_SramPathSet(HDMITX_HDR_PKT_PATH);
+              
+                  #if RX_PORT_SIGN == DP_PORT
+                  BKEA_18_REG |= BIT6_1;//[6]vsif1 hdr10+ dp in; [2]rgd_s_hdr_dp_in; [1]rgd_d_hdr_dp_in;
+                  BKEA_1D_REG |= BIT6_1;//[6]vsif1 hdr10+ pkt en; [2]rgd_s_hdr_pkt_en; [1]rgd_d_hdr_pkt_en;
+                  #endif
+              
+                  #if RX_PORT_SIGN == HDMI_PORT
+                  BKEA_18_REG &= BIT6_0;//[6]vsif1 hdr10+ dp in;  [2]rgd_s_hdr_dp_in; [1]rgd_d_hdr_dp_in;
+                  BKEA_1D_REG |= BIT6_1;//[6]vsif1 hdr10+ pkt en; [2]rgd_s_hdr_pkt_en; [1]rgd_d_hdr_pkt_en;
+              
+                  #endif
+                  #endif
+              }
+              
+              void Drv_HdmiTx_StaticHdrEnable(void)
+              {
+                  #if HDR_SUPPORT == ENABLED
+                  Drv_System_SramPathSet(HDMITX_HDR_PKT_PATH);
+              
+                  #if RX_PORT_SIGN == DP_PORT
+                  BKEA_18_REG |= BIT2_1;//[6]vsif1 hdr10+ dp in; [2]rgd_s_hdr_dp_in; [1]rgd_d_hdr_dp_in;
+                  BKEA_1D_REG |= BIT2_1;//[6]vsif1 hdr10+ pkt en; [2]rgd_s_hdr_pkt_en; [1]rgd_d_hdr_pkt_en;
+                  #endif
+              
+                  #if RX_PORT_SIGN == HDMI_PORT
+                  BKEA_18_REG &= BIT2_0;//[6]vsif1 hdr10+ dp in;  [2]rgd_s_hdr_dp_in; [1]rgd_d_hdr_dp_in;
+                  BKEA_1D_REG |= BIT2_1;//[6]vsif1 hdr10+ pkt en; [2]rgd_s_hdr_pkt_en; [1]rgd_d_hdr_pkt_en;
+              
+                  #endif
+                  #endif
+              }
+              
+              void Drv_HdmiTx_DymicHdrEnable(void)
+              {
+                  #if HDR_SUPPORT == ENABLED
+                  Drv_System_SramPathSet(HDMITX_HDR_PKT_PATH);
+              
+                  #if RX_PORT_SIGN == DP_PORT
+                  BKEA_18_REG |= BIT1_1;//[6]vsif1 hdr10+ dp in; [2]rgd_s_hdr_dp_in; [1]rgd_d_hdr_dp_in;
+                  BKEA_1D_REG |= BIT1_1;//[6]vsif1 hdr10+ pkt en; [2]rgd_s_hdr_pkt_en; [1]rgd_d_hdr_pkt_en;
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 18  
+
+                  #endif
+              
+                  #if RX_PORT_SIGN == HDMI_PORT
+                  BKEA_18_REG &= BIT1_0;//[6]vsif1 hdr10+ dp in;  [2]rgd_s_hdr_dp_in; [1]rgd_d_hdr_dp_in;
+                  BKEA_1D_REG |= BIT1_1;//[6]vsif1 hdr10+ pkt en; [2]rgd_s_hdr_pkt_en; [1]rgd_d_hdr_pkt_en;
+                  #endif
+              
+                  #endif
+              }
+              u16 Drv_HdmiTx_FrlJitGet(void)
+              {
+                  static u16 usFrlMaxJitter = 0;
+                  usFrlMaxJitter = ((u16)(BKEC_43_REG&0x0f)<<8) + BKEC_44_REG;
+                  return usFrlMaxJitter;
+              }
+              #if HDMITX_VRR_SUPPORT == ENABLED
+              void Drv_HdmiTx_VrrSet(u8 b1VrrEn,LtTiming_S *pRxTimingInfo)
+              {
+                  if (ENABLED == b1VrrEn)
+                  {
+                      
+                              
+                      BKEA_19_REG |= BIT3_1;
+                      BKEA_1A_REG &= BIT3_0;//[3]rgd_vtem_update_en: 0-dis, 1-en
+                      
+                      BKEA_17_REG |= BIT3_1;//[3]rgd_vtem_update_sel: 1-vsync update, 0-do not
+                      BKEA_18_REG |= BIT3_1;//[3]rgd_vtem_dp_in: 1-en,0-dis;
+                      
+                      BKEA_1B_REG &= 0xcf;//[5]rgd_vtem_end; [4]rgd_vtem_new;
+                      BKEA_1C_REG &= BIT3_0;//[3]rgd_vtem_sync: emp pkt sync val
+                      
+                      BKEA_30_REG = 0x24;//[7:0]sram addr offset
+                      BKEA_34_REG = 0x01;//Emp pkt MD0
+                      BKEA_30_REG = 0x25;//[7:0]sram addr offset
+                      BKEA_31_REG = pRxTimingInfo->usVfp;
+                      //BKEA_31_REG = 0x04;//Emp pkt MD1 Vfp
+                      BKEA_32_REG = pRxTimingInfo->usFramerate>>8;//Emp pkt MD2
+                      BKEA_33_REG = pRxTimingInfo->usFramerate;//Emp pkt MD3
+                      BKEA_34_REG = 0x00;//Emp pkt MD4
+                      
+                      BKEA_1D_REG |= BIT3_1;//[3]rgd_vtem_pkt_en: 1-en
+                      printLT(PRINT_PRIO_TEST, "\nHdmi tx vrr enable");
+                  }
+                  else if (DISABLED == b1VrrEn)
+                  {
+                      BKEA_17_REG &= BIT3_0;//[3]rgd_vtem_update_sel: 1-vsync update, 0-do not
+                      BKEA_1D_REG &= BIT3_0;//[3]rgd_vtem_pkt_en: 1-en
+                      printLT(PRINT_PRIO_TEST, "\nHdmi tx vrr disable");
+                  }
+              }
+              #endif
+              void Drv_HdmiTx_AudioInfoSet(HdmiTx_S pstHdmiTx)
+              {
+                  printLT(PRINT_PRIO_TEST, "\nLayout,Channel 0x%02bx,0x%02bx", pstHdmiTx.ucLayout,pstHdmiTx.ucChannel);
+                  if(pstHdmiTx.ucLayout == 1)
+                  {
+                      BKEB_06_REG |= BIT0_1;//[0]set hdmi audio packet header layout: 1-up to 8chl
+                  }
+                  else
+                  {
+                      BKEB_06_REG &= BIT0_0;//[0]set hdmi audio packet header layout: 0-2chl
+                  }
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 19  
+
+                  if(pstHdmiTx.ucCodingType == 0x10)
+                  {
+                      BKEB_06_REG |= BIT1_1;//[0]set hdmi audio packet header layout: 1-up to 8chl
+                  }
+                  else
+                  {
+                      BKEB_06_REG &= BIT1_0;
+                  }
+                  memcpy(&BKEB_B1_REG,pstHdmiTx.szAudioInfo,9);
+              //    BKEB_B1_REG = pstHdmiTx.szAudioInfo[0];
+              //    BKEB_B2_REG = pstHdmiTx.szAudioInfo[1];
+              //    BKEB_B3_REG = pstHdmiTx.szAudioInfo[2];
+              //    BKEB_B4_REG = pstHdmiTx.szAudioInfo[3];
+              //    BKEB_B5_REG = pstHdmiTx.szAudioInfo[4];
+              //    BKEB_B6_REG = pstHdmiTx.szAudioInfo[5];
+              //    BKEB_B7_REG = pstHdmiTx.szAudioInfo[6];
+              //    BKEB_B8_REG = pstHdmiTx.szAudioInfo[7];
+              //    BKEB_B9_REG = pstHdmiTx.szAudioInfo[8];
+              }
+              void Drv_HmdiTx_PowerOnInit(void)
+              {
+                  Drv_HdmiTx_DdcInit();
+                  Drv_HdmiTx_DebounceSet();
+                  //Drv_HdmiTx_DcDet();
+                  Drv_HdmiTx_RtermCali(TXRTERM_50);
+                  Drv_HdmiTx_DataSel();
+                  Drv_HdmiTx_TxPllInit();
+                  Drv_HdmiTx_FrlVidSet();
+                  Drv_HdcpTx_HdcpInit();
+                  Drv_Audio_Init();
+                  Drv_Gpio_ModeSet(GPIO29_SD0B, OUT_PP_1x|PD_100K, VOL_3_3);
+                  Drv_Gpio_ModeSet(GPIO30_WSB, OUT_PP_1x|PD_100K, VOL_3_3);
+                  Drv_Gpio_ModeSet(GPIO31_MCLKB, OUT_PP_1x|PD_100K, VOL_3_3);
+                  Drv_Gpio_ModeSet(GPIO32_SCLKB, OUT_PP_1x|PD_100K, VOL_3_3);
+              }
+              
+              void Drv_HdmiTx_TmdsVideoOn(void)
+              {
+                  if(g_stHdmiTx.ucHdmiVersion == HDMI21)
+                  {
+                      return;
+                  }
+                  Drv_HdmiTx_TmdsDivLinkClkSet();
+                  Drv_HdmiTx_TmdsTxPllCal(&g_stHdmiTx);
+                  Drv_HdmiTx_ParaSet(&g_stHdmiTx);
+                      //HF 1-27
+                  Drv_HdmiTx_PhySet(&g_stHdmiTx,g_stHdmiEdidInfo.b1Scdc_Present);
+              }
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+C51 COMPILER V9.53.0.0   DRVHDMITX                                                         02/13/2025 10:14:20 PAGE 20  
+
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

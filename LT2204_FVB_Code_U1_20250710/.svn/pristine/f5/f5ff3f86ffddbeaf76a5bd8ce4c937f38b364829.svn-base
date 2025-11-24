@@ -1,0 +1,559 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  BillBoard.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "include.h"
+
+#if BB_EN == ENABLED
+#define DPALT_SUCCEED        0x03
+#define DPALT_FAILED        0x00
+
+#define NORMAL_MODE         0x01
+#define FAST_MODE           0x02
+
+//USB version 2.01
+#define    USB_VERSION_HIGH     0x02
+#define    USB_VERSION_LOW     0x01
+//Lontium USB IF
+#define    LONTIUM_USBIF_HIGH    0x2F
+#define    LONTIUM_USBIF_LOW     0x61
+//Lontium PRODUCT ID
+#define    LONTIUM_PID_HIGH    0x22
+#define    LONTIUM_PID_LOW     0x04
+
+#define    LONTIUM_UPDATEMODE   FAST_MODE
+#define    LONTIUM_MEMSIZE      63//63 stands for 64(63+1)KB; the maximun value is 255 which stands for 256KB
+
+
+//Warning
+#define    DPALT_WARNING         DPALT_SUCCEED //DPALT_SUCCEED/DPALT_FAILED
+u8 code szBBData1[18] =//Device Descriptor
+{
+    0x12,0x01,USB_VERSION_LOW,USB_VERSION_HIGH,0x11,0x00,0x00,0x20,
+    LONTIUM_USBIF_LOW,LONTIUM_USBIF_HIGH,LONTIUM_PID_LOW,LONTIUM_PID_HIGH,LONTIUM_MEMSIZE,LONTIUM_UPDATEMODE,0x01,0x02,0x01,0x01
+};
+//reply to Get descriptor
+u8 code szBBData2[18] =//Configuration Descriptor
+{
+    0x09,0x02,0x12,0x00,0x01,0x01,0x05,0xC0,0x00,0x09,0x04,0x00,0x00,0x00,0x11,0x00,0x00,0x04    
+};
+
+u8 code szBBData3[4] =//string
+{
+    //09-04 :Language English
+    0x04,0x03,0x09,0x04
+};
+
+u8 code szBBData4[36] =//billborad device
+{
+    0x24,0x03,0x20,0x00,0x42,0x00,0x69,0x00,0x6c,0x00,0x6c,0x00,0x62,0x00,0x6f,0x00,
+    0x61,0x00,0x72,0x00,0x64,0x00,0x20,0x00,0x44,0x00,0x65,0x00,0x76,0x00,0x69,0x00,
+    0x63,0x00,0x65,0x00
+};//String index 2
+
+u8 code szBBData5[16]=
+{
+    0x10,0x03,0x4C,0x00,0x4F,0x00,0x4E,0x00,0x54,0x00,0x49,0x00,0x55,0x00,0x4D,0x00//LONTIUM
+};//String index 1
+
+u8 code szBBData6[54]=
+{
+    0x36,0x03,0x77,0x00,0x77,0x00,0x77,0x00,0x2e,0x00,0x76,0x00,0x65,0x00,0x73,0x00,
+    0x61,0x00,0x2e,0x00,0x6f,0x00,0x72,0x00,0x67,0x00,0x2f,0x00,0x64,0x00,0x70,0x00,
+    0x2d,0x00,0x75,0x00,0x73,0x00,0x62,0x00,0x2d,0x00,0x74,0x00,0x79,0x00,0x70,0x00,
+    0x65,0x00,0x2d,0x00,0x63,0x00,
+};//STRING 4
+
+u8 code szBBData7[44]=
+{
+    0x2c,0x03,0x54,0x00,0x79,0x00,0x70,0x00,0x65,0x00,0x2d,0x00,0x43,0x00,0x20,0x00,
+    0x74,0x00,0x6f,0x00,0x20,0x00,0x44,0x00,0x69,0x00,0x73,0x00,0x70,0x00,0x6c,0x00,
+    0x61,0x00,0x79,0x00,0x50,0x00,0x6f,0x00,0x72,0x00,0x74,0x00,
+};//STRING 5
+
+u8 code szBBData8[81]=
+{
+    0x05,0x0F,0x51,0x00,0x03,0x14,0x10,0x04,0x00,0x00,0x22,0x9A,0x00,0x00,0x11,0x11,
+    0x22,0x22,0x33,0x33,0x44,0x44,0x55,0x55,0x66,0x30,0x10,0x0d,0x04,0x01,0x00,0x00,
+    0x00,DPALT_WARNING,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x21,0x01,0x00,0x00,0x01,0xff,0x01,0x05,0x08,0x10,0x0f,0x00,0x85,0x00,0x04,
+    0x00
+};//BOS Descriptor1
+
+u8 code szBBData9[2]=
+{
+    0x00,0x00
+};
+
+u8 code szBBData10[18]=
+{
+    0x09,0x07,0x12,0x00,0x01,0x01,0x01,0x80,0x64,0x09,0x04,0x00,0x00,0x00,0x11,0x00,
+    0x00,0x01
+};//OTHER_SPEED_CONFIGURATION
+
+u8 code szBBData11[10]=
+{
+    0x0a,0x06,0x10,0x02,0x11,0x00,0x00,0x20,0x01,0x00
+};//DEVICE_QUALIFIER Descriptor 
+
+IDATA StructBB g_stBB;
+
+void Drv_BB_Init(u8 b1Function)
+{
+	g_stBB.UsbUpgradeFlow = FALSE;
+    if(b1Function == ENABLED)
+    {
+        g_stBB.ucbUpdate_Cnt = 0;
+        g_stBB.ucEraseIniCnt = 0;
+        g_stBB.ucCrcIniCnt = 0;		
+        g_stBB.ucDevAddr = NONE_ADDR;
+		
+		BKA2_C2_REG &= 0x3f;
+        BKA2_C2_REG |= 0x80;//DP 1.5K Pullup Disable
+		
+		Ocm_Delay1ms(20);
+
+        BKA2_C2_REG |= 0xc0;//DP 1.5K Pull-up
+
+        BKE1_05_REG &= 0xe2;
+        BKE1_05_REG |= 0xbd;//BB LOGIC RESET //3d for rx fifo reset //bd for tx rx fifo reset
+        
+//        BKE2_01_REG |= BIT4_1;// BB 60M PHY CLK EN
+        BKA2_A8_REG = 0x1f;//BB full speed TX phy slew rate select
+        BKA2_C2_REG = 0xc0;// USB_DP PULLUP  DM _PULLDOWN
+        BKA2_C3_REG = 0x00;
+        BKC5_04_REG = 0x15;//tx enable delay
+        BKC5_0A_REG = 0x1a;//bb interrupt en
+        BKC5_05_REG = 0x6a;//intr_regen en //addr_match en //usb reset interrupt en
+        BKC5_08_REG = 0x0c;//hw reset rx fifo enable;
+        Drv_System_IntClr(IRQ_BB_INT);
+        Drv_System_IntSet(IRQ_BB_INT, ON); 
+    }
+    else
+    {
+        BKA2_C2_REG &= 0x3f;
+        BKA2_C2_REG |= 0x80;//DP 1.5K Pullup Disable
+    }
+}
+void Drv_BB_MessageLength_Set(u8 ucLength)
+{
+    if(g_stBB.szSend_Data[6] >= ucLength)
+    {
+        g_stBB.szSend_Data[6] = ucLength;
+    }
+}
+void Drv_BB_DescriptorID(void)
+{
+	BKC5_02_REG &= BIT7_0;
+	
+	if((g_stBB.szSend_Data[1]==0x06)&&(g_stBB.szSend_Data[3]==0x03)&&(g_stBB.szSend_Data[4]==0x00)&&(g_stBB.szSend_Data[5]==0x00))
+    {
+        switch(g_stBB.szSend_Data[2])
+        {
+            case 0x00:
+				Drv_BB_MessageLength_Set(4);
+                g_stBB.pDataId = szBBData3;
+                break;
+            case 0x04:
+                Drv_BB_MessageLength_Set(54);
+                g_stBB.pDataId = szBBData6;
+                break;
+            case 0x05:
+                Drv_BB_MessageLength_Set(44);
+                g_stBB.pDataId = szBBData7;
+                break;
+            default:
+                g_stBB.szSend_Data[6] = 16;
+                g_stBB.pDataId = szBBData5;
+                break;
+        }
+    }
+	else if((g_stBB.szSend_Data[1]==0x06)&&(g_stBB.szSend_Data[3]==0x03)&&(g_stBB.szSend_Data[4]==0x09)&&(g_stBB.szSend_Data[5]==0x04))
+    {
+        if(g_stBB.szSend_Data[2]== 0x01)
+        {
+            Drv_BB_MessageLength_Set(16);
+            g_stBB.pDataId = szBBData5;
+        }
+        else if(g_stBB.szSend_Data[2] > 0x01)
+        {
+            Drv_BB_MessageLength_Set(36);
+            g_stBB.pDataId = szBBData4;
+        }    
+    }
+	else if((g_stBB.szSend_Data[1]==0x00)&&(g_stBB.szSend_Data[2]==0x00)&&(g_stBB.szSend_Data[3]==0x00)&&(g_stBB.szSend_Data[4]==0x00))
+    {
+        g_stBB.szSend_Data[6] = 2;//case 0x00000012
+        g_stBB.pDataId = szBBData9;
+    }
+	else if((g_stBB.szSend_Data[0]==0x90)&&(g_stBB.szSend_Data[1]==0x60)&&(g_stBB.szSend_Data[2]==0x00)&&(g_stBB.szSend_Data[3]==0x06))//
+    {
+        g_stBB.szSend_Data[6] = 3;//
+        g_stBB.pDataId = &BKE0_81_REG;		
+    }	
+	else if((g_stBB.szSend_Data[1]==0x06)&&(g_stBB.szSend_Data[2]==0x00)/*&&(g_stBB.szSend_Data[3]==0x01)*/)
+    {
+        switch(g_stBB.szSend_Data[3])
+        {
+            case 0x01:
+                Drv_BB_MessageLength_Set(18);
+                g_stBB.pDataId = szBBData1;
+                break;
+            case 0x02:
+                Drv_BB_MessageLength_Set(18);
+                g_stBB.pDataId = szBBData2;
+                break;
+           case 0x06:
+                g_stBB.szSend_Data[6] = 10;
+                g_stBB.pDataId = szBBData11;
+                break;
+           case 0x07:
+                Drv_BB_MessageLength_Set(18);
+                g_stBB.pDataId = szBBData10;
+                break;
+           case 0x0F:
+                Drv_BB_MessageLength_Set(81);
+                g_stBB.pDataId = szBBData8;
+                break;
+           default:
+               g_stBB.szSend_Data[6] = 0;
+               break;
+        }        
+    }
+    else
+    {
+		BKC5_02_REG |= BIT7_1;
+        g_stBB.szSend_Data[6] = 0;
+    }
+    g_stBB.ucPkt_Lenth = g_stBB.szSend_Data[6];
+}
+
+void Drv_BB_FlashConfig(void)
+{
+    BKE0_EE_REG=0x01;//software is not affC5tive
+    BKE0_5E_REG=0xC1;//0XDF
+    BKE0_58_REG=0x00;
+    BKE0_59_REG=0x50;
+    BKE0_5A_REG=0x10;
+    BKE0_5A_REG=0x00;
+    BKE0_58_REG=0x21;
+}
+
+void Drv_BB_BlockEraseROrder(u32 ulAddr)
+{
+    BKE0_5A_REG=0x04;
+    BKE0_5A_REG=0x00;
+    BKE0_5B_REG=(ulAddr>>16);//High bit
+    BKE0_5C_REG=(ulAddr>>8);
+    BKE0_5D_REG= ulAddr;//Low bit
+    BKE0_5A_REG=0x01;
+    BKE0_5A_REG=0x00; 
+    Ocm_Delay1ms(500); 
+	if((ulAddr == 0x000000)||(ulAddr == 0x040000))//main FW and second FW
+    {
+        BKE0_5A_REG=0x04;
+        BKE0_5A_REG=0x00;
+        BKE0_5B_REG=(ulAddr>>16);//
+        BKE0_5C_REG=0x80;// 0x80 second block
+        BKE0_5D_REG=0x00;//
+        BKE0_5A_REG=0x01;
+        BKE0_5A_REG=0x00; 
+        Ocm_Delay1ms(500);  
+    }      
+}
+
+void Drv_BB_FlashWROrder(void)
+{
+    BKE1_03_REG=0x3F;
+    BKE1_03_REG=0xFF;
+    BKE0_5A_REG=0x04;
+    BKE0_5A_REG=0x00;
+}
+
+void Drv_BB_DataToFifoWOrder(u8 uclenth)
+{
+    IDATA u8 ucLoop_BB;
+
+    BKE0_5E_REG=0xc0|(uclenth-1);
+    BKE0_5A_REG=0x20;
+    BKE0_5A_REG=0x00;    
+    BKE0_58_REG=0x21;    
+    for(ucLoop_BB= 0;ucLoop_BB< uclenth;ucLoop_BB++)
+    {
+        BKE0_59_REG = g_stBB.szRevUpdateData[ucLoop_BB];
+    } 
+}
+
+void Drv_BB_FifoToFlashWOrder(u32 ulAddr)
+{
+    BKE0_5B_REG=(ulAddr>>16); //High bit
+    BKE0_5C_REG=(ulAddr>>8);
+    BKE0_5D_REG= ulAddr; //Low bit
+    BKE0_5A_REG=0x10;
+    BKE0_5A_REG=0x00;
+}
+
+void Drv_BB_WriteFlashProcess(void)
+{
+    u32 ulFlashAddr;
+    static u16 usAddrCnt = 0;
+
+    if(g_stBB.ucEraseIniCnt == 3)
+    {
+        g_stBB.ucEraseIniCnt = 0;
+        g_stBB.ucCrcIniCnt = 0;
+        usAddrCnt = 0;
+        Drv_BB_FlashConfig();
+        if(((g_stBB.ulAddrInit&0xffff)== 0x0000)/*||((g_stBB.ulAddrInit&0xffff)== 0x8000)*/)//address just be sent once
+        {
+            Drv_BB_BlockEraseROrder(g_stBB.ulAddrInit);//
+        }
+    }
+    ulFlashAddr = (usAddrCnt*WRITE_FLASH_LEN) + g_stBB.ulAddrInit;
+    Drv_BB_FlashWROrder();
+    Drv_BB_DataToFifoWOrder(WRITE_FLASH_LEN);
+    Drv_BB_FifoToFlashWOrder(ulFlashAddr);
+    usAddrCnt++;
+}
+
+void Drv_BB_DataCal(void)//data0_data1
+{
+    IDATA u8 uctemp_lenth;
+    IDATA u8 ucLoop_BB;
+    uctemp_lenth = BKC5_2A_REG;
+    g_stBB.b1Bb_Mode = FALSE;
+    for(ucLoop_BB = 0;ucLoop_BB < 50;ucLoop_BB++)
+    {
+        Ocm_Delay1us(1);
+        if(BKC5_22_REG & BIT4_1)
+        {
+            ucLoop_BB = 100;    
+            break;
+        }
+    }
+    if(ucLoop_BB == 100)
+    {
+        return;
+    }   
+    memset(&g_stBB.szSend_Data[0],0x00,8);
+	if(g_stBB.UsbUpgradeFlow == TRUE)
+	{
+		g_stBB.UsbUpgradeFlow = FALSE;
+		uctemp_lenth = 0x08;//防止其他FS的SETUP清掉了length
+	}
+    for(ucLoop_BB = 0;ucLoop_BB < uctemp_lenth ;ucLoop_BB++)
+    {
+        g_stBB.szSend_Data[ucLoop_BB] = BKC5_10_REG;//
+    }
+    if((g_stBB.szSend_Data[0] == 0x00)&&(g_stBB.szSend_Data[1] == 0xAA)&&(g_stBB.szSend_Data[2] == 0xAA))//initial addr
+    {
+		g_stBB.UsbUpgradeFlow = TRUE;
+        g_stBB.ucBBSumCnt = 0xff;
+        g_stBB.szRevUpdateData[0] = g_stBB.szSend_Data[4];
+        g_stBB.ucEraseIniCnt ++ ;
+        switch(g_stBB.ucEraseIniCnt)
+        {
+            case 0x01:
+                g_stBB.ulAddrInit =  g_stBB.szRevUpdateData[0];
+                break;
+            case 0x02:
+                g_stBB.ulAddrInit<<=8;
+                g_stBB.ulAddrInit |= g_stBB.szRevUpdateData[0];
+                break;
+            case 0x03:
+                g_stBB.ulAddrInit<<=8;
+                g_stBB.ulAddrInit |= g_stBB.szRevUpdateData[0];
+                g_stBB.ucbUpdate_Cnt = 0;
+                break;
+            default:
+                break;                                   
+        }
+        BKC5_02_REG |= BIT7_1;//reply 0-length pkt
+    }
+    else if((g_stBB.szSend_Data[0] == 0x00)&&(g_stBB.szSend_Data[1] == 0xBB)&&(g_stBB.szSend_Data[2] == 0xBB))//checksum addr and checksum
+    {
+		g_stBB.UsbUpgradeFlow = TRUE;
+        g_stBB.szRevUpdateData[0] = g_stBB.szSend_Data[4];
+        g_stBB.ucCrcIniCnt++;
+        switch(g_stBB.ucCrcIniCnt)
+        {
+            case 0x01:
+                g_stBB.ulAddrInit =  g_stBB.szRevUpdateData[0];
+                break;
+            case 0x02:
+                g_stBB.ulAddrInit<<=8;
+                g_stBB.ulAddrInit |= g_stBB.szRevUpdateData[0];
+                break;
+            case 0x03:
+                g_stBB.ulAddrInit<<=8;
+                g_stBB.ulAddrInit |= g_stBB.szRevUpdateData[0];
+                break;
+            case 0x04:
+                Drv_BB_FlashWROrder();
+                Drv_BB_DataToFifoWOrder(0x01);
+                Drv_BB_FifoToFlashWOrder(g_stBB.ulAddrInit);//32k
+                g_stBB.ucCrcIniCnt = 0;
+				g_stBB.UsbUpgradeFlow = FALSE;
+                break;
+            default:
+                break;
+        }
+        BKC5_02_REG |= BIT7_1;//reply 0-length pkt
+    }
+    else if((g_stBB.szSend_Data[0] == 0x00)&&(g_stBB.szSend_Data[1] == 0xAA)&&(g_stBB.szSend_Data[2] == 0xBB))//update FW
+    {
+		if((g_stBB.ucBBSumCnt != g_stBB.szSend_Data[4])&&(g_stBB.szSend_Data[5] == 0x20)) //recieve lenth;
+        {
+            g_stBB.b1IsUpdateMode = TRUE;
+            g_stBB.ucbUpdate_Cnt  = 0;
+        }
+        g_stBB.ucBBSumCnt =  g_stBB.szSend_Data[4];
+        BKC5_02_REG |= BIT7_1;//reply 0-length pkt
+		g_stBB.UsbUpgradeFlow = TRUE;
+	}
+	else if((g_stBB.szSend_Data[0] == 0x00)&&(g_stBB.szSend_Data[1] == 0xCC))
+	{
+		if(g_stBB.b1IsUpdateMode == TRUE)
+        {
+            g_stBB.szRevUpdateData[g_stBB.ucbUpdate_Cnt] = g_stBB.szSend_Data[2];
+            g_stBB.ucbUpdate_Cnt++;
+            g_stBB.szRevUpdateData[g_stBB.ucbUpdate_Cnt] = g_stBB.szSend_Data[3];
+            g_stBB.ucbUpdate_Cnt++;
+            g_stBB.szRevUpdateData[g_stBB.ucbUpdate_Cnt] = g_stBB.szSend_Data[4];
+            g_stBB.ucbUpdate_Cnt++;
+            g_stBB.szRevUpdateData[g_stBB.ucbUpdate_Cnt] = g_stBB.szSend_Data[5];
+            g_stBB.ucbUpdate_Cnt++;
+        }
+        if(g_stBB.ucbUpdate_Cnt == WRITE_FLASH_LEN)
+        {
+            Drv_BB_WriteFlashProcess();
+            g_stBB.ucbUpdate_Cnt  = 0;
+            g_stBB.b1IsUpdateMode = FALSE;
+        }
+        BKC5_02_REG |= BIT7_1;//reply 0-length pkt
+    }
+    else if((g_stBB.szSend_Data[0] == 0x00) && ((g_stBB.szSend_Data[1] == 0x05) || (g_stBB.szSend_Data[1] == 0x09)))
+    {
+		g_stBB.UsbUpgradeFlow = FALSE;
+        if(g_stBB.szSend_Data[1] == 0x05)//set address
+        {
+            g_stBB.ucDevAddr = g_stBB.szSend_Data[2] & 0x7f;
+            if (g_stBB.ucDevAddr != NONE_ADDR)
+            {
+                BKC5_00_REG = g_stBB.ucDevAddr;
+                g_stBB.ucDevAddr = NONE_ADDR;
+            }
+        }
+        BKC5_02_REG |= BIT7_1;//reply 0-length pkt
+    }
+    else
+    {
+		g_stBB.UsbUpgradeFlow = FALSE;
+        g_stBB.b1Bb_Mode = TRUE;
+        Drv_BB_DescriptorID();
+    }
+    
+}
+
+void Drv_BB_DataReply(void) //IN
+{
+    IDATA u8 ucLoop_BB;
+    IDATA u8 b1Pid_Chg = TRUE;
+    IDATA u8 ucszSend_Data_header;
+    IDATA u8 ucszSend_Data_lenth;
+
+    if(g_stBB.b1Bb_Mode == TRUE)
+    {
+        ucszSend_Data_header = 0;
+        while(g_stBB.ucPkt_Lenth <= 96)
+        {
+            if(BKC5_22_REG & BIT4_1)//DATA0
+            {
+                return;
+            }
+            if(BKC5_21_REG & BIT1_1)//USB reset INT
+            {
+                return;
+            }
+            if(g_stBB.ucPkt_Lenth > 32)
+            {
+                ucszSend_Data_lenth = 32;
+            }
+            else
+            {
+                ucszSend_Data_lenth = g_stBB.ucPkt_Lenth;
+            }
+            BKC5_02_REG &= BIT7_1;//send pkt lenth
+            BKC5_02_REG |= ucszSend_Data_lenth;//send pkt lenth
+            if(b1Pid_Chg == TRUE)
+            {
+                BKC5_03_REG = 0x4b;//data0
+                b1Pid_Chg = FALSE;
+            }
+            else
+            {
+                BKC5_03_REG = 0xc3;//data1
+                b1Pid_Chg = TRUE;
+            }
+            
+            for(ucLoop_BB = 0;ucLoop_BB < ucszSend_Data_lenth ;ucLoop_BB++)
+            {
+                BKC5_11_REG = *(g_stBB.pDataId + ucszSend_Data_header);
+                ucszSend_Data_header++;
+                Ocm_Delay1us(1);
+            }
+            if(g_stBB.ucPkt_Lenth > 32)
+            {
+                g_stBB.ucPkt_Lenth -= 32;
+                Ocm_Delay1us(800);
+            }
+            else
+            {
+                g_stBB.ucPkt_Lenth = 0xFF;//
+            } 
+        }
+    }
+    else
+    {
+		BKC5_02_REG &= BIT7_1;//send pkt lenth
+        BKC5_03_REG = 0x4b;
+        BKC5_01_REG = 0x00;
+    }
+}
+
+void Drv_BB_Interrupt(void)
+{
+    BKC5_01_REG = 0x00;
+
+    if(BKC5_22_REG & BIT4_1)//data0 intr     
+    {
+        BKC5_0C_REG |= BIT4_1;
+        BKC5_0C_REG &= BIT4_0;//clear interrupt
+        Drv_BB_DataCal();
+    }
+    if(BKC5_22_REG & BIT1_1)//IN intr    
+    {  
+        BKC5_0C_REG |= BIT1_1;
+        BKC5_0C_REG &= BIT1_0;//clear interrupt
+        Drv_BB_DataReply();
+    }
+    if(BKC5_22_REG & BIT3_1)//ack intr
+    {
+        BKC5_0C_REG |= BIT3_1;
+        BKC5_0C_REG &= BIT3_0;//clear interrupt
+        BKC5_02_REG &= BIT7_0;
+    }   
+    if (BKC5_21_REG & BIT1_1)//USB reset intr
+    {
+        BKC5_05_REG |= BIT4_1;
+        BKC5_05_REG &= BIT4_0;
+        BKC5_00_REG  = 0x00;
+        BKC5_02_REG &= BIT7_0;
+        BKE1_05_REG &= BIT3_0;//bb reset;
+        BKE1_05_REG |= BIT3_1;
+    }
+}
+#endif

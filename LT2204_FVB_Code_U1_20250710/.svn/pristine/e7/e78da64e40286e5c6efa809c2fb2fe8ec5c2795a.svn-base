@@ -1,0 +1,1052 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: DrvMipi.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.05.26
+/******************************************************************************/
+#include "include.h"
+
+#if TX_PORT_SIGN == MIPI_PORT
+
+#define LMTXPLL_VCO_MIN_FS 1200000 //LMTX PLL min work Fs
+#define LMTXPLL_VCO_MAX_FS 2000000 //LMTX PLL max work Fs
+
+//PHY timing :
+#define HS_LPX_REG          BKF9_A4_REG
+#define HS_PREP_REG         BKF9_A5_REG
+#define HS_TRAIL            BKF9_A6_REG
+#define CLK_ZERO_REG        BKF9_A7_REG
+#define CLK_PRE_REG         BKF9_A8_REG
+#define CLK_POST_REG        BKF9_A9_REG
+#define HS_RQST_PRE_REG     BKF9_8A_REG
+
+
+u8 Drv_MipiTx_GetHsTrail()
+{
+    return BKF9_A6_REG;
+}
+
+u8 Drv_mipiTx_GetHsRqstPre()
+{
+    return BKF9_8A_REG;
+}
+
+void Drv_MipiTx_Rst(u8 IsEn)
+{
+	(IsEn == ENABLED)?(BKF9_BF_REG = 0xFF):(BKF9_BF_REG = 0x00);
+}
+
+void Drv_MipiTx_VideoSet(u8 b1Opt)
+{
+    if (ON == b1Opt)
+    {
+				Drv_MipiTx_Rst(ENABLED);			
+				if (g_stMipiTx.b1MIPITXProSel == MIPITX_DSI)
+				{
+        CLEAR_BIT(BKF9_89_REG, BIT5);
+        SET_BIT(BKF9_89_REG, BIT4);
+        LTLog(LOG_INFO, "Mipi DSI Out");
+				}
+				else
+				{
+        SET_BIT(BKF9_89_REG, BIT5);
+        CLEAR_BIT(BKF9_89_REG, BIT4);
+        LTLog(LOG_INFO, "Mipi CSI Out");
+				}
+    }
+    else
+    {
+				Drv_MipiTx_Rst(DISABLED);			
+        CLEAR_BITS(BKF9_89_REG, BIT5, BIT4);
+				LTLog(LOG_INFO, "Mipi Out Disable");
+    }
+
+}
+
+void Drv_MipiTx_DataTypeSet(u8 ucDataType, u8 ucBppAndFmtVal)
+{
+    LET_BITS(BKF9_86_REG, 5, 0, ucDataType);
+    BKF9_88_REG = ucBppAndFmtVal;
+
+}
+
+void Drv_MipiTx_TimingSet(IN StructTiming *pstVidTiming)
+{
+    BKF9_7E_REG = GET_16BIT_HIGH(pstVidTiming->Hactive); 
+    BKF9_7F_REG = GET_16BIT_LOW(pstVidTiming->Hactive);        
+
+    BKF9_7C_REG = GET_16BIT_HIGH(pstVidTiming->Vactive);
+    BKF9_7D_REG = GET_16BIT_LOW(pstVidTiming->Vactive);    
+    
+    //SET_BIT(BKF9_7A_REG, BIT4);//以前是数vss 判断DE，现在通过第一个DE的上升沿来判断。
+
+    BKF9_80_REG = GET_16BIT_HIGH(pstVidTiming->Vsw + pstVidTiming->Vbp);
+    BKF9_81_REG = GET_16BIT_LOW(pstVidTiming->Vsw + pstVidTiming->Vbp);
+
+    LET_BITS(BKF9_7A_REG, BIT3, BIT0, GET_16BIT_HIGH((pstVidTiming->Hactive) / 4));
+    BKF9_7B_REG = GET_16BIT_LOW((pstVidTiming->Hactive) / 4);
+}
+
+void Drv_MipiTx_InHSyncPol_Sel(IN u8 b1SyncPol)
+{
+    if (POSITIVE == b1SyncPol )
+    {
+        CLEAR_BIT(BKF9_70_REG, BIT1);
+    }
+    else
+    {
+        SET_BIT(BKF9_70_REG, BIT1);
+    }
+}
+
+void Drv_MipiTx_InVSyncPol_Sel(IN u8 b1SyncPol)
+{
+    if (POSITIVE == b1SyncPol )
+    {
+        CLEAR_BIT(BKF9_70_REG, BIT0);
+    }
+    else
+    {
+        SET_BIT(BKF9_70_REG, BIT0);
+    }
+}
+
+u32 Drv_MipiTx_GetMipiInClk()
+{
+    u32 ulMipiInClk = 0 ;
+    u8 ucIndex = 0;
+    
+    //Drv_System_FmSet(TX_FM, 0x13); //AD_DSCTX_DSC_OUT_CLK   
+    Drv_System_FmSet(TOP_FM, 0x14); 
+    Ocm_Delay1ms(5);
+
+    for(;ucIndex < 5; ucIndex++)
+    {
+        if(STABLE ==  Drv_System_FmStbGet(TOP_FM) )
+        {
+            ulMipiInClk = Drv_System_FmGet(TOP_FM, 0);
+            break;
+        }
+        Ocm_Delay1ms(1);
+    }
+    
+    return ulMipiInClk;
+}
+
+void Drv_MipiTx_PortLdoRpRdCali()
+{
+    u8 ucMipiTxRd[4] = {0,0,0,0} ;
+    u8 ucMipiTxRp[4] = {0,0,0,0} ;
+    u8 ucScanCnt = 0;
+    u8 ucCaliDoneFlag = 0x00;
+
+    //port 0~3 TX Swing cali Enable
+    SET_BIT(BKE2_A3_REG, BIT0);
+    SET_BIT(BKE2_A5_REG, BIT0);
+    SET_BIT(BKE2_A7_REG, BIT0);
+    SET_BIT(BKE2_A9_REG, BIT0);
+    Ocm_Delay1ms(1);
+    
+    //wait cali Done,and get Rp & Rd Value
+    while(ucScanCnt ++ < 10)
+    {
+        if(GET_BIT(BKE2_AB_REG, BIT0)) //LMTX0 swing cali done
+        {
+            ucMipiTxRd[0] = GET_BITS(BKE2_AC_REG, 4, 0);
+            ucMipiTxRp[0] = GET_BITS(BKE2_AD_REG, 4, 0);
+            ucCaliDoneFlag |= 0x01;
+        }
+        
+        if(GET_BIT(BKE2_AE_REG, BIT0)) //LMTX1 swing cali done
+        {
+            ucMipiTxRd[1] = GET_BITS(BKE2_AF_REG, 4, 0);
+            ucMipiTxRp[1] = GET_BITS(BKE2_B0_REG, 4, 0);
+            ucCaliDoneFlag |= 0x02;
+        }
+
+        if(GET_BIT(BKE2_B1_REG, BIT0)) //LMTX2 swing cali done
+        {
+            ucMipiTxRd[2] = GET_BITS(BKE2_B2_REG, 4, 0);
+            ucMipiTxRp[2] = GET_BITS(BKE2_B3_REG, 4, 0);
+            ucCaliDoneFlag |= 0x04;
+        }
+
+        if(GET_BIT(BKE2_B4_REG, BIT0)) //LMTX3 swing cali done
+        {
+            ucMipiTxRd[3] = GET_BITS(BKE2_B5_REG, 4, 0);
+            ucMipiTxRp[3] = GET_BITS(BKE2_B6_REG, 4, 0);
+            ucCaliDoneFlag |= 0x08;
+        }
+        
+        if(0x0F == ucCaliDoneFlag)
+        {
+            break;
+        }
+        
+        Ocm_Delay1ms(1);
+    }
+
+    //set Cali Result to LMTX0~3  TAP0 Rp and Rd
+    if((0 != ucMipiTxRd[0]) && (0 != ucMipiTxRp[0]))
+    {
+        LET_BITS(BKA2_1C_REG, 4, 0, ucMipiTxRp[0]); 
+        LET_BITS(BKA2_1D_REG, 4, 0, ucMipiTxRd[0]); 
+    }
+
+    if((0 != ucMipiTxRd[1]) && (0 != ucMipiTxRp[1]))
+    {
+        LET_BITS(BKA2_31_REG, 4, 0, ucMipiTxRp[1]); 
+        LET_BITS(BKA2_32_REG, 4, 0, ucMipiTxRd[1]); 
+    }
+
+    if((0 != ucMipiTxRd[2]) && (0 != ucMipiTxRp[2]))
+    {
+        LET_BITS(BKA2_46_REG, 4, 0, ucMipiTxRp[2]); 
+        LET_BITS(BKA2_47_REG, 4, 0, ucMipiTxRd[2]); 
+    }
+
+    if((0 != ucMipiTxRd[3]) && (0 != ucMipiTxRp[3]))
+    {
+        LET_BITS(BKA2_5B_REG, 4, 0, ucMipiTxRp[3]); 
+        LET_BITS(BKA2_5C_REG, 4, 0, ucMipiTxRd[3]); 
+    }
+
+    LTLog(LOG_INFO, "Port 0~3 Rp Cali Result: %02bx, %02bx, %02bx, %02bx",ucMipiTxRp[0], ucMipiTxRp[1], ucMipiTxRp[2], ucMipiTxRp[3]);
+    LTLog(LOG_INFO, "Port 0~3 Rd Cali Result: %02bx, %02bx, %02bx, %02bx",ucMipiTxRd[0], ucMipiTxRd[1], ucMipiTxRd[2], ucMipiTxRd[3]);
+}
+
+void Drv_MipiTx_Port0Setting(u8 ucP0En)
+{
+    //Dphy
+	 if(g_stMipiTx.ucTxPhySel == MIPITX_DPHY)
+	 {
+    BKA2_12_REG = (ENABLED == ucP0En)? 0xF0 : 0x10; //lmtx port0 enable & port0 ldo1 ldo2 enable
+    BKA2_13_REG = (ENABLED == ucP0En)? 0x30 : 0x20; //lmtx port0 p2s enable: rg_en
+    BKA2_17_REG = (ENABLED == ucP0En)? 0xA2 : 0x00; //lp driver level2 for CTS
+    BKA2_18_REG = (ENABLED == ucP0En)? 0xB2 : 0x00; //lmtx port0 mipi lprx enable control
+    BKA2_19_REG = (ENABLED == ucP0En)? 0x01 : 0x00; //lmtx port0 dphy lprx channel select: lane-0
+    BKA2_1A_REG = (ENABLED == ucP0En)? 0x03 : 0x00; //lmtx port0 dphy clk channel select: lane-2
+    BKA2_22_REG = (ENABLED == ucP0En)? 0xFE : 0x00; //Lmtx port0 channel lvds_dphy lane0~4 enable control
+    BKA2_23_REG = (ENABLED == ucP0En)? 0x80 : 0x00; //lmtx port0 lvds_dphy_cphy tap0 enable control
+		}
+		else
+		{
+    //Cphy
+    BKA2_12_REG = (ENABLED == ucP0En)? 0xF4 : 0x10; //lmtx port0 enable & port0 ldo1 ldo2 enable
+    BKA2_17_REG = (ENABLED == ucP0En)? 0xA2 : 0x00; //lp driver level2 for CTS
+    BKA2_18_REG = (ENABLED == ucP0En)? 0xB2 : 0x00; //lmtx port0 mipi lprx enable control
+    BKA2_19_REG = (ENABLED == ucP0En)? 0x01 : 0x00; // TODO:lmtx port0 dphy lprx channel select: lane-0 
+    BKA2_23_REG = (ENABLED == ucP0En)? 0xC0 : 0x00; // mtx port0 lvds_dphy_cphy tap0 enable control
+    BKA2_24_REG = (ENABLED == ucP0En)? 0x0F : 0x00; //lmtx port0 cphy channel enable cphy channel0 lprx
+    BKA2_13_REG = (ENABLED == ucP0En)? 0x10 : 0x10; //bit5:lmtx port0 cphy p2s reset control
+    BKA2_13_REG = (ENABLED == ucP0En)? 0x30 : 0x30; //lmtx0 p2s_en_sel from da
+    if(BKA2_23_REG == 0xC0)
+    {
+        BKA2_1E_REG = 0x02;//tap1 up
+        BKA2_1F_REG = 0x02;//tap1 down
+					
+    }
+#ifdef MIPI_CHPY_HSLP_FALL_CFG_EN
+    BKA2_6E_REG = 0x20;
+    BKA2_6F_REG = 0xF0;//up
+    BKA2_70_REG = 0x30;//down
+    BKA2_1B_REG = 0x02;//RG_LMTX1_M_CALI_UPDOWN_SEL
+    BKA2_6E_REG = 0x43;
+#endif
+		}
+}
+
+void Drv_MipiTx_Port1Setting(u8 ucP1En)
+{
+	 if(g_stMipiTx.ucTxPhySel == MIPITX_DPHY)
+	 {
+    //Dphy
+    BKA2_27_REG = (ENABLED == ucP1En)? 0xF0 : 0x10; //lmtx port1 enable & port0 ldo1 ldo2 enable
+    BKA2_28_REG = (ENABLED == ucP1En)? 0x30 : 0x20; //lmtx port1 p2s enable: rg_en
+    BKA2_2C_REG = (ENABLED == ucP1En)? 0xA2 : 0x00; //lp driver level2 for CTS
+    BKA2_2D_REG = (ENABLED == ucP1En)? 0xB2 : 0x00; //lmtx port1 mipi lprx enable control
+    BKA2_2E_REG = (ENABLED == ucP1En)? 0x01 : 0x00; //lmtx port1 dphy lprx channel select: lane-0
+    BKA2_2F_REG = (ENABLED == ucP1En)? 0x03 : 0x00; //lmtx port1 dphy clk channel select: lane-2
+    BKA2_37_REG = (ENABLED == ucP1En)? 0xFE : 0x00; //Lmtx port1 channel lvds_dphy lane0~4 enable control
+    BKA2_38_REG = (ENABLED == ucP1En)? 0x80 : 0x00; //lmtx port1 lvds_dphy_cphy tap0 enable control
+		}
+		else
+		{
+    //Cphy
+    BKA2_27_REG = (ENABLED == ucP1En)? 0xF4 : 0x10; //lmtx port0 enable & port0 ldo1 ldo2 enable
+    BKA2_2C_REG = (ENABLED == ucP1En)? 0xA2 : 0x00; //lp driver level2 for CTS
+    BKA2_2D_REG = (ENABLED == ucP1En)? 0xB2 : 0x00; //lmtx port0 mipi lprx enable control
+    BKA2_2E_REG = (ENABLED == ucP1En)? 0x01 : 0x00; // TODO:lmtx port0 dphy lprx channel select: lane-0
+    BKA2_38_REG = (ENABLED == ucP1En)? 0xC0 : 0x00; //lmtx port0 lvds_dphy_cphy tap0 enable control
+    BKA2_39_REG = (ENABLED == ucP1En)? 0x0F : 0x00; //lmtx port0 cphy channel enable & LPRX enable
+    BKA2_28_REG = (ENABLED == ucP1En)? 0x10 : 0x10; //Lmtx port0 cphy p2s reset control:
+    BKA2_28_REG = (ENABLED == ucP1En)? 0x30 : 0x30; //lmtx port0 p2s enable: rg_en
+    if(BKA2_38_REG == 0xC0)
+    {
+        BKA2_33_REG = 0x02;
+        BKA2_34_REG = 0x02;
+    }
+#ifdef MIPI_CHPY_HSLP_FALL_CFG_EN
+    BKA2_79_REG = 0x03;
+    BKA2_7A_REG = 0x30;//up
+    BKA2_7B_REG = 0x30;//down
+    BKA2_30_REG = 0x02;//RG_LMTX1_M_CALI_UPDOWN_SEL
+    BKA2_79_REG = 0x0F;
+#endif
+		}
+}
+
+void Drv_MipiTx_Port2Setting(u8 ucP2En)
+{
+	 if(g_stMipiTx.ucTxPhySel == MIPITX_DPHY)
+	 {
+    //Dphy
+    BKA2_3C_REG = (ENABLED == ucP2En)? 0xF0 : 0x10; //lmtx port1 enable & port0 ldo1 ldo2 enable
+    BKA2_3D_REG = (ENABLED == ucP2En)? 0x30 : 0x20; //lmtx port1 p2s enable: rg_en
+    BKA2_41_REG = (ENABLED == ucP2En)? 0xA2 : 0x00; //lp driver level2 for CTS
+    BKA2_42_REG = (ENABLED == ucP2En)? 0xB2 : 0x00; //lmtx port1 mipi lprx enable control
+    BKA2_43_REG = (ENABLED == ucP2En)? 0x01 : 0x00; //lmtx port1 dphy lprx channel select: lane-0
+    BKA2_44_REG = (ENABLED == ucP2En)? 0x03 : 0x00; //lmtx port1 dphy clk channel select: lane-2
+    BKA2_4C_REG = (ENABLED == ucP2En)? 0xFE : 0x00; //Lmtx port1 channel lvds_dphy lane0~4 enable control
+    BKA2_4D_REG = (ENABLED == ucP2En)? 0x80 : 0x00; //lmtx port1 lvds_dphy_cphy tap0 enable control
+		}
+		else
+		{
+    //Cphy
+    BKA2_3C_REG = (ENABLED == ucP2En)? 0xF4 : 0x10; //lmtx port0 enable & port0 ldo1 ldo2 enable
+    BKA2_41_REG = (ENABLED == ucP2En)? 0xA2 : 0x00; //lp driver level2 for CTS
+    BKA2_42_REG = (ENABLED == ucP2En)? 0xB2 : 0x00; //lmtx port0 mipi lprx enable control
+    BKA2_43_REG = (ENABLED == ucP2En)? 0x01 : 0x00; // TODO:lmtx port0 dphy lprx channel select: lane-0
+    BKA2_4D_REG = (ENABLED == ucP2En)? 0xC0 : 0x00; //lmtx port0 lvds_dphy_cphy tap0 enable control
+    BKA2_4E_REG = (ENABLED == ucP2En)? 0x0F : 0x00; //lmtx port0 cphy channel enable & LPRX enable
+    BKA2_3D_REG = (ENABLED == ucP2En)? 0x10 : 0x10; //Lmtx port0 cphy p2s reset control:
+    BKA2_3D_REG = (ENABLED == ucP2En)? 0x30 : 0x30; //lmtx port0 p2s enable: rg_en
+    if(BKA2_4D_REG == 0xC0)
+    {
+        BKA2_48_REG = 0x02;
+        BKA2_49_REG = 0x02;
+    }
+#ifdef MIPI_CHPY_HSLP_FALL_CFG_EN
+    BKA2_84_REG = 0x0C;
+    BKA2_85_REG = 0xD0;//up
+    BKA2_86_REG = 0x10;//down
+    BKA2_45_REG = 0x02;//RG_LMTX1_M_CALI_UPDOWN_SEL
+    BKA2_84_REG = 0x3C;
+#endif
+		}
+}
+
+void Drv_MipiTx_Port3Setting(u8 ucP3En)
+{
+	 if(g_stMipiTx.ucTxPhySel == MIPITX_DPHY)
+	 {
+    //Dphy
+    BKA2_51_REG = (ENABLED == ucP3En)? 0xF0 : 0x10; //lmtx port1 enable & port0 ldo1 ldo2 enable
+    BKA2_52_REG = (ENABLED == ucP3En)? 0x30 : 0x20; //lmtx port1 p2s enable: rg_en
+    BKA2_56_REG = (ENABLED == ucP3En)? 0xA2 : 0x00; //lp driver level2 for CTS
+    BKA2_57_REG = (ENABLED == ucP3En)? 0xB2 : 0x00; //lmtx port1 mipi lprx enable control
+    BKA2_58_REG = (ENABLED == ucP3En)? 0x01 : 0x00; //lmtx port1 dphy lprx channel select: lane-0
+    BKA2_59_REG = (ENABLED == ucP3En)? 0x03 : 0x00; //lmtx port1 dphy clk channel select: lane-2
+    BKA2_61_REG = (ENABLED == ucP3En)? 0xFE : 0x00; //Lmtx port1 channel lvds_dphy lane0~4 enable control
+    BKA2_62_REG = (ENABLED == ucP3En)? 0x80 : 0x00; //lmtx port1 lvds_dphy_cphy tap0 enable control
+		}
+		else
+		{
+    //Cphy
+    BKA2_51_REG = (ENABLED == ucP3En)? 0xF4 : 0x10; //lmtx port0 enable & port0 ldo1 ldo2 enable
+    BKA2_56_REG = (ENABLED == ucP3En)? 0xA2 : 0x00; //lp driver level2 for CTS
+    BKA2_57_REG = (ENABLED == ucP3En)? 0xB2 : 0x00; //lmtx port0 mipi lprx enable control
+    BKA2_58_REG = (ENABLED == ucP3En)? 0x01 : 0x00; // TODO:lmtx port0 dphy lprx channel select: lane-0
+    BKA2_62_REG = (ENABLED == ucP3En)? 0xC0 : 0x00; //lmtx port0 lvds_dphy_cphy tap0 enable control
+    BKA2_63_REG = (ENABLED == ucP3En)? 0x0F : 0x00; //lmtx port0 cphy channel enable & LPRX enable
+    BKA2_52_REG = (ENABLED == ucP3En)? 0x10 : 0x10; //Lmtx port0 cphy p2s reset control:
+    BKA2_52_REG = (ENABLED == ucP3En)? 0x30 : 0x30; //lmtx port0 p2s enable: rg_en
+    if(BKA2_62_REG == 0xC0)
+    {
+        BKA2_5D_REG = 0x02;
+        BKA2_5E_REG = 0x02;
+    }
+#ifdef MIPI_CHPY_HSLP_FALL_CFG_EN
+    BKA2_8F_REG = 0x03;
+    BKA2_91_REG = 0x30;//up
+    BKA2_92_REG = 0x30;//down
+    BKA2_5A_REG = 0x02;//RG_LMTX1_M_CALI_UPDOWN_SEL
+    BKA2_8F_REG = 0x0f;
+#endif
+	}
+}
+
+
+void Drv_MipiTx_PhySet(u8 ucP0En,u8 ucP1En,u8 ucP2En,u8 ucP3En)
+{
+    Drv_MipiTx_Port0Setting(ucP0En);
+    Drv_MipiTx_Port1Setting(ucP1En);
+    Drv_MipiTx_Port2Setting(ucP2En);
+    Drv_MipiTx_Port3Setting(ucP3En);
+
+   // Drv_MipiTx_PortLdoRpRdCali();//LDO Rp RD 校准
+}
+
+
+void Drv_MipiTx_LaneSwap()//by customer design
+{
+		/********EVB MIPI default********/
+			//port0 setting
+			BKF9_60_REG = 0x01;
+			BKF9_61_REG = 0x23;
+			BKF9_62_REG = 0x45;
+
+			//port1 setting
+			BKF9_63_REG = 0x01;
+			BKF9_64_REG = 0x23;
+			BKF9_65_REG = 0x45;
+			
+			//port2 setting
+			BKF9_66_REG = 0x01;
+			BKF9_67_REG = 0x23;
+			BKF9_68_REG = 0x45;
+			
+			//port3 setting				
+			BKF9_69_REG = 0x01;
+			BKF9_6A_REG = 0x23;
+			BKF9_6B_REG = 0x45;
+	
+	
+ /******EVB MIPI DPHY OUT FOR LT9611UXC TEST******/
+//      //port0 setting
+//      BKF9_60_REG = 0x43;
+//      BKF9_61_REG = 0x21;
+//      BKF9_62_REG = 0x05;
+
+//			//port1 setting
+//      BKF9_63_REG = 0x43;
+//      BKF9_64_REG = 0x21;
+//      BKF9_65_REG = 0x05;	
+
+//			//port2 setting
+//      BKF9_66_REG = 0x43;
+//      BKF9_67_REG = 0x21;
+//      BKF9_68_REG = 0x05;	
+
+//			//port3 setting
+//      BKF9_69_REG = 0x43;
+//      BKF9_6A_REG = 0x21;
+//      BKF9_6B_REG = 0x05;
+  
+}
+
+void Drv_MipiTx_PortSwap(u8 PortNum)
+{
+    /*
+        example: downstream connect LT9611uxc 
+        LT9611uxc   ------->     LT22046911GXE
+        port0      ------->     port3(sel 1)
+        port1       ------->    port2(sel 3)
+    */
+//    if(GET_BITS(BKF9_87_REG, 3, 0) > 0)
+//      {
+//        BKF9_6C_REG = 0xFF;//  2 port 
+//      }
+	
+	
+	switch ( PortNum )
+	{
+	    case MIPI_1PORT :
+	        BKF9_6C_REG = 0xFF;
+	        break;
+	    case MIPI_2PORT :
+					#if ((CHIP_SEL == LT6911GXD_HD)||(CHIP_SEL == LT6911GXD_DP))
+					BKF9_6C_REG = 0xF5;
+					#else
+	        BKF9_6C_REG = 0xDD;
+					#endif
+	        break;
+	    case MIPI_4PORT :
+	        BKF9_6C_REG = 0xE4;
+	        break;
+	    default:
+	        break;
+	}
+	if(g_stMipiTx.ucLMTXPortSel != 0)
+	{
+	BKF9_6C_REG = g_stMipiTx.ucLMTXPortSel;
+	}	
+    
+}
+
+void Drv_MipiTx_PortNumSet(u8 ucPortNum)
+{
+    LET_BITS(BKF9_87_REG, 3, 0, ucPortNum);
+    
+    
+}
+
+void Drv_MipiTx_LaneNumSet(u8 ucLaneNum)
+{
+    if(4 > ucLaneNum)
+    {
+        LET_BITS(BKF9_89_REG, 1, 0, ucLaneNum);
+    }
+}
+
+void Drv_MipiTx_CPhyEn(u8 ucEn)
+{
+    CHK_SET_BIT(ucEn, BKF9_6F_REG, BIT5);
+}
+
+void Drv_MipiTx_DPhyClkDataSet()
+{
+    BKF9_AA_REG = 0xAA;
+}
+void Drv_MipiTx_DPhyClkModeSet(u8 ub1ClkMode)
+{
+    if(ON == ub1ClkMode )
+    {
+        SET_BIT(BKF9_89_REG, BIT7);
+        CLEAR_BIT(BKF9_AB_REG, BIT7);
+        LTLog(LOG_DEBUG,"DPhy Clk burst Mode");
+        
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_89_REG, BIT7);//DSC这个要关闭
+        SET_BIT(BKF9_AB_REG, BIT7);
+        LTLog(LOG_DEBUG,"DPhy Clk continue Mode");
+    }
+}
+
+void Drv_MipiTx_DSIVideoModeSet(u8 b1DSIVideoMode)
+{
+    if(b1DSIVideoMode == NON_BURST_MODE_WITH_SYNC_EVENT )
+    {
+				LET_BITS(BKF9_97_REG, 1, 0, 0x1);
+        LTLog(LOG_DEBUG,"DSI video NON_BURST_MODE_WITH_SYNC_EVENT");
+        
+    }
+    else if(b1DSIVideoMode == NON_BURST_MODE_WITH_SYNC_PULSE )
+    {
+				LET_BITS(BKF9_97_REG, 1, 0, 0x2);
+        LTLog(LOG_DEBUG,"DSI video NON_BURST_MODE_WITH_SYNC_PULSE");
+    }
+		else if(b1DSIVideoMode == BURST_MODE )
+		{
+				LET_BITS(BKF9_97_REG, 1, 0, 0x3);
+        LTLog(LOG_DEBUG,"DSI video BURST_MODE");			
+		}
+}
+
+void Drv_MipiTx_DPhyCSI8LaneEn(IN u8 ucEn)
+{
+    if (ucEn)
+    {
+        SET_BIT(BKF9_A0_REG, BIT6);
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_A0_REG, BIT6);
+    }
+}
+
+
+void Drv_MipiTx_PhyModeSet(u8 ucTxPhySel)
+{
+    CHK_SET_BIT(ucTxPhySel, BKF9_89_REG, BIT6);
+}
+
+void Drv_MipiTx_LmtxModeSet(u8 ucTxPhySel)
+{
+    if(MIPITX_CPHY == ucTxPhySel)
+    {
+        LET_BITS(BKA2_10_REG, 5, 4, 0x03);
+    }
+    else
+    {
+        LET_BITS(BKA2_10_REG, 5, 4, 0x02);
+    }
+}
+void Drv_MipiTx_LmtxSrcSet()
+{
+    SET_BIT(BKF9_6F_REG, BIT4);
+}
+
+void Drv_MipiTx_LmtxInputDataSet()
+{
+    SET_BIT(BKF9_00_REG, BIT2);
+}
+
+void Drv_MipiTx_LmtxSramInputSet()
+{
+    SET_BIT(BKF9_00_REG, BIT0);
+}
+
+void Drv_MipiTx_FrameCntSet(u8 ucFrameCntSet)
+{
+    if(ON == ucFrameCntSet)
+    {
+        SET_BIT(BKF9_70_REG, BIT3);
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_70_REG, BIT3);
+    }
+}
+
+void Drv_MipiTx_EotpSet(u8 ucEotpSet)
+{
+    if(ENABLED == ucEotpSet )
+    {
+        SET_BIT(BKF9_A0_REG, BIT7);
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_A0_REG, BIT7);
+    }
+}
+
+void Drv_MipiTx_3DModeSet(u8 uc3DMode)
+{   
+    LET_BITS(BKF9_87_REG, 6, 4, 0);
+    switch(uc3DMode)
+    {
+        case MIPI_LEFT_RIGHT_MODE:
+            SET_BIT(BKF9_87_REG, BIT4);
+						LTLog(LOG_DEBUG,"MIPITX_3D_MODE: MIPI_LEFT_RIGHT_MODE");	
+            break;
+        
+        case MIPI_UP_DOWN_MODE:
+            SET_BIT(BKF9_87_REG, BIT5);
+            break;
+        
+        case MIPI_ODD_EVEN_MODE:
+            SET_BIT(BKF9_87_REG, BIT6);
+            break;
+        
+        default:
+						LTLog(LOG_DEBUG,"MIPITX_3D_MODE: MIPI_NO_3D_MODE");	
+            break;
+    }
+        
+}
+
+void Drv_MipiTx_PllSrcSet()
+{
+    LET_BITS(BKA2_00_REG, 1,0,0x0);//0:xtal-25m 
+    LET_BITS(BKA3_44_REG, 6, 4, 0x3);
+}
+
+void Drv_MipiTx_PllDivSet(u32 ulRate)
+{
+    u8 ucPrediv = 1;
+    u8 ucLmtxpllOutPutDiv = 0; //cal LmtxpllOutPutDiv set
+    u8 ucLoop = 0;
+    u8 ucLmtxPllDiv = 0;
+    u32 ulRateTmp = ulRate;
+    
+    SET_BIT(BKA2_00_REG, BIT4); //lmtxpll power down
+    CLEAR_BIT(BKA2_00_REG, BIT2);//post div /2
+    LET_BITS(BKA2_01_REG, 4,0,0x00);//lmtxpll prediv
+    BKA2_02_REG = 0xA8; //lmtxpll cp current
+    
+    BKA2_04_REG = 0x00; //lmtxpll ssc half pixel clock mux and divider
+    BKA2_05_REG = 0x00; // TODO:Lmtxpll output clock mux and divider
+    BKA2_06_REG = 0x00; //lmtxpll tmds clock range selection
+    BKA2_07_REG = 0x00; //lmtxpll output clock range selection:
+    BKA2_0A_REG = 0x80; //Da_lmtxpll_div_set software output set value
+    
+    if((LMTXPLL_VCO_MIN_FS/2 > ulRateTmp) && (LMTXPLL_VCO_MIN_FS/2 - ulRateTmp < 1000))//如果输入频率与VCO/2 差别很小，则加一点余量，以免倍频过高达不到需要的频率
+    {
+        ulRateTmp += 10000;
+    }
+    LTLog(LOG_DEBUG,"vco DataRate: %lu, %lu",ulRateTmp,ulRate);
+/*如何确定PLL分档步骤如下：
+1、LMTXPLL输出为Fvco，pll_seri_clk输出为VCO的分频，pll_seri_clk分档1为1.2-2.4G，2挡为600M-1.2,因此VCO需工作在1.2-2.4G
+2、输出需要根据phy的datarate计算，判断datarate处于pll_tdms的哪一个分档，可以根据倍乘来快速确定（*2）
+3、确定pll_tdms分档后，就可以根据公式来计算pll环中muldiv、postdiv、cpcur以及lmtxpll_div，
+Fin /prediv = Fvco/(muldiv*cpcur_set*postdiv*pll_div), Fvco = seri_div *分档，如果倍乘后Fvco超过2G，可以考虑多将muldiv、postdiv、cpcur 加一档
+*/
+    for (ucLoop = 0; ucLoop < 4; ucLoop++)
+    {
+        if (ulRateTmp < LMTXPLL_VCO_MIN_FS)
+        {
+            ucLmtxpllOutPutDiv++; 
+            ulRateTmp <<= 1;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    if(ulRateTmp > LMTXPLL_VCO_MAX_FS)
+    {
+        //cpcurset(1-2) 、muldivsel(1-2)0xA200-bit3 、postdivsel(1-2)0xA200-bit2、lmtxplldiv(3-127)0xA20A
+        ulRateTmp >>= 1; 
+        SET_BIT(BKA2_00_REG, BIT2);//post div /2
+        LTLog(LOG_DEBUG,"Post div = 2");
+    }
+
+    LET_BITS(BKA2_07_REG, 2, 0, ucLmtxpllOutPutDiv); 
+    LTLog(LOG_DEBUG,"A207 RG_LMTXPLL_RANGE_SEL : 0x%02bx",ucLmtxpllOutPutDiv);
+    
+    //cal div set
+    ucLmtxPllDiv = ulRateTmp / (25 * 1000);
+    if (0 != (ulRateTmp % (25 * 1000)))
+    {
+        ucLmtxPllDiv++;
+    }
+
+    LET_BITS(BKA2_0A_REG, 6, 0, ucLmtxPllDiv);
+    SET_BIT(BKA2_0A_REG, BIT7);//LMTXPLL SW mode 
+    
+    
+    LTLog(LOG_DEBUG,"A20A LMTXPLL_DIV_SET : 0x%02bx",ucLmtxPllDiv);
+
+}
+
+u8 Drv_MipiTx_PllCali()
+{
+    //1.配置相关模式以及分档
+    //2.配置开启rg_xxxpll_pd=0              0xA200 Bit7
+    //3.复位操作 rgd_xxxpll_rst_n=0 rgd_xxxpll_rst_n=1     0xE10FBIT4
+    
+    //4.校准使能 rgd_xxxpll_cal_en=0 rgd_xxxpll_cal_en=1       0xE263 bit3
+    
+    //5.判断 cal done 和 pll lock out    
+        //RGOD_LMTXPLL_PLL_CAL_DONE 0xE26D bit1:calidone bit0 pll cail fail
+        //RGOD_LMTXPLL_PLL_LOCK_OUT 0xE228 bit2
+        
+    //pll div rest 0xA210 bit7
+    
+      u8 ucCaliCnt = 0;
+
+    CLEAR_BIT(BKA2_00_REG, BIT4); //Lmtxpll power Normal Work
+    CLEAR_BITS(BKE1_07_REG, 3, 0);
+    CLEAR_BIT(BKE1_0F_REG, BIT4);//Software control for LMTXPLL reset
+    CLEAR_BIT(BKE2_63_REG, BIT3);//LMTXPLL PLL calibration enable.
+    Ocm_Delay1ms(1);
+    
+    LET_BITS(BKE1_07_REG, 3, 0, 0xF);
+    SET_BIT(BKE1_0F_REG, BIT4);//Software control for LMTXPLL reset
+    
+    Ocm_Delay1ms(1);
+    SET_BIT(BKE2_63_REG, BIT3);//LMTXPLL PLL calibration enable.
+    Ocm_Delay1ms(2);
+     
+    do
+    {
+        ucCaliCnt ++;
+        Ocm_Delay1ms(5);
+        
+    }while((ucCaliCnt < 3) && (GET_BIT(BKE2_6D_REG, BIT1)));
+    
+    if(0x02 != GET_BITS(BKE2_6D_REG, BIT1, BIT0))
+    {
+        LTLog(LOG_ERROR, "LMTXPLL cali fail");
+        return FALSE;
+    }
+
+    LTLog(LOG_DEBUG, "LMTXPLL lock flag:0x%02bx ",BKE2_28_REG);
+    
+    if(!GET_BIT(BKE2_28_REG, BIT2))
+    {
+        LTLog(LOG_ERROR, "LMTXPLL unlock");
+        return FALSE;
+    }
+
+    LTLog(LOG_DEBUG, "LMTXPLL calibration bandout: 0x%02bx 0x%02bx", BKE2_74_REG, BKE2_75_REG);
+
+    CLEAR_BIT(BKA2_10_REG, BIT7);
+    SET_BIT(BKA2_10_REG, BIT7);
+    
+    return TRUE;
+
+    
+}
+
+void Drv_MipiTx_PllSet(u32 ulPhyClk)
+{
+    Drv_MipiTx_PllSrcSet();
+    Drv_MipiTx_PllDivSet(ulPhyClk);
+}
+
+void Drv_MipiTx_PhyTimingParaSet(u32 ulMipiDataRate, u8 b1MipiClockburst, u8 ucPhySel, u8 ucDphyCsi8Lane)
+{
+    u16 rdbyteclk ;
+    rdbyteclk = ulMipiDataRate/1000 ;
+    
+    if(MIPITX_DPHY == ucPhySel)
+    {
+        rdbyteclk /= 8; 
+    }
+    else
+    {
+        rdbyteclk /= 7;
+    }
+    LTLog(LOG_DEBUG,"Byte clk:%uMhz",rdbyteclk);
+
+    HS_LPX_REG = rdbyteclk * 60 / 1000 + 1;//hs lpx > 50ns
+    HS_PREP_REG = rdbyteclk * 50 / 1000 + 1;//hs prep : (40ns + 4*UI)~(85ns + 6*UI) , clk_prepare
+    HS_TRAIL = rdbyteclk * 7 / 100 + 4; //hs_trail and clk_trail: 60ns + 4UI ~105+12UI;
+    
+    CLK_ZERO_REG = rdbyteclk * 6 / 25;    //ck_zero > 300 - ck_prpr , old: rdbyteclk/4
+    CLK_POST_REG = rdbyteclk * 7 / 100 + 7;//ck_post > 60ns + 52UI,  +4->+15->+1    
+    
+    if ( MIPITX_DPHY == ucPhySel  )
+    {
+        if(ON == b1MipiClockburst)
+        {
+            //CLK_PRE_REG = 0x00; //clk_pre  > 8 UI
+            CLK_ZERO_REG = rdbyteclk * 6 / 25 + 7;    //ck_zero > 300 - ck_prpr , old: rdbyteclk/4
+            //CLK_ZERO_REG = rdbyteclk * 6 / 100+5;
+            CLK_POST_REG = rdbyteclk * 7 / 100 + 7;//ck_post > 60ns + 52UI,  +4->+15->+1
+            HS_RQST_PRE_REG = HS_LPX_REG + 0x67; 
+        }
+        else
+        {
+            HS_RQST_PRE_REG = rdbyteclk / 10; 
+        }
+        
+        if (ENABLED == ucDphyCsi8Lane)
+        {
+            HS_RQST_PRE_REG = HS_LPX_REG + HS_PREP_REG + 10; 
+        }
+    }
+    else
+    {
+        CLK_POST_REG = 30; //t3-post
+        HS_RQST_PRE_REG = HS_LPX_REG + 0x32;
+
+        //cphy CTS test 
+//        CLK_POST_REG = 0x10;
+//        HS_RQST_PRE_REG = 0x20;
+        
+    }
+
+    LTLog(LOG_DEBUG, "ck_post (0xF9A9) = 0x%02bx", BKF9_A9_REG);
+    LTLog(LOG_DEBUG, "ck_zero (0xF9A7) = 0x%02bx", BKF9_A7_REG);
+    LTLog(LOG_DEBUG, "hs_lpx  (0xF9A4) = 0x%02bx", BKF9_A4_REG);
+    LTLog(LOG_DEBUG, "hs_prep (0xF9A5) = 0x%02bx", BKF9_A5_REG);
+    LTLog(LOG_DEBUG, "hs_trail(0xF9A6) = 0x%02bx", BKF9_A6_REG);
+    LTLog(LOG_DEBUG, "hs_rqst (0xF98A) = 0x%02bx", BKF9_8A_REG);
+}
+
+void Drv_MipiTx_Hss_Set(IN u16 usVal)
+{
+    if( usVal > 0x3FF )
+    {
+        usVal = 0x3FF;
+    }
+
+    LET_BITS(BKF9_84_REG, BIT1, BIT0, GET_16BIT_HIGH(usVal));
+    BKF9_85_REG = GET_16BIT_LOW(usVal);
+}
+
+u16 Drv_MipiTx_Hss_Get(void)
+{
+    u16 rdhss;
+    rdhss = PACK_16_BIT(BKF9_84_REG&0x03, BKF9_85_REG);
+    return rdhss;
+}
+
+
+u16 Drv_MipiTx_FSMHact_Get(void)
+{
+    u16 rgod_hact;
+    rgod_hact = PACK_16_BIT(BKF9_C1_REG & 0x3f, BKF9_C2_REG);
+    return rgod_hact;
+}
+
+void Drv_MipiTx_FifoDelay_Set(IN u16 rddly)
+{
+    BKF9_82_REG = GET_16BIT_HIGH(rddly);
+    BKF9_83_REG = GET_16BIT_LOW(rddly); //MIPI FIFO read delay:d'96
+}
+
+
+void Drv_MipiTx_DPhySkewCali(void)
+{
+    SET_BITS(BKF9_AB_REG, BIT3, BIT0); 
+    BKF9_AC_REG = 0x18; 
+    BKF9_AD_REG = 0x00; 
+    BKF9_AE_REG = 0x10; 
+    SET_BIT(BKF9_AB_REG, BIT4);
+    Ocm_Delay1ms(5);
+    CLEAR_BIT(BKF9_AB_REG, BIT4);
+    BKF9_AE_REG = 0x00; 
+}
+
+
+void Drv_MipiTx_DPhyClkHsTrig(void)
+{
+    CLEAR_BIT(BKF9_AB_REG, BIT5);
+    Ocm_Delay1ms(5);
+    SET_BIT(BKF9_AB_REG, BIT5); //[5]:Dphy clk lane hs mode initial trigger
+    Ocm_Delay1ms(1);
+    CLEAR_BIT(BKF9_AB_REG, BIT5);
+}
+
+#if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD))
+u8 Drv_MipiTx_VideoReadyDetect(void)
+{
+		u16 Htotal,Hactive,Vtotal,Vactive;
+		u8 Colorspace,Colordepth;
+	
+		if(BKE0_84_REG != 0x01)
+		{
+				BKE0_84_REG = 0x01;
+			
+				/*pixelclock:0xE085~0xE087*/
+				BKE0_85_REG = (g_stMipiTx.ulMipiInClk*2 >> 16);//&0x0F;
+				BKE0_86_REG = (g_stMipiTx.ulMipiInClk*2 >> 8);
+				BKE0_87_REG = (g_stMipiTx.ulMipiInClk*2);
+			
+				/*resolution:0xE088~0xE08F*/
+				Htotal    = Drv_VideoCheckSingle_Get(HTOTAL_POS);
+				Hactive   = Drv_VideoCheckSingle_Get(HACTIVE_POS);
+				Vtotal    = Drv_VideoCheckSingle_Get(VTOTAL_POS);
+				Vactive   = Drv_VideoCheckSingle_Get(VACTIVE_POS);
+			
+				BKE0_88_REG = GET_16BIT_HIGH(Htotal);
+				BKE0_89_REG = GET_16BIT_LOW(Htotal);
+				BKE0_8A_REG = GET_16BIT_HIGH(Vtotal);
+				BKE0_8B_REG = GET_16BIT_LOW(Vtotal);
+				BKE0_8C_REG = GET_16BIT_HIGH(Hactive);
+				BKE0_8D_REG = GET_16BIT_LOW(Hactive);
+				BKE0_8E_REG = GET_16BIT_HIGH(Vactive);
+				BKE0_8F_REG = GET_16BIT_LOW(Vactive);
+				
+				/*Byteclock:0xE092~0xE093*/
+				BKE0_92_REG = ((g_stMipiTx.ulMipiDataRate/8)>>16);//&0x0F;
+				BKE0_93_REG = ((g_stMipiTx.ulMipiDataRate/8)>>8);
+				BKE0_94_REG = (g_stMipiTx.ulMipiDataRate/8);
+				
+				/*colorspace*/
+				#if ((HDMIRX_DSC_BYPASS_SUPPORT == ENABLED)||(HDMIRX_DSC_DEC_SUPPORT == ENABLED))
+				if (Drv_HdmiRx_DscDecState() == ENABLED)
+				{
+						Colorspace = g_stHdmiRxDscByInfo.ucColorSpace;
+						Colordepth = (g_stHdmiRxDscByInfo.ucColorDepth << 1);
+						BKE0_95_REG = Colorspace;
+						BKE0_96_REG = Colordepth;
+				}
+				else
+				#endif
+				{
+						Colorspace = ((BKCC_A3_REG & 0x60) >> 5);//pb1[7:5]0-rgb, 1-422, 2-444, 3-420
+						BKE0_95_REG = Colorspace;
+						Colordepth = (BKCC_D7_REG  & 0x0f);//[3:0]color depth: 4-8bit, 5-10bit, 6-12bit
+						switch(Colordepth)
+						{
+								case 0x00:
+								case 0x04:
+									BKE0_96_REG = 8;
+								break;
+								
+								case 0x05:
+									BKE0_96_REG = 10;
+								break;
+								
+								case 0x06:
+									BKE0_96_REG = 12;
+								break;
+								
+								default:
+									BKE0_96_REG = 0;
+								break;
+						}
+				}
+				/********Mipi:0xE0A0~0xE0AF********/
+				/*Lane*/
+				BKE0_A0_REG = g_stMipiTx.ucTxLaneNum;
+				BKE0_A1_REG = g_stMipiTx.ucTxPortNum;
+				
+			  return 1;
+		}
+		else
+		{
+			  return 0;
+		}
+}
+
+void Drv_MipiTx_EnableControl(void)
+{
+		if(BKE0_B0_REG == 0x00)
+		{
+				if(BKF9_89_REG & 0x30)
+				{
+						Drv_MipiTx_VideoSet(OFF);
+						printLT(PRINT_PRIO_TEST, "\nVIDEO_OUT_PUT_OFF!");
+				}
+		}
+		else if(BKE0_B0_REG == 0x01)
+		{
+				if((BKF9_89_REG & 0x30) == 0x00)
+				{
+						Drv_MipiTx_VideoSet(ON);
+						printLT(PRINT_PRIO_TEST, "\nVIDEO_OUT_PUT_ON!");
+				}
+		}
+}
+#endif
+
+//#if (MIPITX_PRO_SEL == MIPITX_CSI)
+void Drv_MipiTx_CSIFeSoftwareSendInit()
+{
+    SET_BIT(BKF9_B7_REG, BIT2);
+}
+
+void Drv_MipiTx_CSIFeSoftwareSend()
+{
+    LET_BITS(BKF9_97_REG, 6, 3, 0xF);
+    Ocm_Delay1ms(1);
+    CLEAR_BITS(BKF9_97_REG, 6, 3);
+}
+//#endif
+
+void Drv_MipiTx_HssLP_En(u8 ucIsEn)
+{
+    if(ucIsEn == ENABLED)
+    {
+        SET_BIT(BKF9_89_REG, BIT2);
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_89_REG, BIT2);
+    }
+}
+
+void Drv_MipiTx_HsCmd_En(u8 ucIsEn)
+{
+    if(ucIsEn == ENABLED)
+    {
+        SET_BIT(BKF9_84_REG, BIT3);
+    }
+    else
+    {
+        CLEAR_BIT(BKF9_84_REG, BIT3);
+    }
+}
+
+void Drv_MipiTx_WordCnt_Set(u8 IsSoftMode ,u16 WordCnt,u8 PortCnt)
+{
+    (PortCnt > 1)?(BKF9_7A_REG|= BIT7_1):(BKF9_7A_REG&= BIT7_0);
+    (IsSoftMode == SW_MODE)?(BKF9_7A_REG|= BIT6_1):(BKF9_7A_REG&= BIT6_0);
+    BKF9_90_REG = WordCnt/256;
+    BKF9_91_REG = WordCnt%256;
+}
+
+void Drv_MipiTx_Dsc_Split(u16 Hactive,u8 PortCnt)
+{
+	int i = Hactive/PortCnt;
+	
+	if(PortCnt > 1)
+	{
+		if (i % 2 != 0)
+		{
+		BKF9_88_REG = 0x21;
+		BKF9_71_REG = 0x13;	
+		}	
+	}
+}
+#endif

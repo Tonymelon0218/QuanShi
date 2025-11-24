@@ -1,0 +1,334 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  HdcpRx.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+//===========================================
+// func: hdcp decoder init
+// input: @ucOpt,HDCP1X-hdcp1.4, HDCP2X-hdcp2.3, NO_HDCP-close hdcp
+//output: N/A
+//return: void
+//  Info: N/A
+//===========================================
+void Drv_HdcpRx_Enable(IN u8 ucOpt)
+{
+    #if RX_PORT_SIGN == DP_PORT
+    #if DPRX_HDCP_DEC_MODE != NO_HDCP
+    BKCA_2E_REG |= BIT7_1;//[7]rgd_rx_key_load_sel: 1-I2C
+    BKCA_2E_REG |= BIT4_1;//[4]hdcp22 rx mode select, 1-dp mode, 0-hdmi mode
+    Ocm_Delay1ms(2);
+    if ((BKCA_80_REG & 0x03) != 0x03)
+    {
+        BKC9_06_REG &= BIT2_0;//hdcp dpcd reset
+        printLT(PRINT_PRIO_HIG, "\nHdcp key invalid");
+        return;
+    }
+    BKF1_BB_REG = 0x5B;
+    BKF1_C4_REG &= BIT1_0;//[1]rgd_dprx_hdcp_bypass_en: 0-hdcp path
+    #if DPRX_HDCP_REPEATER == ENABLED
+    BKCA_31_REG &= BIT0_0;//[0]rgd_rx_id_list_sram_sel: 0-dis
+    #endif
+    if (ucOpt & HDCP1X)
+    {
+        Drv_System_IntSet(IRQ_RXHDCP1X_INT,ON);//  
+        #if DPRX_HDCP_REPEATER == ENABLED
+        BKF1_69_REG &= BIT6_0;//[6]rx mode rgd_h1_rpt_ready_sel: 0
+        BKF1_C4_REG |= BIT3_1;//[3]rgd_dprx_h1_rpt_bit: 1-en
+        #else
+        BKF1_69_REG |= BIT6_1;//[6]rx mode rgd_h1_rpt_ready_sel: 1
+        BKF1_C4_REG &= BIT3_0;//[3]dprx hdcp13 repeater bit, 1-repeater mode, 0-not
+        #endif
+        BKF1_C4_REG |= BIT0_1;//[0]dprx hdcp13 enable, 1-en, 0-dis
+
+        BKCA_14_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x02; repeater mode: 0x03;
+        BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+        BKCA_16_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[23:16]
+    }
+    if (ucOpt & HDCP2X)
+    {
+        Drv_System_IntSet(IRQ_RXHDCP2X_INT,ON);//  
+        #if DPRX_HDCP_REPEATER == ENABLED
+        BKCA_12_REG &= BIT2_0;//[2]rgd_h2_rpt_rdy_sel;
+        BKCA_14_REG = 0x03;//[7:0]hdcp 2.2 rxcaps[07:00]
+        #else
+        BKCA_12_REG |= BIT2_1;//[2]rgd_h2_rpt_rdy_sel;
+        BKCA_14_REG = 0x02;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x02; repeater mode: 0x03;
+        #endif
+        BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+        BKCA_16_REG = 0x02;//[7:0]hdcp 2.2 rxcaps[23:16]
+        BKCA_2A_REG |= 0x0f;//[3:0]hdcp22_cp_irq_int_en
+    }
+
+    if(ucOpt == NO_HDCP)
+    {
+        Drv_System_IntSet(IRQ_RXHDCP1X_INT,OFF);//
+        Drv_System_IntSet(IRQ_RXHDCP2X_INT,OFF);//  
+        BKF1_C4_REG &= BIT3_0;//[3]rgd_dprx_h1_rpt_bit: 0-dis
+        BKF1_C4_REG &= BIT0_0;//[0]dprx hdcp13 enable, 1-en, 0-dis
+        BKCA_14_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x02; repeater mode: 0x03;
+        BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+        BKCA_16_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[23:16]
+    }
+    #else
+    BKC9_06_REG &= BIT2_0;//hdcp dpcd reset
+    ucOpt = NO_HDCP;
+    #endif
+
+    #endif
+
+    #if RX_PORT_SIGN == HDMI_PORT
+    
+    #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+    BKCC_35_REG |= 0x80;//[7:4]hdmirx hdcp ecc error check after decrypt some frame.
+
+    BKCA_01_REG &= BIT2_0;//[2]rgd_gen_km_prim: 0-hw
+    BKCA_23_REG = 0x80;//rgd_rx_avmute_vs_cnt
+    BKCA_2E_REG |= BIT7_1;//[7]rgd_rx_key_load_sel: 1-I2C
+    BKCA_2E_REG &= BIT4_0;//[4]hdcp22 rx mode select, 1-dp mode, 0-hdmi mode
+    Ocm_Delay1ms(2);
+    if ((BKCA_80_REG & 0x03) != 0x03)
+    {
+        printLT(PRINT_PRIO_HIG, "\nHdcp key invalid");
+        return;
+    }
+
+    BKCC_00_REG &= BIT1_0;//[1]0-hdcp decode output, 1-bypass hdcp (hdmirx decode output).
+    BKCC_15_REG |= BIT7_1;//must set1, = 0 will cause 4096X2160 24HZ issue
+
+    if (ucOpt & HDCP1X)
+    {
+        #if HDMIRX_HDCP_REPEATER == ENABLED
+        BKCA_00_REG &= BIT2_0;//[2]rx_only: 0-dis
+        BKCA_00_REG |= BIT4_1;//[4]rgd_hdcp_rpt: 1-en
+        #else
+        BKCA_00_REG |= BIT2_1;//[2]rx_only: 1-en
+        BKCA_00_REG &= BIT4_0;//[4]rgd_hdcp_rpt: 1-en
+        #endif
+        BKCA_00_REG &= BIT1_0;//[1]ddc_h2_hdcp_en: 1-en
+        BKCA_0A_REG |= BIT0_1;//[0]enc_dis_at_err: 1-enc dis(HDCP1.4)
+    }
+    if (ucOpt & HDCP2X)
+    {
+        BKCA_00_REG |= BIT1_1;//[1]ddc_h2_hdcp_en: 1-en
+        BKCA_11_REG |= 0x01;//[7]rgd_enc_dis_at_err: 1-enc dis(HDCP2.3)
+                            //[0]hdcp2.2 RX cipher enable: 1-en
+        BKCA_11_REG |= BIT7_1;
+        #if HDMIRX_HDCP_REPEATER == ENABLED
+        BKCA_12_REG &= BIT2_0;//[2]rgd_h2_rpt_rdy_sel: 0-repeater
+        BKCA_14_REG = 0x01;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x00; repeater mode: 0x01;
+        #else
+        BKCA_12_REG |= BIT2_1;//[2]rgd_h2_rpt_rdy_sel: 1-rx only mode
+        BKCA_14_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x00; repeater mode: 0x01;
+        #endif
+        BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+        BKCA_16_REG = 0x02;//[7:0]hdcp 2.2 rxcaps[23:16]
+    }
+
+    if(ucOpt == NO_HDCP)
+    {
+        BKCA_06_REG &= 0x3f;//[7]hdcp_auto_ctrl_en; [6]dis_hdcp_dev_auto_en;
+        BKCA_06_REG |= BIT5_1;//[5]dis_hdcp_dev;
+
+        BKCA_11_REG &= BIT0_0;//[0]hdcp2.2 rx cipher enable: 0-dis
+        BKCA_00_REG &= BIT1_0;//[1]ddc_h2_hdcp_en: 0-dis
+        BKCA_00_REG &= BIT2_0;//[2]rx_only: 1-en
+
+        BKCA_14_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x00; repeater mode: 0x01;
+        BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+        BKCA_16_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[23:16]
+    }
+    #else
+    BKC9_06_REG &= BIT2_0;//hdcp dpcd reset
+    ucOpt = NO_HDCP;
+    #endif
+
+    #endif
+}
+
+//===========================================
+//  func: hdcp decoder init
+// input: void
+//output: N/A
+//return: dp rx hdcp version
+//  Info: N/A
+//===========================================
+u8 Drv_HdcpRx_VerGet(void)
+{
+    #if RX_PORT_SIGN == DP_PORT
+
+    #if DPRX_HDCP_DEC_MODE != NO_HDCP
+    #if DPRX_HDCP_REPEATER == DISABLED
+    if (BKF1_FD_REG & BIT7_1)//[7]hdcp 1.3
+    {
+        return HDCP1X;
+    }
+    else if (BKCA_B3_REG & BIT0_1)//[0]hdcp 2.2
+    {
+        return HDCP2X;
+    }
+    else
+    #endif
+    #if DPRX_HDCP_REPEATER == ENABLED
+    if (BKF1_FE_REG & BIT5_1)//[5]hdcp repeater 1.3
+    {
+        return HDCP1X;
+    }
+    else if (BKCA_B3_REG & BIT1_1)//[1]hdcp repeater 2.2
+    {
+        return HDCP2X;
+    }
+    else
+    #endif
+    #endif
+    {
+        return NO_HDCP;
+    }
+
+    #endif
+
+    #if RX_PORT_SIGN == HDMI_PORT
+
+    #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+    if (BKCA_84_REG & BIT0_1)//hdcp1.3
+    {
+        return HDCP1X;
+    }
+    else if (BKCA_B3_REG & BIT0_1)//hdcp2.2
+    {
+        return HDCP2X;
+    }
+    else
+    #endif
+    {
+        return NO_HDCP;
+    }
+
+    #endif
+}
+
+void Drv_HdcpRx_StateClear(void)
+{
+    #if RX_PORT_SIGN == DP_PORT
+    #if DPRX_HDCP_DEC_MODE != NO_HDCP
+    u8 ucHDCP13 = 0;
+    //bit6 rgd_dprx_hdcp13_sw_dec_rst_n
+    //bit5 rgd_dprx_hdcp13_prtc_rst_n
+    //bit4 rgd_dprx_hdcp13_dpcd_rst_n
+    ucHDCP13 = BKF1_B1_REG;
+    BKF1_B1_REG &= 0x8F;//HDCP1.3 State Clear
+    BKF1_B1_REG = ucHDCP13;//HDCP1.3 State Clear
+    //bit3 HDCPRX protocol control logic soft reset  -----Important
+    //bit1 rgd_hdcprx_dp_dec_rst_n
+    //bit0 rgd_hdcprx_dp_dpcd_rst_n
+    BKC9_06_REG &= 0x37;
+    BKC9_06_REG |= 0xc8;
+    #endif
+    #endif
+
+    #if RX_PORT_SIGN == HDMI_PORT
+    #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+    BKCA_11_REG |= BIT6_1;//[6]rgd_re_auth_pls_pix;
+    Ocm_Delay1us(20);//necessary for run hdcp logic reset
+    BKCA_11_REG &= BIT6_0;
+
+    BKCA_00_REG &= BIT0_0;//[0]rgd_hdcp_auto_ctrl_en;
+    BKCA_01_REG |= BIT6_1;
+    Ocm_Delay1us(20);//necessary for run hdcp logic reset
+    BKCA_01_REG &= BIT6_0;//[6]rgd_abort_rx_auth;
+    BKCA_00_REG |= BIT0_1;//[0]rgd_hdcp_auto_ctrl_en;
+    #endif
+    #endif
+}
+
+void Drv_HdcpRx_ReauthHdcpStateClr(void)
+{
+    #ifdef NVIDIA_FW_EN
+    if((BKCA_B0_REG & BIT2_1))//[2]h2_hdmirx_re_auth_flag
+    {
+        /*
+        在开始握手的时候，有时候tmds时钟不稳定，采不到硬件re_auth_tmds信号的上升沿，
+        所以需要在后面配寄存器rgd_re_auth_pls_pxl手动再清一下。由于硬件的re_auth_tmds会维持一段时间高电平，
+        如果在这段时间rgd_re_auth_pls_pxl也是无法产生有效沿去清掉HDCP状态的，
+        所以在软件在检测到重新握手之后，配Drv_HdcpRx_StateClear之前加个延迟是有必要的
+        */
+        Ocm_Delay1ms(10);
+        Drv_HdcpRx_StateClear();//hdcp state clr
+        /*
+        Drv_HdcpRx_StateClear之后加延迟有作用，
+        可以让软件在HDCP出错帧少进行其他操作产生的影响，比如color space判断等
+        */
+        Ocm_Delay1ms(5);
+        BKCA_1A_REG |= BIT6_1;//[6]rgd_h2_rx_reauth_req_clr: 1-en
+        BKCA_1A_REG &= BIT6_0;//[6]rgd_h2_rx_reauth_req_clr: 0-dis
+    }
+    #endif
+}
+
+void Drv_HdcpRx_SoftAvmuteEn(u8 ucOpt)
+{
+    #if RX_PORT_SIGN == DP_PORT
+
+    ucOpt = DISABLED;
+
+    #endif
+
+    #if RX_PORT_SIGN == HDMI_PORT
+    #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+
+    if (ucOpt == ENABLED)
+    {
+        BKCA_13_REG |= BIT7_1;//[7]hdcp2.3 rgd_avmute_soft_mode: 1-en
+        BKCA_06_REG |= BIT2_1;//[2]hdcp1.3 soft_avmute_ctrl: 1-en
+    }
+    else
+    {
+        BKCA_13_REG &= BIT7_0;//[7]hdcp2.3 rgd_avmute_soft_mode: 0-dis
+        BKCA_06_REG &= BIT2_0;//[2]hdcp1.3 soft_avmute_ctrl: 0-dis
+    }
+
+    #endif
+    #endif
+}
+#if RX_PORT_SIGN == DP_PORT
+#if (DPRX_HDCP_DEC_MODE != NO_HDCP)
+//False: No Int
+//True: INT
+u8 Drv_Hdcp13_IntGet(void)
+{
+    if(BKE5_40_REG & BIT3_1)//dp hdcp1.3 rx int
+    {
+        BKE5_30_REG |= BIT3_1;//[1]dp rx int clr en
+        BKE5_30_REG &= BIT3_0;//[1]dp rx int clr dis
+        if((BKF1_A7_REG & BIT3_1) == 0x00)//HDCP13 INT DIS
+        {
+            return FALSE;
+        }
+        if(BKF1_DC_REG & 0x06)//[2]dprx hdcp13 v ready, [1]dprx hdcp13 link intergrity check failure
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+u8 Drv_Hdcp2X_IntGet(void)
+{
+    if(BKE5_41_REG & BIT7_1)//dprx hdcp22 interrupt flag
+    {
+        BKE5_31_REG |= BIT7_1;//[6]hdcp rx int clr en
+        BKE5_31_REG &= BIT7_0;//[6]hdcp rx int clr dis
+        if((BKCA_2A_REG & 0x0f) != 0x0f)
+        {
+            return FALSE;
+        }
+        if (BKCA_B4_REG & 0xf0)//[7:4]link fail/ekhkm ready/H ready/V ready flag
+        {
+            return TRUE;
+        }
+    }  
+    return FALSE;
+}
+#endif
+#endif

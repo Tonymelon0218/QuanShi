@@ -1,0 +1,374 @@
+C51 COMPILER V9.53.0.0   DRVHDCPRX                                                         02/13/2025 10:14:17 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVHDCPRX
+OBJECT MODULE PLACED IN .\Objects\DrvHdcpRx.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvHdcpRx.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE) 
+                    -REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRIN
+                    -T(.\Listings\DrvHdcpRx.lst) OBJECT(.\Objects\DrvHdcpRx.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  HdcpRx.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          #include "Include.h"
+   8          
+   9          //===========================================
+  10          // func: hdcp decoder init
+  11          // input: @ucOpt,HDCP1X-hdcp1.4, HDCP2X-hdcp2.3, NO_HDCP-close hdcp
+  12          //output: N/A
+  13          //return: void
+  14          //  Info: N/A
+  15          //===========================================
+  16          void Drv_HdcpRx_Enable(IN u8 ucOpt)
+  17          {
+  18   1          #if RX_PORT_SIGN == DP_PORT
+                  #if DPRX_HDCP_DEC_MODE != NO_HDCP
+                  BKCA_2E_REG |= BIT7_1;//[7]rgd_rx_key_load_sel: 1-I2C
+                  BKCA_2E_REG |= BIT4_1;//[4]hdcp22 rx mode select, 1-dp mode, 0-hdmi mode
+                  Ocm_Delay1ms(2);
+                  if ((BKCA_80_REG & 0x03) != 0x03)
+                  {
+                      BKC9_06_REG &= BIT2_0;//hdcp dpcd reset
+                      printLT(PRINT_PRIO_HIG, "\nHdcp key invalid");
+                      return;
+                  }
+                  BKF1_BB_REG = 0x5B;
+                  BKF1_C4_REG &= BIT1_0;//[1]rgd_dprx_hdcp_bypass_en: 0-hdcp path
+                  #if DPRX_HDCP_REPEATER == ENABLED
+                  BKCA_31_REG &= BIT0_0;//[0]rgd_rx_id_list_sram_sel: 0-dis
+                  #endif
+                  if (ucOpt & HDCP1X)
+                  {
+                      Drv_System_IntSet(IRQ_RXHDCP1X_INT,ON);//  
+                      #if DPRX_HDCP_REPEATER == ENABLED
+                      BKF1_69_REG &= BIT6_0;//[6]rx mode rgd_h1_rpt_ready_sel: 0
+                      BKF1_C4_REG |= BIT3_1;//[3]rgd_dprx_h1_rpt_bit: 1-en
+                      #else
+                      BKF1_69_REG |= BIT6_1;//[6]rx mode rgd_h1_rpt_ready_sel: 1
+                      BKF1_C4_REG &= BIT3_0;//[3]dprx hdcp13 repeater bit, 1-repeater mode, 0-not
+                      #endif
+                      BKF1_C4_REG |= BIT0_1;//[0]dprx hdcp13 enable, 1-en, 0-dis
+              
+                      BKCA_14_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x02; repeater mode: 0x03;
+                      BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+                      BKCA_16_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[23:16]
+                  }
+                  if (ucOpt & HDCP2X)
+                  {
+                      Drv_System_IntSet(IRQ_RXHDCP2X_INT,ON);//  
+                      #if DPRX_HDCP_REPEATER == ENABLED
+C51 COMPILER V9.53.0.0   DRVHDCPRX                                                         02/13/2025 10:14:17 PAGE 2   
+
+                      BKCA_12_REG &= BIT2_0;//[2]rgd_h2_rpt_rdy_sel;
+                      BKCA_14_REG = 0x03;//[7:0]hdcp 2.2 rxcaps[07:00]
+                      #else
+                      BKCA_12_REG |= BIT2_1;//[2]rgd_h2_rpt_rdy_sel;
+                      BKCA_14_REG = 0x02;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x02; repeater mode: 0x03;
+                      #endif
+                      BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+                      BKCA_16_REG = 0x02;//[7:0]hdcp 2.2 rxcaps[23:16]
+                      BKCA_2A_REG |= 0x0f;//[3:0]hdcp22_cp_irq_int_en
+                  }
+              
+                  if(ucOpt == NO_HDCP)
+                  {
+                      Drv_System_IntSet(IRQ_RXHDCP1X_INT,OFF);//
+                      Drv_System_IntSet(IRQ_RXHDCP2X_INT,OFF);//  
+                      BKF1_C4_REG &= BIT3_0;//[3]rgd_dprx_h1_rpt_bit: 0-dis
+                      BKF1_C4_REG &= BIT0_0;//[0]dprx hdcp13 enable, 1-en, 0-dis
+                      BKCA_14_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x02; repeater mode: 0x03;
+                      BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+                      BKCA_16_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[23:16]
+                  }
+                  #else
+                  BKC9_06_REG &= BIT2_0;//hdcp dpcd reset
+                  ucOpt = NO_HDCP;
+                  #endif
+              
+                  #endif
+  81   1      
+  82   1          #if RX_PORT_SIGN == HDMI_PORT
+  83   1          
+  84   1          #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+  85   1          BKCC_35_REG |= 0x80;//[7:4]hdmirx hdcp ecc error check after decrypt some frame.
+  86   1      
+  87   1          BKCA_01_REG &= BIT2_0;//[2]rgd_gen_km_prim: 0-hw
+  88   1          BKCA_23_REG = 0x80;//rgd_rx_avmute_vs_cnt
+  89   1          BKCA_2E_REG |= BIT7_1;//[7]rgd_rx_key_load_sel: 1-I2C
+  90   1          BKCA_2E_REG &= BIT4_0;//[4]hdcp22 rx mode select, 1-dp mode, 0-hdmi mode
+  91   1          Ocm_Delay1ms(2);
+  92   1          if ((BKCA_80_REG & 0x03) != 0x03)
+  93   1          {
+  94   2              printLT(PRINT_PRIO_HIG, "\nHdcp key invalid");
+  95   2              return;
+  96   2          }
+  97   1      
+  98   1          BKCC_00_REG &= BIT1_0;//[1]0-hdcp decode output, 1-bypass hdcp (hdmirx decode output).
+  99   1          BKCC_15_REG |= BIT7_1;//must set1, = 0 will cause 4096X2160 24HZ issue
+ 100   1      
+ 101   1          if (ucOpt & HDCP1X)
+ 102   1          {
+ 103   2              #if HDMIRX_HDCP_REPEATER == ENABLED
+                      BKCA_00_REG &= BIT2_0;//[2]rx_only: 0-dis
+                      BKCA_00_REG |= BIT4_1;//[4]rgd_hdcp_rpt: 1-en
+                      #else
+ 107   2              BKCA_00_REG |= BIT2_1;//[2]rx_only: 1-en
+ 108   2              BKCA_00_REG &= BIT4_0;//[4]rgd_hdcp_rpt: 1-en
+ 109   2              #endif
+ 110   2              BKCA_00_REG &= BIT1_0;//[1]ddc_h2_hdcp_en: 1-en
+ 111   2              BKCA_0A_REG |= BIT0_1;//[0]enc_dis_at_err: 1-enc dis(HDCP1.4)
+ 112   2          }
+ 113   1          if (ucOpt & HDCP2X)
+ 114   1          {
+ 115   2              BKCA_00_REG |= BIT1_1;//[1]ddc_h2_hdcp_en: 1-en
+C51 COMPILER V9.53.0.0   DRVHDCPRX                                                         02/13/2025 10:14:17 PAGE 3   
+
+ 116   2              BKCA_11_REG |= 0x01;//[7]rgd_enc_dis_at_err: 1-enc dis(HDCP2.3)
+ 117   2                                  //[0]hdcp2.2 RX cipher enable: 1-en
+ 118   2              BKCA_11_REG |= BIT7_1;
+ 119   2              #if HDMIRX_HDCP_REPEATER == ENABLED
+                      BKCA_12_REG &= BIT2_0;//[2]rgd_h2_rpt_rdy_sel: 0-repeater
+                      BKCA_14_REG = 0x01;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x00; repeater mode: 0x01;
+                      #else
+ 123   2              BKCA_12_REG |= BIT2_1;//[2]rgd_h2_rpt_rdy_sel: 1-rx only mode
+ 124   2              BKCA_14_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x00; repeater mode: 0x01;
+ 125   2              #endif
+ 126   2              BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+ 127   2              BKCA_16_REG = 0x02;//[7:0]hdcp 2.2 rxcaps[23:16]
+ 128   2          }
+ 129   1      
+ 130   1          if(ucOpt == NO_HDCP)
+ 131   1          {
+ 132   2              BKCA_06_REG &= 0x3f;//[7]hdcp_auto_ctrl_en; [6]dis_hdcp_dev_auto_en;
+ 133   2              BKCA_06_REG |= BIT5_1;//[5]dis_hdcp_dev;
+ 134   2      
+ 135   2              BKCA_11_REG &= BIT0_0;//[0]hdcp2.2 rx cipher enable: 0-dis
+ 136   2              BKCA_00_REG &= BIT1_0;//[1]ddc_h2_hdcp_en: 0-dis
+ 137   2              BKCA_00_REG &= BIT2_0;//[2]rx_only: 1-en
+ 138   2      
+ 139   2              BKCA_14_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[07:00],rx mode: 0x00; repeater mode: 0x01;
+ 140   2              BKCA_15_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[15:08]
+ 141   2              BKCA_16_REG = 0x00;//[7:0]hdcp 2.2 rxcaps[23:16]
+ 142   2          }
+ 143   1          #else
+                  BKC9_06_REG &= BIT2_0;//hdcp dpcd reset
+                  ucOpt = NO_HDCP;
+                  #endif
+ 147   1      
+ 148   1          #endif
+ 149   1      }
+ 150          
+ 151          //===========================================
+ 152          //  func: hdcp decoder init
+ 153          // input: void
+ 154          //output: N/A
+ 155          //return: dp rx hdcp version
+ 156          //  Info: N/A
+ 157          //===========================================
+ 158          u8 Drv_HdcpRx_VerGet(void)
+ 159          {
+ 160   1          #if RX_PORT_SIGN == DP_PORT
+              
+                  #if DPRX_HDCP_DEC_MODE != NO_HDCP
+                  #if DPRX_HDCP_REPEATER == DISABLED
+                  if (BKF1_FD_REG & BIT7_1)//[7]hdcp 1.3
+                  {
+                      return HDCP1X;
+                  }
+                  else if (BKCA_B3_REG & BIT0_1)//[0]hdcp 2.2
+                  {
+                      return HDCP2X;
+                  }
+                  else
+                  #endif
+                  #if DPRX_HDCP_REPEATER == ENABLED
+                  if (BKF1_FE_REG & BIT5_1)//[5]hdcp repeater 1.3
+                  {
+                      return HDCP1X;
+C51 COMPILER V9.53.0.0   DRVHDCPRX                                                         02/13/2025 10:14:17 PAGE 4   
+
+                  }
+                  else if (BKCA_B3_REG & BIT1_1)//[1]hdcp repeater 2.2
+                  {
+                      return HDCP2X;
+                  }
+                  else
+                  #endif
+                  #endif
+                  {
+                      return NO_HDCP;
+                  }
+              
+                  #endif
+ 191   1      
+ 192   1          #if RX_PORT_SIGN == HDMI_PORT
+ 193   1      
+ 194   1          #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+ 195   1          if (BKCA_84_REG & BIT0_1)//hdcp1.3
+ 196   1          {
+ 197   2              return HDCP1X;
+ 198   2          }
+ 199   1          else if (BKCA_B3_REG & BIT0_1)//hdcp2.2
+ 200   1          {
+ 201   2              return HDCP2X;
+ 202   2          }
+ 203   1          else
+ 204   1          #endif
+ 205   1          {
+ 206   2              return NO_HDCP;
+ 207   2          }
+ 208   1      
+ 209   1          #endif
+ 210   1      }
+ 211          
+ 212          void Drv_HdcpRx_StateClear(void)
+ 213          {
+ 214   1          #if RX_PORT_SIGN == DP_PORT
+                  #if DPRX_HDCP_DEC_MODE != NO_HDCP
+                  u8 ucHDCP13 = 0;
+                  //bit6 rgd_dprx_hdcp13_sw_dec_rst_n
+                  //bit5 rgd_dprx_hdcp13_prtc_rst_n
+                  //bit4 rgd_dprx_hdcp13_dpcd_rst_n
+                  ucHDCP13 = BKF1_B1_REG;
+                  BKF1_B1_REG &= 0x8F;//HDCP1.3 State Clear
+                  BKF1_B1_REG = ucHDCP13;//HDCP1.3 State Clear
+                  //bit3 HDCPRX protocol control logic soft reset  -----Important
+                  //bit1 rgd_hdcprx_dp_dec_rst_n
+                  //bit0 rgd_hdcprx_dp_dpcd_rst_n
+                  BKC9_06_REG &= 0x37;
+                  BKC9_06_REG |= 0xc8;
+                  #endif
+                  #endif
+ 230   1      
+ 231   1          #if RX_PORT_SIGN == HDMI_PORT
+ 232   1          #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+ 233   1          BKCA_11_REG |= BIT6_1;//[6]rgd_re_auth_pls_pix;
+ 234   1          Ocm_Delay1us(20);//necessary for run hdcp logic reset
+ 235   1          BKCA_11_REG &= BIT6_0;
+ 236   1      
+ 237   1          BKCA_00_REG &= BIT0_0;//[0]rgd_hdcp_auto_ctrl_en;
+ 238   1          BKCA_01_REG |= BIT6_1;
+ 239   1          Ocm_Delay1us(20);//necessary for run hdcp logic reset
+C51 COMPILER V9.53.0.0   DRVHDCPRX                                                         02/13/2025 10:14:17 PAGE 5   
+
+ 240   1          BKCA_01_REG &= BIT6_0;//[6]rgd_abort_rx_auth;
+ 241   1          BKCA_00_REG |= BIT0_1;//[0]rgd_hdcp_auto_ctrl_en;
+ 242   1          #endif
+ 243   1          #endif
+ 244   1      }
+ 245          
+ 246          void Drv_HdcpRx_ReauthHdcpStateClr(void)
+ 247          {
+ 248   1          #ifdef NVIDIA_FW_EN
+                  if((BKCA_B0_REG & BIT2_1))//[2]h2_hdmirx_re_auth_flag
+                  {
+                      /*
+                      ‘⁄ø™ ºŒ’ ÷µƒ ±∫Ú£¨”– ±∫Útmds ±÷”≤ªŒ»∂®£¨≤…≤ªµΩ”≤º˛re_auth_tmds–≈∫≈µƒ…œ…˝—ÿ£¨
+                      À˘“‘–Ë“™‘⁄∫Û√Ê≈‰ºƒ¥Ê∆˜rgd_re_auth_pls_pxl ÷∂Ø‘Ÿ«Â“ªœ¬°£”…”⁄”≤º˛µƒre_auth_tmdsª·Œ¨≥÷“ª∂Œ ±º‰∏ﬂµÁ∆Ω£
+             -¨
+                      »Áπ˚‘⁄’‚∂Œ ±º‰rgd_re_auth_pls_pxl“≤ «Œﬁ∑®≤˙…˙”––ß—ÿ»•«ÂµÙHDCP◊¥Ã¨µƒ£¨
+                      À˘“‘‘⁄»Ìº˛‘⁄ºÏ≤‚µΩ÷ÿ–¬Œ’ ÷÷Æ∫Û£¨≈‰Drv_HdcpRx_StateClear÷Æ«∞º”∏ˆ—”≥Ÿ «”–±ÿ“™µƒ
+                      */
+                      Ocm_Delay1ms(10);
+                      Drv_HdcpRx_StateClear();//hdcp state clr
+                      /*
+                      Drv_HdcpRx_StateClear÷Æ∫Ûº”—”≥Ÿ”–◊˜”√£¨
+                      ø…“‘»√»Ìº˛‘⁄HDCP≥ˆ¥Ì÷°…ŸΩ¯––∆‰À˚≤Ÿ◊˜≤˙…˙µƒ”∞œÏ£¨±»»Ácolor space≈–∂œµ»
+                      */
+                      Ocm_Delay1ms(5);
+                      BKCA_1A_REG |= BIT6_1;//[6]rgd_h2_rx_reauth_req_clr: 1-en
+                      BKCA_1A_REG &= BIT6_0;//[6]rgd_h2_rx_reauth_req_clr: 0-dis
+                  }
+                  #endif
+ 268   1      }
+ 269          
+ 270          void Drv_HdcpRx_SoftAvmuteEn(u8 ucOpt)
+ 271          {
+ 272   1          #if RX_PORT_SIGN == DP_PORT
+              
+                  ucOpt = DISABLED;
+              
+                  #endif
+ 277   1      
+ 278   1          #if RX_PORT_SIGN == HDMI_PORT
+ 279   1          #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+ 280   1      
+ 281   1          if (ucOpt == ENABLED)
+ 282   1          {
+ 283   2              BKCA_13_REG |= BIT7_1;//[7]hdcp2.3 rgd_avmute_soft_mode: 1-en
+ 284   2              BKCA_06_REG |= BIT2_1;//[2]hdcp1.3 soft_avmute_ctrl: 1-en
+ 285   2          }
+ 286   1          else
+ 287   1          {
+ 288   2              BKCA_13_REG &= BIT7_0;//[7]hdcp2.3 rgd_avmute_soft_mode: 0-dis
+ 289   2              BKCA_06_REG &= BIT2_0;//[2]hdcp1.3 soft_avmute_ctrl: 0-dis
+ 290   2          }
+ 291   1      
+ 292   1          #endif
+ 293   1          #endif
+ 294   1      }
+ 295          #if RX_PORT_SIGN == DP_PORT
+              #if (DPRX_HDCP_DEC_MODE != NO_HDCP)
+              //False: No Int
+              //True: INT
+              u8 Drv_Hdcp13_IntGet(void)
+              {
+C51 COMPILER V9.53.0.0   DRVHDCPRX                                                         02/13/2025 10:14:17 PAGE 6   
+
+                  if(BKE5_40_REG & BIT3_1)//dp hdcp1.3 rx int
+                  {
+                      BKE5_30_REG |= BIT3_1;//[1]dp rx int clr en
+                      BKE5_30_REG &= BIT3_0;//[1]dp rx int clr dis
+                      if((BKF1_A7_REG & BIT3_1) == 0x00)//HDCP13 INT DIS
+                      {
+                          return FALSE;
+                      }
+                      if(BKF1_DC_REG & 0x06)//[2]dprx hdcp13 v ready, [1]dprx hdcp13 link intergrity check failure
+                      {
+                          return TRUE;
+                      }
+                  }
+                  return FALSE;
+              }
+              u8 Drv_Hdcp2X_IntGet(void)
+              {
+                  if(BKE5_41_REG & BIT7_1)//dprx hdcp22 interrupt flag
+                  {
+                      BKE5_31_REG |= BIT7_1;//[6]hdcp rx int clr en
+                      BKE5_31_REG &= BIT7_0;//[6]hdcp rx int clr dis
+                      if((BKCA_2A_REG & 0x0f) != 0x0f)
+                      {
+                          return FALSE;
+                      }
+                      if (BKCA_B4_REG & 0xf0)//[7:4]link fail/ekhkm ready/H ready/V ready flag
+                      {
+                          return TRUE;
+                      }
+                  }  
+                  return FALSE;
+              }
+              #endif
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    323    ----
+   CONSTANT SIZE    =     18    ----
+   XDATA SIZE       =   ----       1
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

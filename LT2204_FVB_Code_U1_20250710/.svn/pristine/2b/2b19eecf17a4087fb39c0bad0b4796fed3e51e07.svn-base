@@ -1,0 +1,391 @@
+//////////////////////////////////////
+//Project:   LT2204
+//Filename:  Lt8711gxe.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+#if CHIP_SEL == LT8711GXE
+
+//========================================================================
+// Func Name   : LT8711GXE_PowerOnInit
+// Description : The initialization at power on
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void LT8711GXE_PowerOnInit(void)
+{
+    #if TYPECRX_EN == ENABLED
+    Mod_CC1Vari_Init();
+    Mod_CC2Vari_Init();
+    #endif
+    Mod_DpRx_PowerOnInit();
+    Mod_HdmiTx_PowerOnInit();
+    Drv_Sys_DecPowerDomain(TRUE);
+    Drv_Sys_EncPowerDomain(TRUE);
+    Drv_Sys_LmtxPowerDomain(TRUE);
+}
+
+
+void LT8711GXE_DpRxVarInit(void)
+{
+    g_stDpRx.ucRxMaxLinkRate  = DPRX_LINK_RATE;
+//    g_stDpRx.ucRxMaxLaneCount = DPRX_LANE_COUNT;
+    g_stDpRx.b1Ssc_Support    = DPRX_SSC_SUPPORT_EN;
+    g_stDpRx.b1Tps3_Support   = DPRX_TPS3_SUPPORT_EN;
+    g_stDpRx.b1Tps4_Support   = DPRX_TPS4_SUPPORT_EN;
+    memset(&g_stAuxStatus,0x00,sizeof(AuxStatus_S));
+    #if DPRX_MST_MODE_EN == ENABLED
+    memset(&g_stMstRxStatus, 0, sizeof(MstRxStatus_S));
+    g_stMstRxStatus.payload_update = 1;
+    g_stMstRxStatus.payload_clear  = 1;//payload_update and payload_clear set to 1, is clear vc playload id
+    g_stMstRxStatus.sink_cnt       = DPRX_MST_SINK_CNT;
+    g_stAuxStatus.FecFlag = 0x00;
+    #endif
+}
+
+void LT8711GXE_HdmiTxVarInit(void)
+{
+
+    ;
+
+}
+
+void LT8711GXE_CCGpioInit(void)
+{
+    #if TYPECRX_EN == ENABLED
+    
+    UCCStatus.b1UCcInput_type = Drv_GetIO_State(GPIO28_SD1B);//male or female GPIO28
+    
+    if(Drv_GetIO_State(GPIO19_SD0A_VSYNC) == HIGH)
+    {
+        UCCStatus.uclaneCount = FOUR_LANE;
+    }
+    else
+    {
+        UCCStatus.uclaneCount = TWO_LANE;
+    }
+    g_stDpRx.ucRxMaxLaneCount = UCCStatus.uclaneCount;
+    printLT(PRINT_PRIO_HIG,"\nFEMALE = 0x%02bx",UCCStatus.b1UCcInput_type);
+    Drv_Gpio_ModeSet(GPIO19_SD0A_VSYNC, OUT_PP_1x|PD_100K, VOL_3_3);
+    DISCSOURCE_GPIO_CTRL(LOW);
+
+    Drv_Gpio_ModeSet(GPIO28_SD1B, OUT_PP_1x|PD_100K, VOL_3_3);
+    DISCADAPTER_GPIO_CTRL(LOW);
+    
+    Drv_Gpio_ModeSet(GPIO26_SD3B, OUT_PP_1x|PD_100K, VOL_3_3);
+    SOURCE_GPIO_CTRL(LOW);
+
+    Drv_Gpio_ModeSet(GPIO27_SD2B, OUT_PP_1x|PD_100K, VOL_3_3);
+    ADAPTER_GPIO_CTRL(LOW);
+	
+	Drv_Gpio_ModeSet(GPIO17_SCLKA, OUT_PP_1x|PD_100K, VOL_3_3);
+	Drv_Gpio_ModeSet(GPIO18_WSA, OUT_PP_1x|PD_100K, VOL_3_3);
+	Mod_CC1Vconn_Off();
+    #else
+    if(Drv_GetIO_State(GPIO19_SD0A_VSYNC) == HIGH)
+	{
+		g_stDpRx.ucRxMaxLaneCount = FOUR_LANE;
+	}
+	else
+	{
+		g_stDpRx.ucRxMaxLaneCount = TWO_LANE;
+	}
+    #endif 
+
+}
+
+void LT8711GXE_DpRxDpOrTypecDet(void)
+{
+    #if TYPECRX_EN == ENABLED
+    if((BKFC_2F_REG&BIT5_1)||(BKFC_30_REG&0xf0)||(BKFC_AF_REG&BIT5_1)||(BKFC_B0_REG&0xf0)) 
+    {
+        g_stDpRx.b1Input_Type_Sel = TYPEC_INTF;
+        printLT(PRINT_PRIO_HIG,"\nTypeC Interface");
+    }
+    else
+    #endif
+    {
+        g_stDpRx.b1Input_Type_Sel = DP_INTF;
+        printLT(PRINT_PRIO_HIG,"\nDp Interface");
+    }
+}
+
+void LT8711GXE_DpRxAudioInfoCvt(void)
+{
+    AudioChlInfo_S stInfo;
+    Drv_DpRx_AudioInfoGet(&stInfo);
+    Mod_Audio_HdmiTxInfoCvt(&stInfo,&g_stHdmiTx);
+}
+
+void LT8711GXE_DpRxColorInfoCvt(void)
+{
+    ColorInfo_S stInfo;
+    LtTiming_S  stRxTimingInfo; 
+    Drv_DpRx_VidColorInfoGet(&stInfo);
+    Drv_DpRx_RxTimingGet(&stRxTimingInfo);
+    #if DPRX_DSC_DEC_SUPPORT == ENABLED
+    if (Drv_DpRxDscDec_SwitchGet() == ENABLED)
+    {
+        Drv_DpRxDscDec_ColorInfoGet(&stInfo);
+    }
+    #endif
+    #if DPRX_DSC_BYPASS_SUPPORT == ENABLED
+    if (Drv_DpRxDscBy_SwitchGet() == ENABLED)
+    {
+        Drv_DpRxDscBy_ColorInfoGet(&stInfo);
+    }
+    #endif
+	Mod_DpRx_FrameRate_Get(&stRxTimingInfo);
+    Mod_HdmiTx_ColorSpaceCal(&stInfo,&g_stHdmiTx);
+    Mod_HdmiTx_ColorRangeCal(&stInfo,&g_stHdmiTx);
+    Mod_HdmiTx_ColorimetryCal(&stInfo,&g_stHdmiTx);
+    Mod_HdmiTx_AspectRatioCal(&g_stHdmiTx);
+    Mod_HdmiTx_VicCal(&stRxTimingInfo,&g_stHdmiTx);
+    Mod_HdmiTx_ColorDepthCal(&stInfo,&g_stHdmiTx); 
+
+}
+
+void LT8711GXE_DpRxColorrimetry(void)
+{
+    ColorInfo_S stInfo;
+    Drv_DpRx_VidColorInfoGet(&stInfo);
+    Mod_HdmiTx_ColorimetryCal(&stInfo,&g_stHdmiTx);
+}
+
+void LT8711GXE_DpRxToTx_ClkCal(void)
+{
+    u8 ucTxPixelEncoding;
+    g_stHdmiTx.ulTxPixelClk        = g_stDpRx.ulRxPixelClk;
+    g_stHdmiTx.ulTxTmdsClk         = g_stDpRx.ulRxPeakClk;
+    ucTxPixelEncoding              = g_stDpRx.ucPixelEncoding;
+    #if DPRX_DSC_DEC_SUPPORT == ENABLED
+    if((ucTxPixelEncoding == YCbCr422_1)&&(Drv_DpRxDscDec_ColorSpaceGet() != SIMPLE422_5))
+    #else
+    if(ucTxPixelEncoding == YCbCr422_1)
+    #endif
+    {
+        g_stHdmiTx.ulTxTmdsClk = g_stDpRx.ulRxPixelClk;
+    } 
+}
+void LT8711GXE_DpRxCscOrEncSel(void)
+{
+    g_stDpRx.b1CscRxEnable = DISABLED;
+
+    g_stHdmiTx.b1EncodeEn = DISABLED;
+    if (g_stHdmiTx.ulTxTmdsClk > Mod_HdmiTx_LinkBandWidthGet())
+    {
+        #if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT
+        #if HDMITX_DSC_ENC_SUPPORT == ENABLED
+        if((g_stHdmiEdidInfo.ucMaxFrlRate > 0)&&(g_stHdmiEdidInfo.b1Scdc_Present == TRUE))
+        {
+            #if HDMITX_DSC_ENC_SUPPORT == ENABLED
+            if((g_stHdmiEdidInfo.ucMaxDscSlice != 0)&&(g_stHdmiEdidInfo.ucMaxFrlDscRate != FRL_NOT_SPT))
+            {
+                if (Mod_HdmiTx_DscEncEnableJudge() == ENABLED)
+                {
+                    g_stHdmiTx.b1EncodeEn = ENABLED;
+                    printLT(PRINT_PRIO_HIG, "\nHdmiTx encode enable");
+                }
+            }
+            #endif
+        }
+        else
+        #endif
+        #endif
+        {
+            if (g_stHdmiTx.ucColorDepth >= DEEP_10BIT)
+            {
+                g_stHdmiTx.ucColorDepth = DEEP_8BIT;
+                g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+                printLT(PRINT_PRIO_HIG, "\nHdmix 8bit Out");
+                if (g_stHdmiTx.ulTxTmdsClk > Mod_HdmiTx_LinkBandWidthGet())//in case of over bandwidth
+                {
+                    ;
+                }
+                else
+                {
+                    return;
+                }
+            }
+        }
+
+        #if CSC_SUPPORT == ENABLED
+        if ((g_stHdmiTx.b1EncodeEn == DISABLED)&&(g_stHdmiTx.ucTxPixelEncoding != YCbCr420_3))
+        {
+            g_stDpRx.b1CscRxEnable    = ENABLED;
+            g_stDpRx.b1CscRxOutFormat = YCbCr420_3;
+            g_stHdmiTx.ulTxPixelClk >>= 1;
+            g_stHdmiTx.ulTxTmdsClk  >>= 1;
+            printLT(PRINT_PRIO_HIG, "\nHdmiTx Csc enable");
+        }
+        #endif
+    }
+}
+
+#if CSC_SUPPORT == ENABLED
+void LT8711GXE_DpRxCscCvt(void)
+{
+    if(g_stDpRx.b1CscRxEnable == ENABLED)
+    {
+        if((g_stDpRx.ucPixelEncoding == RGB_0)||(g_stDpRx.ucPixelEncoding == RGB_WIDE_4))
+        {
+            g_stDpRx.b1CscRxOutRange = FULL_RANGE;
+        }
+        else
+        {
+            g_stDpRx.b1CscRxOutRange = LIMIT_RANGE;
+        }
+        Drv_CscRx_RxtoTx(&g_stDpRx,&g_stHdmiTx);
+    }
+}
+#endif
+
+
+void LT8711GXE_DpRxMsgNotify(u8 ucEvent)
+{
+    switch(ucEvent)
+    {
+        case DPRX_SOURECE_PLUG_EVENT:
+            g_stHdmiTx.b1UpstreamDeviceReady = TRUE;
+            break;
+
+        case DPRX_SOURECE_UNPLUG_EVENT:
+            Drv_System_IntSet(IRQ_DPRX_AUX_INT, OFF);
+            Drv_System_IntClr(IRQ_DPRX_AUX_INT);
+            g_stHdmiTx.b1UpstreamDeviceReady = FALSE;
+            break;
+
+        case DPRX_VIDEO_ON_EVENT:
+            Mod_DpRx_PeakClkCal();
+            Mod_DpRx_InfoDisplay();
+            LT8711GXE_DpRxToTx_ClkCal();
+            LT8711GXE_DpRxColorInfoCvt();
+            LT8711GXE_DpRxCscOrEncSel();       
+            #if CSC_SUPPORT == ENABLED
+            LT8711GXE_DpRxCscCvt();
+            #endif
+            #if DPRX_DSC_BYPASS_SUPPORT == ENABLED
+            if (Drv_DpRxDscBy_SwitchGet() == ENABLED)
+            {
+                g_stHdmiTx.b1SrcDscByEn = ENABLED;
+            }
+            else
+            {
+                 g_stHdmiTx.b1SrcDscByEn = DISABLED;
+            }
+            #endif
+            g_stHdmiTx.b1UpstreamVideoReady = TRUE;
+            break;
+
+        case DPRX_VIDEO_OFF_EVENT:
+            Drv_DpRx_SyncPolSet(DISABLED);
+            Drv_Sys_DecPowerDomain(TRUE);
+            Drv_Sys_EncPowerDomain(TRUE);
+            #if CSC_SUPPORT == ENABLED
+            Drv_CscRx_Init();
+            #endif
+            g_stHdmiTx.b1UpstreamVideoReady = FALSE;
+            break;
+
+        case DPRX_HDCP_VER_CHG_EVENT:
+//            g_stHdmiTx.ucHdcpRxVerChg = TRUE;
+//            g_stHdmiTx.ucHdcpRxVersion = Drv_HdcpRx_VerGet();
+            break;
+        
+        case DPRX_COLORINFO_CHG_EVENT:
+            break;
+        case DPRX_TIMING_CHG_EVENT:
+            break;
+        case DPRX_PACKET_CHG_EVENT:
+            break;
+        case DPRX_VRR_NOTIFY_EVENT:
+            #if ((DPRX_ADAPTIVE_SYNC == ENABLED)&&(HDMITX_VRR_SUPPORT == ENABLED))
+            g_stHdmiTx.b1SrcVrrEn  = g_stDpRx.b1AdaptiveSyncEn;
+            g_stHdmiTx.b1SrcVrrChg = TRUE;
+            #endif
+            break;
+        case DPRX_STATIC_HDR_NOTIFY_EVENT:
+            g_stHdmiTx.b1SrcStaticHdrEn  = g_stDpRx.b1HdrEn;
+            g_stHdmiTx.b1SrcStaticHdrChg = TRUE;
+            break;
+        case DPRX_DOBLY_HDR_NOTIFY_EVENT:
+            g_stHdmiTx.b1SrcDoblyHdrEn  = g_stDpRx.b1HdrEn;
+//            g_stHdmiTx.b1SrcDoblyHdrEn = TRUE;
+            g_stHdmiTx.b1SrcDoblyHdrChg = TRUE;
+            break;
+        case DPRX_DYNAMIC_HDR_NOTIFY_EVENT:
+            g_stHdmiTx.b1SrcDynamicHdrEn  = g_stDpRx.b1HdrEn;
+//            g_stHdmiTx.b1SrcDynamicHdrEn = TRUE;
+            g_stHdmiTx.b1SrcDynamicHdrChg = TRUE;
+            break;
+        case DPRX_AUDIO_CHG_EVENT:
+            LT8711GXE_DpRxAudioInfoCvt();
+            g_stHdmiTx.b1AudioInfoChg = TRUE;
+            break;
+
+        case DPRX_FEC_NOTIFY_EVENT:
+            break;   
+        case DPRX_COLORRIMETRY_CHG_EVENT:
+            LT8711GXE_DpRxColorrimetry();
+            break;
+        default:
+            break;
+    }
+}
+
+void LT8711GXE_HdmiTxMsgNotify(u8 ucEvent)
+{
+    switch(ucEvent)
+    {
+        case HDMITX_SINK_PLUG_EVENT:
+            break;
+
+        case HDMITX_SINK_UNPLUG_EVENT:
+            Drv_System_IntSet(IRQ_DPRX_AUX_INT, OFF);
+            Drv_System_IntClr(IRQ_DPRX_AUX_INT);
+            g_stDpRx.b1DownstreamDeviceReady = FALSE;
+            break;
+
+        case HDMITX_EDID_VALID_EVENT:
+        case HDMITX_EDID_INVALID_EVENT:    
+            Mod_Edid_Update(szEdidData);
+            
+            g_stDpRx.b1DownstreamDeviceReady = TRUE;
+            break;
+        case HDMITX_VIDEOOFF_EVENT:
+            g_stDpRx.b1HdrEn = DISABLED;
+            Drv_System_IntClr(IRQ_DPRX_STATICHDR_INT);
+            Drv_System_IntClr(IRQ_DPRX_DYNAMICHDR_INT);
+            Drv_System_IntClr(IRQ_DPRX_VSI_INT);
+            Mod_DpRx_MsgNotify(DPRX_STATIC_HDR_NOTIFY_EVENT);
+            Mod_DpRx_MsgNotify(DPRX_DYNAMIC_HDR_NOTIFY_EVENT);
+            Mod_DpRx_MsgNotify(DPRX_DOBLY_HDR_NOTIFY_EVENT);
+            break;
+        default:
+            break;
+    }
+}
+
+//========================================================================
+// Func Name   : LT8711GXE_Main_Scan
+// Description : the main loop for LT8711GXE
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void LT8711GXE_Main_Scan(void)
+{
+    #if TYPECRX_EN == ENABLED
+    Mod_CC1Rx_Loop();
+    #endif
+    //rx handler
+    Mod_DpRx_Handler();
+
+    //tx handler
+    Mod_HdmiTx_Handler();
+}
+
+#endif

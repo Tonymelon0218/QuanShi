@@ -1,0 +1,910 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: FrlTx.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.07.20
+/******************************************************************************/
+
+
+//=====================================================
+//Lt(n)_PNT_req have this val:
+//01 02 03 04: for cts test ptn
+//05 06 07 08: for frl rx training ptn
+//ee ee ee ee: ffe change ptn
+//ff ff ff ff: ffe failed ptn
+//=====================================================
+#include "include.h"
+
+#if TX_PORT_SIGN == HDMI_PORT
+#if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT
+
+HdmiTxFrlInfo_S g_stFrlTxInfo;
+
+#if HDMITX_CTS_SUPPORT == ENABLED
+
+u8 code szFrlNoFfe[4] = {0x00,0x01,0xa0,0x00};
+
+u8 code szFrlDeEmphasis[4][4]=
+{
+    {0x00,0x01,0x98,0x86},    
+    {0x00,0x01,0x90,0x90},   
+    {0x00,0x01,0x88,0x98},    
+    {0x00,0x01,0x80,0xa0},  
+};
+
+u8 code szFrlPreShoot[4][4]=
+{
+    {0x90,0x01,0x98,0x00},    
+    {0xa0,0x01,0x90,0x00},   
+    {0xb0,0x01,0x88,0x00},    
+    {0xc0,0x01,0x80,0x00},  
+};
+
+u8 code szFrlNormal[4][4]=
+{
+    {0x9b,0x01,0x80,0x94},    
+    {0x9b,0x01,0x78,0x9b},   
+    {0x9b,0x01,0x71,0xa1},    
+    {0x9b,0x01,0x6b,0xa8},   
+};
+
+void Mod_FrlTx_Noffe(void)
+{
+    BKA1_5B_REG = 0x22; //tx pre enable /tx tap_main enable  /tx  post enable
+    BKA1_5C_REG = 0x22; ////tx pre enable /tx tap_main enable /tx  post enable
+
+    memcpy(&BKA1_6F_REG,&szFrlNoFfe[0],4); 
+    memcpy(&BKA1_73_REG,&szFrlNoFfe[0],4); 
+    memcpy(&BKA1_77_REG,&szFrlNoFfe[0],4); 
+    memcpy(&BKA1_7B_REG,&szFrlNoFfe[0],4); 
+}
+
+void Mod_FrlTx_DeEmphasis(u8 ucFfeValue,ucOpt)
+{
+    BKA1_5B_REG = 0x33; //tx pre enable /tx tap_main enable  /tx  post enable
+    BKA1_5C_REG = 0x33; ////tx pre enable /tx tap_main enable /tx  post enable
+    
+    switch(ucOpt)
+    {
+        case LANE_0:
+            memcpy(&BKA1_6F_REG,szFrlDeEmphasis[ucFfeValue],4); 
+            break;
+        case LANE_1:
+             memcpy(&BKA1_73_REG,szFrlDeEmphasis[ucFfeValue],4);
+            break;
+        case LANE_2:
+            memcpy(&BKA1_77_REG,szFrlDeEmphasis[ucFfeValue],4); 
+            break;
+        case LANE_3:
+            memcpy(&BKA1_7B_REG,szFrlDeEmphasis[ucFfeValue],4);  
+            break;
+        default:
+            memcpy(&BKA1_6F_REG,szFrlDeEmphasis[ucFfeValue],4); 
+            memcpy(&BKA1_73_REG,szFrlDeEmphasis[ucFfeValue],4); 
+            memcpy(&BKA1_77_REG,szFrlDeEmphasis[ucFfeValue],4); 
+            memcpy(&BKA1_7B_REG,szFrlDeEmphasis[ucFfeValue],4);  
+        break;
+    }
+
+}
+
+void Mod_FrlTx_PreShoot(u8 ucFfeValue,u8 ucOpt)
+{
+    BKA1_5B_REG = 0x66; //tx pre enable /tx tap_main enable  /tx  post enable
+    BKA1_5C_REG = 0x66; ////tx pre enable /tx tap_main enable /tx  post enable 
+    switch(ucOpt)
+    {
+        case LANE_0:
+            memcpy(&BKA1_6F_REG,szFrlPreShoot[ucFfeValue],4); 
+            break;
+        case LANE_1:
+             memcpy(&BKA1_73_REG,szFrlPreShoot[ucFfeValue],4);
+            break;
+        case LANE_2:
+            memcpy(&BKA1_77_REG,szFrlPreShoot[ucFfeValue],4); 
+            break;
+        case LANE_3:
+            memcpy(&BKA1_7B_REG,szFrlPreShoot[ucFfeValue],4);  
+            break;
+        default:
+            memcpy(&BKA1_6F_REG,szFrlPreShoot[ucFfeValue],4); 
+            memcpy(&BKA1_73_REG,szFrlPreShoot[ucFfeValue],4); 
+            memcpy(&BKA1_77_REG,szFrlPreShoot[ucFfeValue],4); 
+            memcpy(&BKA1_7B_REG,szFrlPreShoot[ucFfeValue],4);  
+        break;
+    }
+}
+
+void Mod_FrlTx_Normal(u8 ucFfeValue,u8 ucOpt)
+{
+    BKA1_5B_REG = 0x77; //tx pre enable /tx tap_main enable  /tx  post enable
+    BKA1_5C_REG = 0x77; ////tx pre enable /tx tap_main enable /tx  post enable
+    switch(ucOpt)
+    {
+        case LANE_0:
+            memcpy(&BKA1_6F_REG,szFrlNormal[ucFfeValue],4); 
+            break;
+        case LANE_1:
+             memcpy(&BKA1_73_REG,szFrlNormal[ucFfeValue],4);
+            break;
+        case LANE_2:
+            memcpy(&BKA1_77_REG,szFrlNormal[ucFfeValue],4); 
+            break;
+        case LANE_3:
+            memcpy(&BKA1_7B_REG,szFrlNormal[ucFfeValue],4);  
+            break;
+        default:
+            memcpy(&BKA1_6F_REG,szFrlNormal[ucFfeValue],4); 
+            memcpy(&BKA1_73_REG,szFrlNormal[ucFfeValue],4); 
+            memcpy(&BKA1_77_REG,szFrlNormal[ucFfeValue],4); 
+            memcpy(&BKA1_7B_REG,szFrlNormal[ucFfeValue],4);  
+        break;
+    }
+}
+void Mod_FrlTx_DeEmphasisUpdateOut(u8 ucConfig)
+{
+    static u8  ucConfig_Old  = 0xff;
+    u8   ucConfig_New;
+    ucConfig_New =    ucConfig;
+    if(ucConfig_New != ucConfig_Old)
+    {
+        switch(ucConfig)
+        {
+             case 0x08:
+                Mod_FrlTx_Noffe();
+                break;
+            case 0x04:
+                Mod_FrlTx_DeEmphasis(g_stFrlTxInfo.szffe_level_lane[0],LANE_0);
+                Mod_FrlTx_DeEmphasis(g_stFrlTxInfo.szffe_level_lane[1],LANE_1);
+                Mod_FrlTx_DeEmphasis(g_stFrlTxInfo.szffe_level_lane[2],LANE_2);
+                Mod_FrlTx_DeEmphasis(g_stFrlTxInfo.szffe_level_lane[3],LANE_3);
+                break;
+            case 0x02:
+                Mod_FrlTx_PreShoot(g_stFrlTxInfo.szffe_level_lane[0],LANE_0);
+                Mod_FrlTx_PreShoot(g_stFrlTxInfo.szffe_level_lane[1],LANE_1);
+                Mod_FrlTx_PreShoot(g_stFrlTxInfo.szffe_level_lane[2],LANE_2);
+                Mod_FrlTx_PreShoot(g_stFrlTxInfo.szffe_level_lane[3],LANE_3);
+                break;
+            default:
+                Mod_FrlTx_Normal(g_stFrlTxInfo.szffe_level_lane[0],LANE_0);
+                Mod_FrlTx_Normal(g_stFrlTxInfo.szffe_level_lane[1],LANE_1);
+                Mod_FrlTx_Normal(g_stFrlTxInfo.szffe_level_lane[2],LANE_2);
+                Mod_FrlTx_Normal(g_stFrlTxInfo.szffe_level_lane[3],LANE_3);
+                break;
+        }
+    }
+    ucConfig_Old = ucConfig_New;
+}
+
+void Mod_FrlTx_DeEmphasisInitOut(u8 ucConfig)
+{
+    switch(ucConfig)
+    {
+        case 0x08:
+            Mod_FrlTx_Noffe();
+            break;
+        case 0x04:
+            Mod_FrlTx_DeEmphasis(0x00,LANE_ALL);
+            break;
+        case 0x02:
+            Mod_FrlTx_PreShoot(0x00,LANE_ALL);
+            break;
+        default:
+            Mod_FrlTx_Normal(0x00,LANE_ALL);
+            break;
+    }
+}
+#endif
+
+
+void Mod_FrlTx_Lane0FfeAdjust(u8 ucConfig)
+{
+    g_stFrlTxInfo.szffe_level_lane[0] += 1;
+    if(g_stFrlTxInfo.szffe_level_lane[0] > 3)
+    {
+        g_stFrlTxInfo.szffe_level_lane[0] = 0;
+    }
+    BKEC_17_REG &= 0xfc;
+    BKEC_17_REG |= (g_stFrlTxInfo.szffe_level_lane[0]);
+    #if HDMITX_CTS_SUPPORT == ENABLED
+    switch(ucConfig)
+    {
+        case 0x08:
+            Mod_FrlTx_Noffe();
+            break;
+        case 0x04:
+            Mod_FrlTx_DeEmphasis(g_stFrlTxInfo.szffe_level_lane[0],LANE_0);
+            break;
+        case 0x02:
+            Mod_FrlTx_PreShoot(g_stFrlTxInfo.szffe_level_lane[0],LANE_0);
+            break;
+        default:
+            Mod_FrlTx_Normal(g_stFrlTxInfo.szffe_level_lane[0],LANE_0);
+            break;
+    }
+    #else
+    ucConfig = 0;
+    #endif
+}
+
+void Mod_FrlTx_Lane1FfeAdjust(u8 ucConfig) //
+{
+    g_stFrlTxInfo.szffe_level_lane[1] += 1;
+    if(g_stFrlTxInfo.szffe_level_lane[1] > 3)
+    {
+        g_stFrlTxInfo.szffe_level_lane[1] = 0;
+    }
+    BKEC_17_REG &= 0xf3;
+    BKEC_17_REG |= (g_stFrlTxInfo.szffe_level_lane[1] << 2);
+    
+    #if HDMITX_CTS_SUPPORT == ENABLED
+    switch(ucConfig)
+    {
+        case 0x08:
+            Mod_FrlTx_Noffe();
+            break;
+        case 0x04:
+            Mod_FrlTx_DeEmphasis(g_stFrlTxInfo.szffe_level_lane[1],LANE_1);
+            break;
+        case 0x02:
+            Mod_FrlTx_PreShoot(g_stFrlTxInfo.szffe_level_lane[1],LANE_1);
+            break;
+        default:
+            Mod_FrlTx_Normal(g_stFrlTxInfo.szffe_level_lane[1],LANE_1);
+            break;
+    }
+    #else
+    ucConfig = 0;
+    #endif
+}
+
+void Mod_FrlTx_Lane2FfeAdjust(u8 ucConfig)
+{
+    g_stFrlTxInfo.szffe_level_lane[2] += 1;
+    if(g_stFrlTxInfo.szffe_level_lane[2] > 3)
+    {
+        g_stFrlTxInfo.szffe_level_lane[2] = 0;
+    }
+    BKEC_17_REG &= 0xcf;
+    BKEC_17_REG |= (g_stFrlTxInfo.szffe_level_lane[2] << 4);
+    
+    #if HDMITX_CTS_SUPPORT == ENABLED
+    switch(ucConfig)
+    {
+        case 0x08:
+            Mod_FrlTx_Noffe();
+            break;
+        case 0x04:
+            Mod_FrlTx_DeEmphasis(g_stFrlTxInfo.szffe_level_lane[2],LANE_2);
+            break;
+        case 0x02:
+            Mod_FrlTx_PreShoot(g_stFrlTxInfo.szffe_level_lane[2],LANE_2);
+            break;
+        default:
+            Mod_FrlTx_Normal(g_stFrlTxInfo.szffe_level_lane[2],LANE_2);
+            break;
+    }
+    #else
+    ucConfig = 0;
+    #endif
+}
+
+void Mod_FrlTx_Lane3FfeAdjust(u8 ucConfig)
+{
+    g_stFrlTxInfo.szffe_level_lane[3] += 1;
+    if(g_stFrlTxInfo.szffe_level_lane[3] > 3)
+    {
+        g_stFrlTxInfo.szffe_level_lane[3] = 0;
+    }
+    BKEC_17_REG &= 0x3f;
+    BKEC_17_REG |= (g_stFrlTxInfo.szffe_level_lane[3] << 6);
+    
+    #if HDMITX_CTS_SUPPORT == ENABLED
+    switch(ucConfig)
+    {
+        case 0x08:
+            Mod_FrlTx_Noffe();
+            break;
+        case 0x04:
+            Mod_FrlTx_DeEmphasis(g_stFrlTxInfo.szffe_level_lane[3],LANE_3);
+            break;
+        case 0x02:
+            Mod_FrlTx_PreShoot(g_stFrlTxInfo.szffe_level_lane[3],LANE_3);
+            break;
+        default:
+            Mod_FrlTx_Normal(g_stFrlTxInfo.szffe_level_lane[3],LANE_3);
+            break;
+    }
+    #else
+    ucConfig = 0;
+    #endif
+}
+
+
+
+u8 Mod_FrlTx_TrainInit(void)
+{
+    memset(&g_stFrlTxInfo.szffe_level_lane[0],0x00,4);
+    
+    g_stFrlTxInfo.ucLaneRate = g_stHdmiEdidInfo.ucMaxFrlRate;
+    #if (HDMITX_DSC_ENC_SUPPORT == ENABLED)
+    if (Drv_HdmiTxDscEnc_SwitchGet() == ENABLED)
+    {
+        g_stFrlTxInfo.ucLaneRate     = g_stHdmiEdidInfo.ucMaxFrlDscRate;
+    }
+    #endif
+    #if (HDMITX_DSC_BYPASS_SUPPORT == ENABLED)
+    if (g_stHdmiTx.b1SrcDscByEn == ENABLED)
+    {
+        g_stFrlTxInfo.ucLaneRate     = g_stHdmiEdidInfo.ucMaxFrlDscRate;
+    }
+    #endif
+    g_stFrlTxInfo.ucLaneCnt  = (g_stFrlTxInfo.ucLaneRate <= 2)? (3) : (4);
+    g_stFrlTxInfo.ucFfeLevel = HDMITX_MAX_FFE_LEVEL;
+    BKEC_0D_REG = 0x00;//[7:4]rg_ffe_level, [3:0]rg_frl_rate
+    BKEC_0D_REG |= (g_stFrlTxInfo.ucFfeLevel << 4);
+    BKEC_0F_REG &= BIT1_0;//[1]LTS_P polling use hardware logic: 0-dis
+
+    BKEC_16_REG |= BIT0_1;//[0]1-soft frl training en: 1-en
+    BKEC_17_REG = 0x00;//[1:0]lane0 ffe lvl; [2:3]lane1 ffe lvl; [4:5]lane2 ffe lvl
+
+    BKEC_29_REG = 0x00;//current state by soft training
+    BKEC_2C_REG |= BIT1_1;//[1]rg_training_done_sel: 1-user define, 0-logic generate
+    BKEC_2C_REG &= BIT2_0;//[2]user defined training done indicated flag, 0-not done
+    Drv_HdmiTx_FrlTxRst(ENABLED);
+    Drv_HdmiTx_RtermCali(TXRTERM_50);
+	if(g_stHdmiEdidInfo.ucMaxFrlRate ||g_stHdmiEdidInfo.ucMaxFrlDscRate)
+	{
+		Drv_HdmiTx_WriteI2CByte(0xa831,0x00);//a831[7:4]ffe lvl, [3:0]frl rate
+		//Drv_HdmiTx_WriteI2CByte(0xa840,0xff);//a831[7:4]ffe lvl, [3:0]frl rate
+	}
+    printLT(PRINT_PRIO_TEST, "\nFrl train init");
+    return TRAINING_PROCESS;
+}
+
+u8 Mod_FrlTx_VersionProc(void)
+{
+    if(Drv_HdmiTx_ReadI2CByte(0xa801) != 0)//a801[7:0]sink version
+    {
+        Drv_HdmiTx_WriteI2CByte(0xa802,0x01);//a802[7:0]source version
+        printLT(PRINT_PRIO_TEST, "\nFrl version Ok");
+        return TRAINING_PROCESS;
+    }
+    else
+    {
+        return TRAINING_WAIT;
+    }
+}
+
+u8 Mod_FrlTx_FltReadyProc(void)
+{
+    u8 ucTemp;
+    ucTemp = Drv_HdmiTx_ReadI2CByte(0xa840);
+    if(ucTemp & BIT6_1)//a840[6]flt_ready: 1-ready, 0-dis
+    {
+        BKEC_0D_REG &= 0xf0;//[7:4]rg_ffe_level, [3:0]rg_frl_rate
+        BKEC_0D_REG |= (g_stFrlTxInfo.ucLaneRate & 0x0f);//[7:4]rg_ffe_level, [3:0]rg_frl_rate
+        BKEC_0F_REG &= BIT1_0;//[1]LTS_P polling use hardware logic: 0-dis
+        BKEC_28_REG = 0x00;//[2]rg_sw_ptn_update: 0-dis; [1]rg_sw_ltsp_en: 0-dis; [0]rg_sw_frl_start_en: 0-dis;
+        BKEC_2A_REG = 0x00;//[7:4]lane1 ptn val; [3:0]lane0 ptn val;
+        BKEC_2B_REG = 0x00;//[7:4]lane3 ptn val; [3:0]lane2 ptn val;
+        BKEC_2C_REG &= BIT2_0;//[2]user defined training done indicated flag
+
+        ucTemp = 0x00;
+        Drv_HdmiTx_WriteI2CByte(0xa830, ucTemp);
+        ucTemp = (g_stFrlTxInfo.ucFfeLevel << 4) | g_stFrlTxInfo.ucLaneRate;
+        Drv_HdmiTx_WriteI2CByte(0xa831, ucTemp);
+        printLT(PRINT_PRIO_TEST, "\nFrl rate set = %bd", g_stFrlTxInfo.ucLaneRate);
+        return TRAINING_PROCESS;
+    }
+    else
+    {
+        return TRAINING_WAIT;
+    }
+}
+
+u8 Mod_FrlTx_TxPllProc(void)
+{
+    Drv_HdmiTx_FrlTxPllCal(g_stFrlTxInfo.ucLaneRate);
+    return TRAINING_PROCESS;
+}
+
+u8 Mod_FrlTx_TxOutProc(void)
+{
+    Drv_HdmiTx_ParaSet(&g_stHdmiTx);
+    Drv_HdmiTx_FrlTxPhySet(g_stFrlTxInfo.ucLaneRate);
+    return TRAINING_PROCESS;   
+}
+
+u8 Mod_FrlTx_LmTxPllProc(void)
+{
+    Drv_HdmiTx_FrlFecLinClkCal(&g_stHdmiTx);
+    return TRAINING_PROCESS;    
+}
+
+//=====================================================
+//Lt(n)_PNT_req have this val:
+//00 00 00 00: for training done 
+//01 02 03 04: for cts test ptn
+//05 06 07 08: for frl rx training ptn
+//ee ee ee ee: ffe change ptn
+//ff ff ff ff: ffe failed ptn
+//=====================================================
+u8 Mod_FrlTx_PatternProc(void)
+{
+    u8 ucTemp;
+    u8 ucTestConfig;
+    u8 ucUpdateFlag;
+    u8 ucA841, ucA842;
+    Ocm_Delay1ms(1);
+    BKEC_29_REG = 0x06;//[2:0]rg_sw_cur_state: LTP3
+    ucTestConfig = Drv_HdmiTx_ReadI2CByte(0xa835);
+    g_stFrlTxInfo.b1NoTimeOutEn = (ucTestConfig & BIT5_1)? (ENABLED):(DISABLED);
+    ucUpdateFlag = Drv_HdmiTx_ReadI2CByte(0xa810);//a810[5]flt_update
+    if(ucUpdateFlag & BIT5_1)
+    { 
+//		if(ucUpdateFlag & BIT0_1)//1114
+//		{
+//			Drv_HdmiTx_WriteI2CByte(0xa810,0x01);//
+//		}
+        BKEC_0E_REG = (g_stFrlTxInfo.b1NoTimeOutEn == ENABLED)? (0x03):(0x00);//no time out enable for cts
+        #if HDMITX_CTS_SUPPORT == ENABLED
+        if(g_stFrlTxInfo.b1NoTimeOutEn == ENABLED)
+        {
+            Mod_FrlTx_DeEmphasisInitOut(ucTestConfig&0x0e);
+        }
+        #endif
+        ucA841 = Drv_HdmiTx_ReadI2CByte(0xA841);//a841[7:4]lane1 ptn; [3:0]lane0 ptn
+        ucA842 = Drv_HdmiTx_ReadI2CByte(0xA842);//a842[7:4]lane3 ptn; [3:0]lane2 ptn
+        printLT(PRINT_PRIO_HIG, "\nScdc_Stauts = 0x%02bx,0x%02bx", ucA841,ucA842);
+		
+//		Drv_HdmiTx_WriteI2CByte(0xa810,ucUpdateFlag);//1114
+        if(g_stFrlTxInfo.ucLaneCnt == 4)
+        {
+            ucTemp = 0x33;
+        }
+        else
+        {
+            ucTemp = 0x03;
+            ucA842 &= 0x0f;// high 4bit clr
+        }
+        if(((ucA841 & 0x0f) < 0x0e) && ((ucA841 & 0xf0) < 0xe0) && ((g_stFrlTxInfo.b1NoTimeOutEn)||(ucA841 != 0x33)))
+        {
+            BKEC_2A_REG = ucA841;
+        }
+        if (((ucA842 & 0x0f) < 0x0e) && ((ucA842 & 0xf0) < 0xe0) && ((g_stFrlTxInfo.b1NoTimeOutEn)||(ucA842 != ucTemp)))
+        {
+            BKEC_2B_REG = ucA842;
+        }
+        
+        if((ucA841 != 0) || (ucA842 != 0))//pattern success
+        {
+            BKEC_28_REG |= BIT2_1;//[2]ptn update by soft training
+            Ocm_Delay1us(100);
+            BKEC_28_REG &= BIT2_0;//[2]ptn update by soft training
+        }
+
+        //pattern 0 process
+        if((ucA841 == 0) && (ucA842 == 0))//pattern success
+        {
+            BKEC_29_REG = 0x05;//
+            BKEC_28_REG |= BIT1_1;//[1]access into ltsp by soft training
+
+            BKEC_28_REG |= BIT2_1;//[2]ptn update by soft training
+            Ocm_Delay1us(100);
+            BKEC_28_REG &= BIT2_0;//[2]ptn update by soft training
+            ucTemp = Drv_HdmiTx_ReadI2CByte(0xa810);//a810[5]flt_update//-wangtt- wait confirm
+            if (ucTemp & BIT5_1)
+            {
+                Drv_HdmiTx_WriteI2CByte(0xa810, ucTemp);//clr flt update
+            }
+            return TRAINING_PROCESS;
+        }
+        //ffe pattern failed, than to reduce frl rate
+        else if((ucA841 == 0xff) && (((g_stFrlTxInfo.ucLaneCnt == 3)&&(ucA842 == 0x0f))||((g_stFrlTxInfo.ucLaneCnt == 4)&&(ucA842 == 0xff))))
+        {
+            memset(&g_stFrlTxInfo.szffe_level_lane[0],0x00,4);
+            BKEC_17_REG = 0x00;           //ffe lvl default
+            g_stFrlTxInfo.ucLaneRate -= 1;//reduce frl rate
+            if(g_stFrlTxInfo.ucLaneRate > 0)
+            {
+                BKEC_29_REG  = 0x07;//[2:0]rg_sw_cur_state: LTP4
+                BKEC_0D_REG &= 0xf0;
+                BKEC_0D_REG |= (g_stFrlTxInfo.ucLaneRate & 0x0f);
+                g_stFrlTxInfo.ucLaneCnt = (g_stFrlTxInfo.ucLaneRate <= 2)? (3) : (4);
+                g_stFrlTxInfo.ucFfeLevel = HDMITX_MAX_FFE_LEVEL;
+                ucTemp = 0x00;
+                Drv_HdmiTx_WriteI2CByte(0xa830,ucTemp);
+                ucTemp = (g_stFrlTxInfo.ucFfeLevel << 4) | g_stFrlTxInfo.ucLaneRate;
+                Drv_HdmiTx_WriteI2CByte(0xa831,ucTemp);
+                ucTemp = Drv_HdmiTx_ReadI2CByte(0xa810);//a810[5]flt_update//-wangtt- wait confirm
+                if (ucTemp & BIT5_1)
+                {
+                    Drv_HdmiTx_WriteI2CByte(0xa810,ucTemp);//clr flt update
+                }
+                return TRAINING_FRL_ADJUST;
+            }
+            else
+            {
+                printLT(PRINT_PRIO_TEST, "\nFrl rate Zero");
+                ucTemp = Drv_HdmiTx_ReadI2CByte(0xa810);//a810[5]flt_update//-wangtt- wait confirm
+                if (ucTemp & BIT5_1)
+                {
+                    Drv_HdmiTx_WriteI2CByte(0xa810,ucTemp);//clr flt update
+                }
+                return TRAINING_FAIL;
+            }
+        }
+        else
+        {
+            if ((ucA841 & 0x0f) == 0x0e)//lane0
+            {
+                Mod_FrlTx_Lane0FfeAdjust(ucTestConfig&0x0e);
+            }
+            if ((ucA841 & 0xf0) == 0xe0)//lane1
+            {
+                Mod_FrlTx_Lane1FfeAdjust(ucTestConfig&0x0e);
+            }
+            if ((ucA842 & 0x0f) == 0x0e)//lane2
+            {
+                Mod_FrlTx_Lane2FfeAdjust(ucTestConfig&0x0e);
+            }
+            if ((g_stFrlTxInfo.ucLaneCnt == 4) && ((ucA842 & 0xf0) == 0xe0)) //lane3
+            {
+                Mod_FrlTx_Lane3FfeAdjust(ucTestConfig&0x0e);
+            }
+            ucTemp = Drv_HdmiTx_ReadI2CByte(0xa810);//a810[5]flt_update//-wangtt- wait confirm
+            if (ucTemp & BIT5_1)
+            {
+                Drv_HdmiTx_WriteI2CByte(0xa810,ucTemp);//clr flt update
+            }
+            return TRAINING_FFE_ADJUST ;
+        }
+    }
+    else
+    {
+        #if HDMITX_CTS_SUPPORT == ENABLED
+        if(g_stFrlTxInfo.b1NoTimeOutEn == ENABLED)
+        {
+            Mod_FrlTx_DeEmphasisUpdateOut(ucTestConfig&0x0e);
+        }
+        #endif
+    }
+    return TRAINING_WAIT;
+}
+
+
+u8 Mod_FrlTx_StartProc(void)  
+{
+    u8 ucTemp;  
+    ucTemp = Drv_HdmiTx_ReadI2CByte(0xa810);//a810[4]flt_start
+    if (ucTemp & BIT4_1)
+    {
+        BKEC_28_REG &= BIT1_0;////[1]access into ltsp by soft training
+        BKEC_28_REG |= BIT0_1;//[0]flt_start
+        BKEC_2C_REG |= BIT2_1;//[2]User defined training done indicated flag
+        Drv_HdmiTx_FrlTxRst(DISABLED);
+        Drv_HdmiTx_WriteI2CByte(0xa810,ucTemp);//clr flt_start
+        printLT(PRINT_PRIO_TEST, "\nFrl start get");
+        return TRAINING_PROCESS;
+    }
+    else if(ucTemp & BIT5_1)
+    {
+		Mod_FrlTx_ParamInit();
+        Mod_FrlTx_SetState(FRL_TRAIN_INIT_1);
+		Drv_HdmiTx_WriteI2CByte(0xa810,ucTemp);
+		Ocm_Delay1ms(100);
+        return TRAINING_WAIT;
+    }
+    else
+    {
+		Drv_HdmiTx_WriteI2CByte(0xa810,ucTemp);//clr flt_start
+        Ocm_Delay1ms(5);
+        return TRAINING_WAIT;
+    }
+}
+
+u8 Mod_FrlTx_FecErrorCheck(void)  
+{
+    u8 ucTemp;
+    u8 ucStatus;
+    u8 ucErr0 = 0, ucErr1 = 0;
+    u8 ucChannelErr[9];
+    ucTemp = Drv_HdmiTx_ReadI2CByte(0xa810);//a810[4]flt_start
+    if(ucTemp&0x01)
+    {
+        ucStatus = Drv_HdmiTx_ReadI2CByte(0xa840);
+    }
+    if(ucTemp&0x02)
+    {
+        memset(ucChannelErr,0x00,9);
+        Drv_HdmiTx_ReadI2CByteN(0x00,0xA850,&ucChannelErr[0],9);
+    }
+    if(ucTemp&0x40)
+    {
+        ucErr0 = Drv_HdmiTx_ReadI2CByte(0xa859);
+        ucErr1 = Drv_HdmiTx_ReadI2CByte(0xa85a); 
+        if((g_stFrlTxInfo.b1NoTimeOutEn == DISABLED)&&((ucErr1 > 0x80)||((ucErr1 == 0x80)&&(ucErr0 >= 0x10))))
+        {
+            if(g_stFrlTxInfo.usTrainTtolNum >= 5)
+            {
+                return TRAINING_FRL_RETRY;
+            }
+        }        
+    }
+    Ocm_Delay1ms(1);
+    Drv_HdmiTx_WriteI2CByte(0xa810,ucTemp);//clr flt_start
+	Ocm_Delay1ms(10);
+    if(g_stFrlTxInfo.usTrainTtolNum >= 5)
+    {
+        BKEC_0F_REG |= BIT1_1;//[1]pull inhard mode
+        return TRAINING_PROCESS;
+    }
+    return TRAINING_WAIT;
+}
+
+void Mod_FrlTx_SetState(u8 ucState)
+{
+    u8 ucLastState;
+    if(ucState != g_stFrlTxInfo.ucFrlState)
+    {    
+        ucLastState = g_stFrlTxInfo.ucFrlState;
+        g_stFrlTxInfo.ucFrlState = ucState;
+        g_stFrlTxInfo.usTrainTtolNum = 0;
+        // other state-->FRL_TRAIN_END_PROC_10
+        if(g_stFrlTxInfo.ucFrlState == FRL_TRAIN_END_PROC_10)
+        {
+            BKE9_E1_REG |= BIT5_1;//HDMI21 TX enable for TX ddc msater.
+//            #if HDMITX_HDCP_ENC_MODE == DISABLED
+            Ocm_Delay1ms(100);
+            BKE9_DD_REG |= 0x03;
+//            #endif
+        }
+        //FRL_TRAIN_END_PROC_10-->other
+        if(ucLastState == FRL_TRAIN_END_PROC_10)
+        {
+            BKE9_E1_REG &= BIT5_0;//HDMI21 TX enable for TX ddc msater.
+            #if HDMITX_HDCP_ENC_MODE == DISABLED
+            BKE9_DD_REG &= 0xfc;//
+            #endif
+        }
+//        printLT(PRINT_PRIO_TEST, "\nucFrlState = %bx",g_stFrlTxInfo.ucFrlState);
+    }
+}
+u8 Mod_FrlTx_TrainProcess(void)
+{
+    u8 ucResult;
+	static u8 ucFrl_Step = 0xff;
+    switch(g_stFrlTxInfo.ucFrlState)
+    {
+        case FRL_TRAIN_INIT_1:
+			Mod_FrlTx_TrainFail();//-wangtt- wait update for name
+//			Drv_HdmiTx_PhyDis();
+            ucResult = Mod_FrlTx_TrainInit();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_VER_PROC_2);
+            }
+            break;
+        case FRL_TRAIN_VER_PROC_2:
+            ucResult = Mod_FrlTx_VersionProc();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_FLTREADY_PROC_3);
+            }
+            break;
+        case FRL_TRAIN_FLTREADY_PROC_3:
+            ucResult = Mod_FrlTx_FltReadyProc();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_TXPLL_PROC_4);
+            }
+            break;
+
+        case FRL_TRAIN_TXPLL_PROC_4:
+            ucResult = Mod_FrlTx_TxPllProc();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_TXSET_PROC_5);
+            }
+            break;
+          case FRL_TRAIN_TXSET_PROC_5:
+            ucResult = Mod_FrlTx_TxOutProc();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_FECPLL_PROC_6);
+            }
+            break;      
+        case FRL_TRAIN_FECPLL_PROC_6:
+            ucResult = Mod_FrlTx_LmTxPllProc();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_PTN_PROC_7);
+            }
+            break;
+        case FRL_TRAIN_PTN_PROC_7:
+            ucResult = Mod_FrlTx_PatternProc();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_START_PROC_8);
+            }
+            else if(ucResult == TRAINING_FRL_ADJUST)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_TXPLL_PROC_4);
+            }
+            
+            break;
+
+        case FRL_TRAIN_START_PROC_8:
+            ucResult = Mod_FrlTx_StartProc();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_ERROR_PROC_9);
+            }
+            break;
+        case FRL_TRAIN_ERROR_PROC_9:
+            ucResult = Mod_FrlTx_FecErrorCheck();
+            if (ucResult == TRAINING_PROCESS)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_END_PROC_10);	
+            }
+            else if (ucResult == TRAINING_FRL_RETRY)
+            {
+                Mod_FrlTx_SetState(FRL_TRAIN_INIT_1);
+            }
+            break;
+        case FRL_TRAIN_END_PROC_10:
+            ucResult = TRAINING_SUCCESS;
+            break;
+        default:
+            ucResult = TRAINING_FAIL;
+            break;
+    }
+	if(ucFrl_Step != g_stFrlTxInfo.ucFrlState)
+	{
+		printLT(PRINT_PRIO_TEST, "\nucFrl_Step = %bd",g_stFrlTxInfo.ucFrlState);
+		ucFrl_Step = g_stFrlTxInfo.ucFrlState;
+	}
+    return ucResult;
+}
+
+u8 Mod_FrlTx_TrainingHdl(void)
+{
+    u8 ucResult;
+	u8 ucFrlTrainingFail = FALSE;
+    if(g_stHdmiTx.ucHdmiVersion != HDMI21)
+    {
+        BKEC_0F_REG &= BIT1_0;//[1]LTS_P polling use hardware logic: 0-dis
+        return FAIL ;
+    }
+    ucResult = Mod_FrlTx_TrainProcess();
+    if (ucResult == TRAINING_SUCCESS)//training success
+    {
+        g_stFrlTxInfo.usTrainTtolNum = 0;
+        g_stFrlTxInfo.b1Hdmi21En = ENABLED;
+        printLT(PRINT_PRIO_HIG, "\nFrl Training success");
+        return TRAINING_SUCCESS;
+    }
+    if(g_stFrlTxInfo.usTrainTtolNum > 200)
+    {
+        if ((ucResult == TRAINING_WAIT)&&(g_stFrlTxInfo.ucFrlState == FRL_TRAIN_VER_PROC_2))
+        {
+            Mod_FrlTx_TrainFail();
+			ucFrlTrainingFail = TRUE;
+            printLT(PRINT_PRIO_HIG, "\nSink Version Not Valid");
+        }
+        if ((ucResult == TRAINING_WAIT)&&(g_stFrlTxInfo.ucFrlState == FRL_TRAIN_FLTREADY_PROC_3))
+        {
+            Mod_FrlTx_TrainFail();
+			ucFrlTrainingFail = TRUE;
+            printLT(PRINT_PRIO_HIG, "\nFlt Rdy Not Valid");
+        }
+        if ((ucResult == TRAINING_WAIT)&&(g_stFrlTxInfo.b1NoTimeOutEn == DISABLED)&&(g_stFrlTxInfo.ucFrlState == FRL_TRAIN_PTN_PROC_7))
+        {
+            Mod_FrlTx_TrainFail();
+			ucFrlTrainingFail = TRUE;
+            printLT(PRINT_PRIO_HIG, "\nFlt Update Not Valid");
+        }
+    }
+    if ((ucResult == TRAINING_FAIL)&&(g_stFrlTxInfo.b1NoTimeOutEn == DISABLED)&&(g_stFrlTxInfo.ucFrlState == FRL_TRAIN_PTN_PROC_7))
+    {
+        Mod_FrlTx_TrainFail();
+		ucFrlTrainingFail = TRUE;
+        printLT(PRINT_PRIO_HIG, "\nFlt Update Not Valid");
+    }
+	if(ucFrlTrainingFail == TRUE)
+	{
+		Drv_HdmiTx_WriteI2CByte(0xa831,0x00);//a831[7:4]ffe lvl, [3:0]frl rate
+	}
+    g_stFrlTxInfo.usTrainTtolNum++;
+    return TRAINING_PROCESS;
+}
+
+void Mod_FrlTx_ParamInit(void)
+{
+	//HDMI端发生IRQ，HDMI2.1要重新做TRAINING
+    #if RX_PORT_SIGN == DP_PORT
+	#if DPRX_DSC_BYPASS_SUPPORT == ENABLED
+	//FRL retraining
+    if(Drv_DpRxDscBy_SwitchGet() == ENABLED)
+    {
+        if (Drv_DpRx_DscDecState() == ENABLED)
+        {
+            BKEA_18_REG |= BIT0_1;
+            BKEA_1D_REG |= BIT0_1;
+        }
+    }
+	#endif
+	#endif
+    if(g_stHdmiTx.ucHdmiVersion != HDMI21)
+    {
+        return;
+    }
+    memset(&g_stFrlTxInfo, 0, sizeof(HdmiTxFrlInfo_S));
+    g_stFrlTxInfo.ucFrlState = FRL_TRAIN_INIT_1;
+}
+#endif
+
+void Mod_FrlTx_TrainFail(void)
+{
+    #if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT
+    BKEC_0D_REG = 0x00;
+    BKEC_17_REG = 0x00;
+    BKEC_28_REG = 0x00;
+    BKEC_29_REG = 0x00;
+    BKEC_2C_REG &= BIT2_0;//[2]user defined training done indicated flag
+    
+    BKE9_DD_REG &= 0xfc;//
+    BKE9_E1_REG &= BIT5_0;//HDMI21 TX enable for TX ddc msater.
+	if((g_stHdmiEdidInfo.ucMaxFrlRate == TRUE)||(g_stHdmiEdidInfo.ucMaxFrlDscRate))
+	{
+		Drv_HdmiTx_WriteI2CByte(0xa831,0x00);//a831[7:4]ffe lvl, [3:0]frl rate
+	}
+	//如果FRL training失败，再换成其他TMDS模式时，会不出图
+	Drv_HdmiTx_FrlTxRst(DISABLED);
+    Mod_FrlTx_ParamInit();
+    g_stFrlTxInfo.ucTrainStepNum = 0;
+    g_stFrlTxInfo.b1Hdmi21En = DISABLED;
+    #endif
+	
+//	BKEC_0E_REG = 0x31;
+//	BKEC_0F_REG = 0x01;
+//	BKEC_16_REG = 0x00;
+//	BKEC_2A_REG = 0x65;
+//	BKEC_2B_REG = 0x87;//-
+//	BKEC_2C_REG = 0x01;
+//	
+//	BKA1_49_REG = 0x01;
+//	BKA1_4B_REG = 0x60;
+//	BKA1_50_REG = 0x00;
+//	BKA1_51_REG = 0x00;
+//	BKA1_52_REG = 0x00;
+////	BKA1_53_REG = 0x00;
+////	BKA1_54_REG = 0x1E;
+//	
+//	BKA1_58_REG = 0x81;
+//	BKA1_59_REG = 0xc0;
+//	
+//	BKA1_71_REG = 0xa0;
+//	BKA1_75_REG = 0xa0;
+//	BKA1_79_REG = 0xa0;
+//	BKA1_7D_REG = 0xa0;
+//	
+//	BKA2_00_REG = 0x10;
+//	BKA2_02_REG = 0x48;
+//	BKA2_0A_REG = 0x3c;
+//	BKA3_44_REG = 0x00;
+//	BKE2_63_REG = 0x10;
+}
+
+u8 Mod_FrlTx_Hdmi21EnGet(void)
+{
+    #if HDMITX_MAX_FRL_RATE != FRL_NOT_SPT
+    return g_stFrlTxInfo.b1Hdmi21En;
+    #else
+    return DISABLED;
+    #endif
+}
+
+#endif

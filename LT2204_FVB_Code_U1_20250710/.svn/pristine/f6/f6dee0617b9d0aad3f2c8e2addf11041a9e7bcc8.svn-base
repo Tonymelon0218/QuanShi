@@ -1,0 +1,524 @@
+ //////////////////////////////////////
+ //Project:   LT2101
+ //Filename:  Audio.c
+ //Version:   V1.0
+ //Copyright: Lontium
+ //////////////////////////////////////
+#include "Include.h"
+
+#if ((TX_AUDIO_SEL != NO_AUDIO_DATA) || (I2S_AUDIO_SEL != NO_AUDIO_DATA) || (SPDIF_AUDIO_SEL != NO_AUDIO_DATA))
+
+void Drv_Audio_I2sInInit(void)
+{
+    #if TX_AUDIO_SEL == I2SIN_AUDIO_DATA
+    BKC6_37_REG |= BIT1_1;//[1]audio in en: 1-en(audio in 总开关)
+    BKC6_38_REG &= 0x0f;
+    BKC6_38_REG |= BIT4_1;//[7:4]i2s sdn_en: sd0 en
+    BKC6_39_REG &= BIT7_0;//[7]rgd_spdif_i2s_in_sel: 0-i2s in
+
+//    //default:
+//    BKE6_C3_REG = 0x0f;//ad_sd0a_vsync_gpio19
+//    BKE6_C4_REG = 0x19;//ad_sd1a_gpio5
+//    BKE6_C5_REG = 0x18;//ad_sd2b_gpio6
+//    BKE6_C6_REG = 0x17;//ad_sd3b_gpio7
+//    BKE6_C7_REG = 0x10;//ad_wsa_gpio18
+//    BKE6_C8_REG = 0x11;//ad_scka_gpio17
+
+    BKE1_41_REG &= 0x0f;//[7:6]acr_128fs_clk: 1-i2s_mclk_i, 2-~i2s_mclk, 3-spdif_cdr_clk
+    BKE1_41_REG |= 0x20;//[5:4]acr_fs64_clk_src: 10-i2s sck
+
+//    #if (TX_AUDIO_SEL == I2SIN_AUDIO_DATA)
+    BKC6_3E_REG = 0x30;//25Mhz Cry
+    BKC6_3F_REG = 0xD4;
+    
+    BKA3_71_REG &= 0x33;
+    BKA3_72_REG &= 0x33;
+    BKED_10_REG &= 0x83;//bit6-4 3-2 
+    BKE6_C3_REG = 0x05;//SD0B
+    BKE6_C7_REG = 0x04;//WSB
+    BKE6_C8_REG = 0x02;//SCLKB
+    BKE6_C9_REG = 0x03;//MCLKB
+//    #endif
+    #endif
+}
+void Drv_Audio_IisHbrModeSel(u8 IsSoftmode)
+{
+    (IsSoftmode == SOFTMODE)?(BKC6_2F_REG |= BIT1_1):(BKC6_2F_REG &= BIT1_0);
+}
+void Drv_Audio_IisHbrSet(u8 IsHbr)
+{
+    (IsHbr == TRUE)?(BKC6_2F_REG |= BIT2_1):(BKC6_2F_REG &= BIT2_0);
+}
+void Drv_Audio_HdmiInInit(void)
+{
+    #if RX_PORT_SIGN == HDMI_PORT
+
+    #if ((TX_AUDIO_SEL == RX_AUDIO_DATA)||(EARC_TX_AUDIO_SEL == RX_AUDIO_DATA) ||\
+         (I2S_AUDIO_SEL == RX_AUDIO_DATA)||(SPDIF_AUDIO_SEL == RX_AUDIO_DATA))
+    
+    BKC6_2F_REG |= BIT0_1;//[0]dll_data_sel: 1-hdmirx
+    #endif
+    Drv_Audio_IisHbrModeSel(HARDWARE);
+    #endif
+}
+
+void Drv_Audio_DpInInit(void)
+{
+    #if RX_PORT_SIGN == DP_PORT
+
+    #if ((TX_AUDIO_SEL == RX_AUDIO_DATA)||(EARC_TX_AUDIO_SEL == RX_AUDIO_DATA) ||\
+         (I2S_AUDIO_SEL == RX_AUDIO_DATA)||(SPDIF_AUDIO_SEL == RX_AUDIO_DATA))
+    BKC6_2F_REG &= BIT0_0;//[0]dll_data_sel: 0-dprx
+	BKEB_10_REG &= BIT4_0;//HDMITX Packet layout from User
+    #endif
+    //Set HBR Soft mode
+    Drv_Audio_IisHbrModeSel(SOFTMODE);
+    #endif
+}
+
+void Drv_Audio_SpdifInInit(void)
+{
+    #if TX_AUDIO_SEL == SPDIFIN_AUDIO_DATA
+    BKC6_37_REG |= BIT1_1;//[1]audio in en: 1-en(audio in 总开关)
+    BKC6_39_REG |= BIT7_1;//[7]spdif in en: 1-en
+
+//    //default:
+//    BKE6_CA_REG = 0x1a;//ad_spdifa_gpio4
+//    Drv_Gpio_ModeSet(SPDIF_IN_PORT, FORBIDDEN, 0);
+
+    BKE1_41_REG &= 0x0f;//[7:6]acr_128fs_clk: 1-i2s_mclk_i, 2-~i2s_mclk, 3-spdif_cdr_clk
+    BKE1_41_REG |= 0xd0;//[5:4]acr_fs64_clk_src: 1-128_div2, 0-sck
+    #endif
+}
+
+//void Drv_Audio_I2sOutInit(void)
+//{
+//    #if I2S_AUDIO_SEL != NO_AUDIO_DATA
+//    BKC6_0A_REG |= 0x0F;//[3:0]rgd_sd_out_en: 0-dis
+
+//	  BKA3_0D_REG = 0x92;//MCLK frq
+//	
+//    BKC6_28_REG |= BIT4_1;//[4]rgd_cor_mk_sel: 1-cor_mk_ideal
+//    BKC6_4A_REG |= BIT5_1;//[5]rgd_mk_div_en: 1-en(mk value divide 2 when ma_pre > 0x4a)
+
+//    #endif
+//}
+
+void Drv_Audio_I2sOutInit(void)
+{
+    #if I2S_AUDIO_SEL != NO_AUDIO_DATA
+		BKC6_0A_REG |= 0x0F;//[3:0]rgd_sd0-3_out_en
+	  BKA3_0D_REG = 0x92;
+    BKC6_28_REG |= BIT4_1;//[4]rgd_cor_mk_sel: 1-cor_mk_ideal
+    BKC6_2E_REG &= 0xf8;//[2:0]aud_2hm_sel: 0-hdmirx
+    BKC6_4A_REG |= BIT5_1;//[5]rgd_mk_div_en: 1-en(mk value divide 2 when ma_pre > 0x4a)
+    BKC6_4B_REG = 0x50;//[7:0]rgd_fs_val_rea_thr
+    #endif
+}
+
+void Drv_Audio_TdmOutInit(void)
+{
+    #if I2S_AUDIO_SEL != NO_AUDIO_DATA	
+    BKC6_0A_REG |= 0x0F;//[3:0]rgd_sd_out_en: 0-dis
+	  BKA3_0D_REG = 0x92;//MCLK frq
+
+    BKC6_0B_REG = 0xAC;
+		BKA3_0B_REG = 0x20;
+	  BKA3_0C_REG = 0x23;//TDM SCLK Duty cycle 50%
+	
+    BKC6_28_REG |= BIT4_1;//[4]rgd_cor_mk_sel: 1-cor_mk_ideal
+    BKC6_4A_REG |= BIT5_1;//[5]rgd_mk_div_en: 1-en(mk value divide 2 when ma_pre > 0x4a)
+    BKC6_4B_REG = 0x50;//[7:0]rgd_fs_val_rea_thr	
+	
+		/********短帧同步模式*********/
+		BKC6_42_REG =0x00;//FSYNC_WIDTH = 1 sclk
+    BKC6_0A_REG |=0x10;//Invert sclk	
+    #endif
+}
+
+void Drv_Audio_HdmiOutInit(void)
+{
+    BKC6_27_REG = 0x01; // to solve fs value change, ACR is locked to an abnormal value: 48Khz-->32Khz
+    #if TX_PORT_SIGN == HDMI_PORT
+
+    //===============================spdif and i2s in===============================
+    #if ((TX_AUDIO_SEL == SPDIFIN_AUDIO_DATA) || (TX_AUDIO_SEL == I2SIN_AUDIO_DATA))
+    BKC6_2E_REG &= 0xf8;//[2:0]aud_2hm_sel: 4-acr, 2-dp, 1-aud_rev, 0-hdmirx
+    BKC6_2E_REG |= 0x01;//[2:0]aud_2hm_sel: 1-external audio data
+
+    BKED_10_REG &= 0x83;//[3:2]htx_fs64_clk_src_sel: 00-external audio
+                        //[6:4]htx_fs64_wclk_src_sel: 00-external audio
+    BKEB_0D_REG &= BIT2_0;//[2]ncts bypass en: 0-dis
+    #endif
+    //===============================spdif and i2s in===============================
+
+    //=====================================rx in====================================
+    #if TX_AUDIO_SEL == RX_AUDIO_DATA
+    #if RX_PORT_SIGN == HDMI_PORT
+
+    #if HDMITX_AUDIO_DATA_BYPASS == ENABLED
+    BKC6_2E_REG &= 0xf8;//[2:0]aud_2hm_sel: 0-hdmirx
+    #else
+
+    BKC6_2E_REG &= 0xf8;
+    BKC6_2E_REG |= BIT2_1;//[2:0]aud_2hm_sel: 100-acr
+    BKC6_28_REG |= BIT4_1;//[4]rgd_cor_mk_sel: 1-cor_mk_ideal
+    BKC6_4A_REG |= BIT5_1;//[5]rgd_mk_div_en: 1-en(mk value divide 2 when ma_pre > 0x4a)
+    BKC6_4B_REG = 0x50;//[7:0]rgd_fs_val_rea_thr
+    #endif
+
+    BKED_10_REG &= 0x83;//[6:4]fs64_wclk: 0-rev acr_clk, 1-128fs, 4-lclk;
+                        //[3:2]htx_fs64_clk_src_sel: 1-128fs, 0-rev acr_clk
+    #if HDMITX_AUDIO_DATA_BYPASS == ENABLED
+    BKED_10_REG |= 0x44;
+    #else
+    BKED_10_REG |= 0x14;
+    #endif
+    BKED_11_REG &= 0xf1;//[3:2]htx_fs64_clk_sel: 1-128fs, 0-acr_fs64
+    BKED_11_REG |= 0x02;//[1]acr_mux_clk_sel,1=dhtx_write_clk,0=div_link_clk(tmds for cts)
+    #if HDMITX_AUDIO_NCTS_BYPASS == ENABLED
+    BKEB_0D_REG |= BIT2_1;//[2]ncts bypass en, 1-from hdmi rx
+    #else
+    BKEB_0D_REG &= BIT2_0;//[2]ncts bypass en, 0-from acr regenerate
+    #endif
+    BKEB_10_REG |= BIT4_1;//[4]rgd_aud_auto_sel: 1-from hdmi rx depkt
+    #endif
+
+    
+    #if RX_PORT_SIGN == DP_PORT
+
+    #if HDMITX_AUDIO_DATA_BYPASS == ENABLED
+    BKC6_2E_REG &= 0xf8;
+    BKC6_2E_REG |= BIT1_1;//[2:0]aud_2hm_sel: 010-dp rx
+    #else
+    BKC6_2E_REG &= 0xf8;
+    BKC6_2E_REG |= BIT2_1;//[2:0]aud_2hm_sel: 100-acr
+    BKC6_28_REG |= BIT4_1;//[4]rgd_cor_mk_sel: 1-cor_mk_ideal
+    BKC6_4A_REG |= BIT5_1;//[5]rgd_mk_div_en: 1-en(mk value divide 2 when ma_pre > 0x4a)
+    BKC6_4B_REG = 0x50;//[7:0]rgd_fs_val_rea_thr
+    #endif
+    BKED_10_REG &= 0x83; //[6:4]fs64_wclk: 0-rev acr_clk, 1-128fs, 4-lclk;
+                         //[3:2]htx_fs64_clk_src_sel: 1-128fs, 0-rev acr_clk
+    #if HDMITX_AUDIO_DATA_BYPASS == ENABLED
+    BKED_10_REG |= 0x44;
+    #else
+    BKED_10_REG |= 0x14;
+    #endif
+    BKED_11_REG &= 0xf1;//[3:2]htx_fs64_clk_sel: 1-128fs, 0-acr_fs64
+    BKED_11_REG |= 0x02;//[1]acr_mux_clk_sel,1=dhtx_write_clk,0=div_link_clk(tmds for cts)
+
+    BKEB_0D_REG &= BIT2_0;//[2]ncts bypass en, 1-en, 0-dis
+    BKEB_10_REG &= BIT4_0;//[4]rgd_aud_auto_sel: 0-from user define
+    #endif
+    #endif
+    //=====================================rx in====================================
+    
+    //close audio pkt
+    BKEB_06_REG &= BIT2_0;//[[2]set hdmi audio stream input enable: 0-dis
+    //for case of Amlogic 311D2
+//    BKEB_18_REG &= BIT5_0;//[5]hdmi acr pkt en: 0-dis
+    BKEB_19_REG &= BIT1_0;//
+    #endif
+}
+
+void Drv_Audio_DpOutInit(void)
+{
+    #if TX_PORT_SIGN == DP_PORT
+
+    #if ((TX_AUDIO_SEL == SPDIFIN_AUDIO_DATA) || (TX_AUDIO_SEL == I2SIN_AUDIO_DATA))
+    BKC6_2E_REG &= 0x8f;
+    BKC6_2E_REG |= BIT4_1;//[2:0]aud_2dp_sel: 001-external audio data
+
+    BKED_10_REG &= 0xfc;
+    BKED_10_REG |= BIT0_1;//[1:0]rgd_dptx_fs64_clk_sel: 01-ad_audpll_128fs_clk
+    BKED_11_REG &= 0x8f;
+    BKED_11_REG |= BIT4_1;//[6:4]rgd_dptx+aud_mux_clk_sel: 001-ad_audpll_128fs_clk(acr)
+    #endif
+
+    #if TX_AUDIO_SEL == RX_AUDIO_DATA
+    #if RX_PORT_SIGN == DP_PORT
+    #if DPTX_AUDIO_DATA_BYPASS == ENABLED
+    BKC6_2E_REG &= 0x8f;
+    BKC6_2E_REG |= BIT5_1;//[6:4]aud_2dp_sel: 010-dp rx audio data
+    #else
+
+    BKC6_2E_REG &= 0x8f;
+    BKC6_2E_REG |= BIT6_1;//[6:4]aud_2dp_sel: 100-acr audio data
+    BKC6_28_REG |= BIT4_1;//[4]rgd_cor_mk_sel: 1-cor_mk_ideal
+    BKC6_4A_REG |= BIT5_1;//[5]rgd_mk_div_en: 1-en(mk value divide 2 when ma_pre > 0x4a)
+    BKC6_4B_REG = 0x50;//[7:0]rgd_fs_val_rea_thr
+    #endif
+
+    BKED_10_REG &= 0xfc;
+    BKED_10_REG |= BIT0_1;//[1:0]rgd_dptx_fs64_clk_sel: 01-ad_audpll_128fs_clk
+    BKED_11_REG &= 0x8f;
+    BKED_11_REG |= BIT4_1;//[6:4]rgd_dptx_aud_mux_clk_sel: 001-ad_audpll_128fs_clk(acr)
+    #endif
+
+    #if RX_PORT_SIGN == HDMI_PORT
+    #if DPTX_AUDIO_DATA_BYPASS == ENABLED
+    BKC6_2E_REG &= 0x8f;
+    BKC6_2E_REG |= 0x50;//[6:4]aud_2dp_sel: 101-hdmirx audio data
+
+    BKED_10_REG &= 0xfc;
+    BKED_10_REG |= BIT1_1;//[1:0]rgd_dptx_fs64_clk_sel: 1x-sys_clk
+    BKED_11_REG &= 0x8f;
+    BKED_11_REG |= 0x30;//[6:4]rgd_dptx+aud_mux_clk_sel: 011-pcrpll_div_link_clk(tmds_clk)
+    #else
+
+    BKC6_2E_REG &= 0x8f;
+    BKC6_2E_REG |= BIT6_1;//[6:4]aud_2dp_sel: 100-acr audio data
+    BKC6_28_REG |= BIT4_1;//[4]rgd_cor_mk_sel: 1-cor_mk_ideal
+    BKC6_4A_REG |= BIT5_1;//[5]rgd_mk_div_en: 1-en(mk value divide 2 when ma_pre > 0x4a)
+    BKC6_4B_REG = 0x50;//[7:0]rgd_fs_val_rea_thr
+
+    BKED_10_REG &= 0xfc;
+    BKED_10_REG |= BIT0_1;//[1:0]rgd_dptx_fs64_clk_sel: 01-ad_audpll_128fs_clk
+    BKED_11_REG &= 0x8f;
+    BKED_11_REG |= BIT4_1;//[6:4]rgd_dptx+aud_mux_clk_sel: 001-ad_audpll_128fs_clk(acr)
+    #endif
+    #endif//RX_PORT_SIGN == HDMI_PORT
+    #endif//TX_AUDIO_SEL == RX_AUDIO_DATA
+
+    #endif
+}
+
+void Drv_Audio_SpdifOutInit(void)
+{
+    #if SPDIF_AUDIO_SEL != NO_AUDIO_DATA
+    BKC6_0A_REG |= BIT6_1;//[6]rgd_spdif_out_en: 0-dis
+    
+
+    #endif
+}
+
+void Drv_Audio_eArcOutInit(void)
+{
+    #if ((EARC_TX_AUDIO_SEL == SPDIFIN_AUDIO_DATA) || (EARC_TX_AUDIO_SEL == I2SIN_AUDIO_DATA))
+    BKC6_2F_REG &= 0x1f;
+    BKC6_2F_REG |= BIT5_1;//[7:5]rgd_aud_2earc_sel: 001-external audio data
+    #endif
+
+    #if EARC_TX_AUDIO_SEL == RX_AUDIO_DATA
+    #if RX_PORT_SIGN == HDMI_PORT
+    BKC6_2F_REG &= 0x1f;
+    BKC6_2F_REG |= BIT7_1;//[7:5]rgd_aud_2earc_sel: 100-acr audio
+    #endif
+
+    #if RX_PORT_SIGN == DP_PORT
+    BKC6_2F_REG &= 0x1f;
+    BKC6_2F_REG |= BIT7_1;//[7:5]rgd_aud_2earc_sel: 100-acr audio
+    #endif
+    #endif
+}
+#endif
+
+void Drv_Audio_AcrPllInit(void)
+{
+    BKA3_08_REG &= BIT4_0;
+    BKE1_04_REG |= BIT2_1;//RGD_AUDPLL_CAL_HW_RST_EN
+    BKE2_2A_REG = 0x28;// ks =2; rg_cal_en =1   
+}
+
+#if RX_PORT_SIGN == HDMI_PORT
+//========================================================================
+// Func Name   : Drv_Audio_AcrLogicRst
+// Description : acr logical reset
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_Audio_AcrLogicRst(void)
+{
+    BKC9_01_REG &= BIT1_0; //[1]rgd_sw_acr_logic_rst_n: 0-reset
+    BKC9_01_REG |= BIT1_1; //[1]rgd_sw_acr_logic_rst_n: 1-dis
+}
+#else
+void Drv_Audio_AcrLogicRst(void)
+{
+	BKC9_01_REG &= BIT0_0;
+	BKC9_01_REG |= BIT0_1;
+}
+#endif
+
+void Drv_Audio_HdmiNctsValueSet(u8 IsHdmi21)
+{
+    #if TX_AUDIO_SEL != NO_AUDIO_DATA
+    if (IsHdmi21 == ENABLED)
+    {
+        BKEB_11_REG &= 0xf0;
+        BKEB_11_REG |= 0x0a;
+        BKED_11_REG |= BIT1_1;//[1]rgd_htx20_acr_clk_src_sel: 1-frl_clk
+    }
+    else
+    {
+        BKEB_11_REG &= 0xf0;
+        BKEB_11_REG |= 0x09;
+        BKED_11_REG &= BIT1_0;//[1]rgd_htx20_acr_clk_src_sel: 0-tmds_clk
+    }
+    #else
+    IsHdmi21 = DISABLED;
+    #endif
+}
+
+void Drv_Audio_OutEn(u8 ucOpt)
+{
+    #if ((TX_AUDIO_SEL != NO_AUDIO_DATA) || (I2S_AUDIO_SEL != NO_AUDIO_DATA) || (SPDIF_AUDIO_SEL != NO_AUDIO_DATA))
+
+    #if TX_PORT_SIGN == HDMI_PORT
+    if (ON == ucOpt)
+    {
+        BKEB_06_REG |= BIT2_1;//[2]set hdmi audio stream input enable: 1-en
+        BKEB_18_REG |= BIT5_1;//[5]hdmi acr pkt en: 1-en
+        BKEB_19_REG |= BIT1_1;//
+    }
+    else
+    {
+        BKEB_06_REG &= BIT2_0;//[[2]set hdmi audio stream input enable: 0-dis
+        //for case of Amlogic 311D2
+//        BKEB_18_REG &= BIT5_0;//[5]hdmi acr pkt en: 0-dis
+        BKEB_19_REG &= BIT1_0;//
+    }
+    #endif
+
+    #if TX_PORT_SIGN == DP_PORT
+    if (ON == ucOpt)
+    {
+        BKF5_88_REG |= BIT5_1;
+        BKF5_89_REG |= BIT7_1;
+        BKF6_0E_REG |= 0x29;//[3]atp sdp pkt en, [0]asp sdp pkt en
+    }
+    else
+    {
+        BKF5_88_REG &= BIT5_0;
+        BKF5_89_REG &= BIT7_0;
+        BKF6_0E_REG &= 0xd6;//[3]atp sdp pkt en, [0]asp sdp pkt en
+    }
+    #endif
+    
+    #if TX_PORT_SIGN == LVDS_PORT
+    ucOpt = OFF;
+    #endif
+    #if TX_PORT_SIGN == MIPI_PORT
+    ucOpt = OFF;
+    #endif
+    
+    
+    #else
+    ucOpt = OFF;
+    #endif
+}
+
+//u8 Drv_Audio_AcrMute(void)
+//{
+//    #if ((TX_AUDIO_SEL != NO_AUDIO_DATA) || (I2S_AUDIO_SEL != NO_AUDIO_DATA) || (SPDIF_AUDIO_SEL != NO_AUDIO_DATA))
+//    return FALSE;
+//    #else
+//    return FALSE;
+//    #endif
+//}
+
+void Drv_AudioSdm_SwEn(void)
+{
+	BKC6_24_REG |= 0x07;
+	BKC6_24_REG &= 0xf8;
+}
+
+u8 Drv_Audio_FsValStbCheck(void)
+{
+	if(BKC6_81_REG & BIT0_1)
+	{
+		if(BKC6_97_REG & BIT2_1)//fs stable
+		{
+
+			BKC6_3A_REG |= BIT2_1;
+			BKC6_3A_REG &= BIT2_0;
+			printLT(PRINT_PRIO_TEST, "\nFS = 0x%02bx",BKC6_7C_REG);			
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+//===========================================
+//  func: audio out mute judge
+// input: N/A
+//output: N/A
+//return: u8, ENABLE DISABLED NO_ACTION
+//  Info: N/A
+//===========================================
+u8 Drv_Audio_StatusCheck(void)
+{
+    if (BKC6_8D_REG & BIT1_1)
+    {
+        if (BKEB_06_REG&BIT2_1)
+        {
+            return ENABLED;
+        }
+    }
+    else
+    {
+        if ((BKEB_06_REG&BIT2_1)==0x00)
+        {
+            return DISABLED;
+        }
+    }
+    return NO_ACTION;
+}
+#if TX_PORT_SIGN == DP_PORT
+void Drv_Audio_MuteCheck(u8 ucAudioMuteEn)
+{
+    #if TX_PORT_SIGN == HDMI_PORT
+    ucAudioMuteEn = DISABLED;
+    if (BKC6_8D_REG & BIT2_1)//[2]rgod_au_mute_hd
+    {
+        if (BKEB_06_REG & BIT2_1)//[2]set hdmi audio stream input enable: 1-en
+        {
+            Drv_Audio_OutEn(OFF);
+        }
+    }
+    else
+    {
+        if ((BKEB_06_REG&BIT2_1) == 0x00)
+        {
+            Drv_Audio_OutEn(ON);
+        }
+    }
+    #endif
+
+    #if TX_PORT_SIGN == DP_PORT
+    if (BKC6_8D_REG & BIT2_1)//[2]rgod_au_mute_hd
+    {
+        if (BKF6_0E_REG & BIT0_1)//[0]asp sdp pkt en
+        {
+            Drv_Audio_OutEn(OFF);
+        }
+    }
+    else if (ucAudioMuteEn == DISABLED)//[7]rgd_no_videostream_flag: 0-video out
+    {
+        if ((BKF6_0E_REG & BIT0_1) == 0x00)
+        {
+            Drv_Audio_OutEn(ON);
+        }
+    }
+    #endif
+}
+#endif
+
+
+void Drv_Audio_Init(void)
+{
+    Drv_Audio_AcrPllInit();
+
+    //rx input init
+    Drv_Audio_DpInInit();
+    Drv_Audio_I2sInInit();
+    Drv_Audio_HdmiInInit();
+    Drv_Audio_SpdifInInit();
+    //tx out init
+    Drv_Audio_DpOutInit();
+    Drv_Audio_I2sOutInit();
+    Drv_Audio_HdmiOutInit();
+    Drv_Audio_eArcOutInit();
+    Drv_Audio_SpdifOutInit();
+}

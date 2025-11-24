@@ -1,0 +1,287 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: DrvDscDec.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.05.31
+/******************************************************************************/
+#include "include.h"
+
+#if RX_PORT_SIGN == HDMI_PORT
+
+#if ((HDMIRX_DSC_BYPASS_SUPPORT == ENABLED)||(HDMIRX_DSC_DEC_SUPPORT == ENABLED))
+LtTiming_S g_stHdmiRxDscByTiming;
+DscDecInfo_S g_stHdmiRxDscByInfo;
+
+void Drv_HdmiRxDscBy_ParaInit(void)
+{
+    memset(&g_stHdmiRxDscByInfo, 0, sizeof(DscDecInfo_S));
+    memset(&g_stHdmiRxDscByTiming, 0, sizeof(LtTiming_S));
+}
+
+void Drv_HdmiRxDscBy_RxInit(void)
+{
+    #if HDMIRX_DSC_BYPASS_HALFPIX_EN == ENABLED
+    u16 usHact,usHtotal;
+    #endif
+
+    Drv_System_SramPathSet(HDMIRX_INIT_SET_PATH);
+
+    #if HDMIRX_DSC_BYPASS_HALFPIX_EN == ENABLED
+    usHact = PACK_16_BIT(BKCB_42_REG, BKCB_43_REG);
+    usHtotal = PACK_16_BIT(BKCB_44_REG, BKCB_45_REG);  
+    usHact = usHact/2;
+    usHtotal = usHtotal/2;
+    
+    BKCE_4B_REG = 0x0a;
+    BKCE_40_REG = usHact >>8; //hact[15:8]
+    BKCE_41_REG = usHact; //hact[7:0]
+    
+    BKCE_32_REG = 0x7d;
+    BKCE_42_REG = usHtotal >>8; //htotal[15:8]
+    BKCE_43_REG = usHtotal; //htotal[7:0]
+    
+    printLT(PRINT_PRIO_TEST, "\nhalf Hact  : %-4d  half Htol  : %-4d", usHact,usHtotal);
+    //printLT(PRINT_PRIO_TEST, "\nce40=%02bx ce41=%02bx ce42=%02bx ce43=%02bx", BKCE_40_REG,BKCE_41_REG,BKCE_42_REG,BKCE_43_REG);
+    #endif
+}
+
+void Drv_HdmiRxDscBy_TimingGet(void)
+{
+    u8 ucCnt, ucNum;
+    u16 usCrt = 0, usLast = 0;
+
+    //=================wait video check stable=====================
+    ucCnt = 0;
+    ucNum = 150;
+    while(ucNum--)
+    {
+        Ocm_Delay1ms(2);
+        usCrt = PACK_16_BIT(BKC8_56_REG, BKC8_57_REG);
+        if (usLast == usCrt)
+        {
+            ucCnt++;
+            if (ucCnt > 10)
+            {
+                break;
+            }
+        }
+        else
+        {
+            ucCnt = 0;
+            usLast = usCrt;
+        }
+    }
+    //=================wait video check stable=====================
+
+    //get V timing by VideoCheck
+    Drv_HdmiRx_RxTimingGet(&g_stHdmiRxDscByTiming);
+    //get H timing by EMP pkt
+    g_stHdmiRxDscByTiming.usHbp   = PACK_16_BIT(BKCB_3F_REG, BKCB_40_REG);
+    g_stHdmiRxDscByTiming.usHsync = PACK_16_BIT(BKCB_3D_REG, BKCB_3E_REG);
+    g_stHdmiRxDscByTiming.usHfp   = PACK_16_BIT(BKCB_3B_REG, BKCB_3C_REG);
+    g_stHdmiRxDscByTiming.usHact  = PACK_16_BIT(BKCB_42_REG, BKCB_43_REG);
+    g_stHdmiRxDscByTiming.usHtol  = PACK_16_BIT(BKCB_44_REG, BKCB_45_REG);
+
+    #if 0
+    printLT(PRINT_PRIO_TEST, "\n==============DscBy Info==============");
+    printLT(PRINT_PRIO_TEST, "\nHbp   : %-4d  Vbp   : %-4d", g_stHdmiRxDscByTiming.usHbp,g_stHdmiRxDscByTiming.usVbp);
+    printLT(PRINT_PRIO_TEST, "\nHfp   : %-4d  Vfp   : %-4d", g_stHdmiRxDscByTiming.usHfp,g_stHdmiRxDscByTiming.usVfp);
+    printLT(PRINT_PRIO_TEST, "\nHsync : %-4d  Vsync : %-4d", g_stHdmiRxDscByTiming.usHsync,g_stHdmiRxDscByTiming.usVsync);
+    printLT(PRINT_PRIO_TEST, "\nHact  : %-4d  Vact  : %-4d", g_stHdmiRxDscByTiming.usHact,g_stHdmiRxDscByTiming.usVact);
+    printLT(PRINT_PRIO_TEST, "\nHtol  : %-4d  Vtol  : %-4d", g_stHdmiRxDscByTiming.usHtol,g_stHdmiRxDscByTiming.usVtol);
+    #endif
+}
+
+//========================================================================
+// Func Name   : Drv_HdmiRxDscBy_DscInfoGet
+// Description : dsc pps info get
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_HdmiRxDscBy_DscInfoGet(void)
+{
+    u8 usPpsDetCnt;
+    u16 temp0, temp1;
+    u8 pps3, pps4, pps5, pps8, pps9, pps10, pps11, pps12, pps13, pps14, pps15, pps88;
+
+    //packet mode set to RGB
+    BKCC_10_REG |= BIT0_1;//[0]color space en
+    BKCC_10_REG &= 0x8f;//[6:4]color space value: 0-RGB, 1-YUV422, 2-YUV444, 3-YUV420
+    BKCC_0F_REG |= BIT2_1;//[2]rgd_audc_cd_sel: 1-software configure color depth value
+    BKCC_0F_REG &= 0x0f;//[7:4]color depth value: 4-8bit
+    BKCC_0F_REG |= 0x40;
+
+//    Ocm_Delay1us(2);//must be wait load success
+        usPpsDetCnt = 0;
+    Drv_System_IntClr(IRQ_HDMIRX_PPS_LOAD_SUCC_INT);
+    while(usPpsDetCnt < 500)
+    {
+        usPpsDetCnt++;
+        Ocm_Delay1us(100);
+        if (Drv_System_IntFlagGet(IRQ_HDMIRX_PPS_LOAD_SUCC_INT) == TRUE)//[3]pps packet interrupt flag
+        {
+            Ocm_Delay1us(10);//must be wait load success
+            Drv_System_SramPathSet(HDMIRX_DSCBYPASS_PPS_PATH);
+            break;
+        }
+    }
+    //////////////////////////////////////////pps sram start
+    Drv_System_SramPathSet(HDMIRX_DSCBYPASS_PPS_PATH);
+    
+    BKE5_6A_REG = 0x00; //sram address num = 0   pps0/1/2/3 <- e683/e682/e681/e680
+    Ocm_Delay1us(2);
+    pps3 = BKE6_80_REG;
+    BKE5_6A_REG = 0x01; //sram address num = 1   pps4/5/6/7 <- e683/e682/e681/e680
+    Ocm_Delay1us(2);
+    pps4 = BKE6_83_REG;
+    pps5 = BKE6_82_REG;
+    BKE5_6A_REG = 0x02; //sram address num = 2   pps8/9/10/11 <- e683/e682/e681/e680
+    Ocm_Delay1us(2);
+    pps8 = BKE6_83_REG;
+    pps9 = BKE6_82_REG;
+    pps10 = BKE6_81_REG;
+    pps11 = BKE6_80_REG;
+    BKE5_6A_REG = 0x03; //sram address num = 3   pps12/13/14/15 <- e683/e682/e681/e680
+    Ocm_Delay1us(2);
+    pps12 = BKE6_83_REG;
+    pps13 = BKE6_82_REG;
+    pps14 = BKE6_81_REG;
+    pps15 = BKE6_80_REG;
+    BKE5_6A_REG = 0x16; //sram address num = 22   pps88/89/90/91 <- e683/e682/e681/e680
+    Ocm_Delay1us(2);
+    pps88 = BKE6_83_REG;
+    //////////////////////////////////////////pps sram end
+
+     //color space and depth get
+    g_stHdmiRxDscByInfo.ucColorDepth = (pps3 >> 5);//8 bit = 0x04, so >> 4 and /2, is >> 5
+    if (pps88 & BIT0_1)
+        g_stHdmiRxDscByInfo.ucColorSpace = YCbCr422_1;
+    else if (pps88 & BIT1_1)
+        g_stHdmiRxDscByInfo.ucColorSpace = YCbCr420_3;
+    else if (pps4 & BIT3_1)
+        g_stHdmiRxDscByInfo.ucColorSpace = SIMPLE422_5;
+    else if (pps4 & BIT4_1)//pps4[4]: 1-RGB, 0-nonRGB
+        g_stHdmiRxDscByInfo.ucColorSpace = RGB_0;
+    else
+        g_stHdmiRxDscByInfo.ucColorSpace = YCbCr444_2;
+
+    g_stHdmiRxDscByInfo.usBpp = ((u16)(pps4 & 0x03) << 8) + pps5;
+    temp1 = g_stHdmiRxDscByInfo.usBpp;
+    if (g_stHdmiRxDscByInfo.ucColorSpace == YCbCr422_1)
+    {
+         temp0 = 24;//24/bpp
+         temp1 >>= 1;
+    }
+    else if(g_stHdmiRxDscByInfo.ucColorSpace == YCbCr420_3)
+    {
+         temp0 = 12;
+         temp1 >>= 1;
+    }
+    else
+    {
+         temp0 = 24;
+    }
+    temp0 *= 160;
+    g_stHdmiRxDscByInfo.ucCompressRatio = (u8)(temp0 / temp1);
+
+    temp0 = ((u16)pps8 << 8) + pps9;
+    temp1 = ((u16)pps12 << 8) + pps13;
+    g_stHdmiRxDscByInfo.ucSliceNum = temp0 / temp1;
+
+    g_stHdmiRxDscByInfo.usSliceHeight = ((u16)pps10 << 8) + pps11;
+    g_stHdmiRxDscByInfo.usSliceWidth  = ((u16)pps12 << 8) + pps13;
+    if ((g_stHdmiRxDscByInfo.ucColorSpace == YCbCr422_1) || (g_stHdmiRxDscByInfo.ucColorSpace == YCbCr420_3))//420 or 422 or simple_422
+    {
+        g_stHdmiRxDscByInfo.usSliceWidth >>= 1;
+    }
+    if (g_stHdmiRxDscByInfo.ucColorSpace == YCbCr420_3)
+    {
+        g_stHdmiRxDscByInfo.usSliceHeight >>= 1;
+    }
+
+    g_stHdmiRxDscByInfo.usChunkSize = ((u16)pps14 << 8) + pps15;
+    g_stHdmiRxDscByInfo.ucCoreNum = g_stHdmiRxDscByInfo.ucSliceNum;
+    return;
+}
+
+void Drv_HdmiRxDscBy_InfoDisplay(void)
+{
+    #if 1
+    printLT(PRINT_PRIO_TEST, "\n==============DscBy Info==============");
+    printLT(PRINT_PRIO_TEST, "\nHbp   : %-4d  Vbp   : %-4d", g_stHdmiRxDscByTiming.usHbp,g_stHdmiRxDscByTiming.usVbp);
+    printLT(PRINT_PRIO_TEST, "\nHfp   : %-4d  Vfp   : %-4d", g_stHdmiRxDscByTiming.usHfp,g_stHdmiRxDscByTiming.usVfp);
+    printLT(PRINT_PRIO_TEST, "\nHsync : %-4d  Vsync : %-4d", g_stHdmiRxDscByTiming.usHsync,g_stHdmiRxDscByTiming.usVsync);
+    printLT(PRINT_PRIO_TEST, "\nHact  : %-4d  Vact  : %-4d", g_stHdmiRxDscByTiming.usHact,g_stHdmiRxDscByTiming.usVact);
+    printLT(PRINT_PRIO_TEST, "\nHtol  : %-4d  Vtol  : %-4d", g_stHdmiRxDscByTiming.usHtol,g_stHdmiRxDscByTiming.usVtol);
+    printLT(PRINT_PRIO_TEST, "\nSliceNumber   : %-4bd  DscNumber    : %-4bd", g_stHdmiRxDscByInfo.ucSliceNum, g_stHdmiRxDscByInfo.ucCoreNum);
+    printLT(PRINT_PRIO_TEST, "\nCompressRatio : %-4bd  Bpp          : %-4d", g_stHdmiRxDscByInfo.ucCompressRatio, g_stHdmiRxDscByInfo.usBpp);
+    printLT(PRINT_PRIO_TEST, "\nColorSpace    : %-4bd  ColorDepth   : %-4bd", g_stHdmiRxDscByInfo.ucColorSpace, g_stHdmiRxDscByInfo.ucColorDepth << 1);
+    printLT(PRINT_PRIO_TEST, "\nGroupUnit     : %-4bd  ChunkSize    : %-4d", g_stHdmiRxDscByInfo.ucGroupUnit, g_stHdmiRxDscByInfo.usChunkSize);
+    printLT(PRINT_PRIO_TEST, "\nSliceHeight   : %-4d  SliceWidth   : %-4d", g_stHdmiRxDscByInfo.usSliceHeight, g_stHdmiRxDscByInfo.usSliceWidth);
+    printLT(PRINT_PRIO_TEST, "\n======================================");
+    #endif
+}
+
+void Drv_HdmiRxDscBy_RxSet(void)
+{
+    #if RX_PORT_SIGN == HDMI_PORT
+    BKEA_18_REG &= BIT0_0;//[0]rgd_pps_dp_in: 1-dp in, 0-hdmi in
+    #endif
+}
+
+void Drv_HdmiRxDscBy_DataClkMuxSet(void)
+{
+    BKA3_32_REG = 0x01;//[6:4]rg_secpcrpll_half_pcrck_muxsel: 000-aa_pll_pix_clk
+}
+
+void Drv_HdmiRxDscBy_ModuleEnable(void)
+{
+    Drv_HdmiRxDscBy_InfoDisplay();
+    Drv_HdmiRxDscBy_RxSet();
+    Drv_HdmiRxDscBy_DataClkMuxSet();
+
+    g_stHdmiRxDscByInfo.ucDscByEn = ENABLED;
+}
+
+void Drv_HdmiRxDscBy_Init(void)//recover to no dsc configure
+{ 
+    BKCC_0F_REG &= BIT2_0;//[2]rgd_audc_cd_sel: 0-logic generate from rx depkt
+    BKCC_10_REG &= BIT0_0;//[0]color space en: 0-logic generate from rx depkt
+
+    BKCE_32_REG = 0x7b; //secpcr mode
+    BKCE_4B_REG |= BIT4_1; //[4]rgd_dsc_pcr_hact_set_sel: 1-hactive used from pps detection
+    BKCE_40_REG = 0x00; //hact[15:8]
+    BKCE_41_REG = 0x00; //hact[7:0]
+    BKCE_42_REG = 0x00; //htotal[15:8]
+    BKCE_43_REG = 0x00; //htotal[7:0]
+    
+    g_stHdmiRxDscByInfo.ucDscByEn = DISABLED;
+    printLT(PRINT_PRIO_TEST, "\nHdmi rx dsc bypass init");
+}
+
+void Drv_HdmiRxDscBy_ColorInfoGet(ColorInfo_S *pstInfo)
+{
+    pstInfo->ucBitDepth      = g_stHdmiRxDscByInfo.ucColorDepth;
+    pstInfo->ucPixelEncoding = g_stHdmiRxDscByInfo.ucColorSpace;
+}
+
+u8 Drv_HdmiRxDscBy_SwitchGet(void)
+{
+    return g_stHdmiRxDscByInfo.ucDscByEn;
+}
+u16 Drv_HdmiRxDscBy_BppGet(void)
+{   
+    if(g_stHdmiRxDscByInfo.usBpp & 0x0f)
+    {
+       return  1;
+    }
+    else
+    {
+      return  0;
+    }
+}
+
+#endif
+#endif

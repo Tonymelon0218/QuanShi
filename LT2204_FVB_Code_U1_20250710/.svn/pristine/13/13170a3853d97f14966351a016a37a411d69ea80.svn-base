@@ -1,0 +1,141 @@
+C51 COMPILER V9.53.0.0   DRVDDCMAST                                                        02/13/2025 10:14:13 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVDDCMAST
+OBJECT MODULE PLACED IN .\Objects\DrvDdcMast.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvDdcMast.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE)
+                    - REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRI
+                    -NT(.\Listings\DrvDdcMast.lst) OBJECT(.\Objects\DrvDdcMast.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  DdcMast.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          #include "Include.h"
+   8          
+   9          #if TX_PORT_SIGN == HDMI_PORT
+              
+              void Drv_HdmiTx_DdcMstRst(void)
+              {
+                  BKE9_8A_REG &= BIT7_0;
+                  BKE9_8A_REG |= BIT7_1;
+              }
+              void Drv_HdmiTx_DdcSoftMode(u8 b1IsSoftEn)
+              {
+                  if(b1IsSoftEn == TRUE)
+                  {
+                      BKE9_DD_REG |= BIT5_1;//ddc master input select software mode
+                      BKE9_DE_REG |= BIT5_1;//ddc access control:
+                  }
+                  else
+                  {
+                      Ocm_Delay1us(1);
+                      BKE9_DD_REG &= BIT5_0;//auto mode
+                      BKE9_DE_REG &= BIT5_0;//ddc access control:
+                  }
+              }
+              void Drv_HdmiTx_WriteI2CByte(u16 usRegAddr, u8 ucValue)
+              {
+                  u8 ucDelay;
+              
+                  Drv_HdmiTx_DdcSoftMode(TRUE);
+                  BKE9_BA_REG = usRegAddr >>8;//addr high
+                  BKE9_BC_REG = usRegAddr;//addr low
+                  BKE9_BD_REG = 0x01;//data lenth
+                  BKE9_C9_REG = ucValue;//write data
+                  BKE9_BE_REG = 0x9a;//write command
+                  ucDelay = 0;
+                  while(((BKE9_90_REG & BIT7_1) == 0x00) && (ucDelay < 100))
+                  {
+                      Ocm_Delay1us(50);
+                      ucDelay++;
+                  }
+                  BKE9_BE_REG = 0x9f;
+                  Drv_HdmiTx_DdcSoftMode(FALSE);
+              }
+              
+              u8 Drv_HdmiTx_ReadI2CByteN(u8 ucSegmentAddr, u16 usRegAddr, u8 *pucValue, u8 ucNum)
+              {
+                  u8 b1Vaule;
+                  u8 ucReadCnt;
+C51 COMPILER V9.53.0.0   DRVDDCMAST                                                        02/13/2025 10:14:13 PAGE 2   
+
+                  u16 usDelay;
+              
+                  Drv_HdmiTx_DdcSoftMode(TRUE);
+              
+                  BKE9_D5_REG |=BIT3_1;//must clear for next read request
+                  BKE9_D6_REG = 0x00;  // initial the addr before c6d5
+                  BKE9_D5_REG &=BIT3_0;//must clear for next read request
+              
+                  BKE9_BA_REG = usRegAddr >>8;//addr high
+                      //for CTS test, block number bigger than 4
+                      BKE9_BB_REG = ucSegmentAddr;
+              //    BKE9_BB_REG = (ucSegmentAddr == 0x01)?(0x01):(0x00);//segment addr
+                  BKE9_BC_REG = usRegAddr&0xff;// addr++
+                  BKE9_BD_REG = ucNum;//
+                  BKE9_BE_REG = (ucSegmentAddr != 0x00)?(0x9c):(0x99);//read command  
+                  ucSegmentAddr = 0x00;
+                  usDelay = 0;
+                  while(((BKE9_90_REG & BIT7_1) == 0x00)&&(usDelay < 1500))//ddc stretch must be wait 150ms for CTS
+                  {
+                      Ocm_Delay1us(100);
+                      usDelay++;
+                  }
+                  if(BKE9_90_REG & BIT5_1)//no nack
+                  {
+                      b1Vaule = FALSE;
+                      *pucValue = 0xff;
+                  }
+                  else
+                  {
+                      BKE9_D5_REG |= BIT4_1|BIT3_1;//Set to software of KSV list sram reading/Set to software of KSV lis
+             -t sram.
+                      for(ucReadCnt = 0;ucReadCnt < ucNum; ucReadCnt ++)
+                      {
+                          BKE9_D6_REG = ucReadCnt;
+                          *pucValue = BKE9_A0_REG ;
+                          pucValue++;
+                      }
+                      b1Vaule = TRUE;
+                  }
+                  BKE9_BE_REG = 0x9f;
+                  BKE9_D6_REG = 0x00;// initial the addr before c6d5
+                  BKE9_D5_REG &= BIT4_0&BIT3_0;//must clear for next read request
+                  Drv_HdmiTx_DdcSoftMode(FALSE);
+              
+                  return b1Vaule;
+              }
+              
+              u8 Drv_HdmiTx_ReadI2CByte(u16 usRegAddr)
+              {
+                  u8 ucVaule;
+                  Drv_HdmiTx_ReadI2CByteN(0x00,usRegAddr,&ucVaule,1);
+                  return ucVaule;
+              }
+              
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+C51 COMPILER V9.53.0.0   DRVDDCMAST                                                        02/13/2025 10:14:13 PAGE 3   
+
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

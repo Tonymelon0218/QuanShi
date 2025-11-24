@@ -1,0 +1,43 @@
+#include "include.h"
+
+//===========================================
+//func  :Drvtypec
+//input :N/A
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+
+// this TypecRx It means Typec DCC 
+#if TYPECTX_EN == ENABLED
+
+void Drv_Cc1Sw_Ctrl(u8 b1IsEn)
+{
+    (b1IsEn == ENABLED)?(BKA2_A9_REG |= BIT1_1):(BKA2_A9_REG &= BIT1_0);
+}
+
+void Drv_CC1Ra_Det(void)
+{
+    if(Drv_CC1RpOn_Scan() == 1)//Rp Online
+    {
+        //0x60 Normal Emark;0x90 Flip Emark
+        if((BKFC_30_REG&0xA0) == 0x20)//Normal Emark
+        {
+            VCONN2_GPIO_CTRL(HIGH);
+        }
+        else if((BKFC_30_REG&0xA0) == 0x80)//Flip Emark
+        {
+            VCONN1_GPIO_CTRL(HIGH);
+        }
+        else//No Ra or Audio online
+        {
+            ;
+        }
+    }
+    else
+    {
+        ;
+    }
+}
+
+#endif

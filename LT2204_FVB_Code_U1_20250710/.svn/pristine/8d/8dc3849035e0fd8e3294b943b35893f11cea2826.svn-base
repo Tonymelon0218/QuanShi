@@ -1,0 +1,216 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  Lt8711uxe2.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "include.h"
+
+#if CHIP_SEL == LT86121GXE
+
+//========================================================================
+// Func Name   : LT86121GXE_PowerOnInit
+// Description : 
+// Input       : None
+// Output      : None
+// Return      : 
+//========================================================================
+void LT86121GXE_PowerOnInit(void)
+{
+    Mod_HdmiRx_PowerOnInit();
+    Mod_HdmiTx_PowerOnInit();
+    Drv_Sys_DecPowerDomain(TRUE);
+    Drv_Sys_EncPowerDomain(TRUE);
+    Drv_Sys_LmtxPowerDomain(TRUE);
+}
+
+
+void LT86121GXE_HdmiRxVarInit(void)
+{
+    
+}
+
+void LT86121GXE_HdmiTxVarInit(void)
+{
+    ;
+}
+
+void LT86121GXE_HdmiRxColorInfoCvt(void)
+{
+    ColorInfo_S stInfo;
+    LtTiming_S  stRxTimingInfo; 
+
+    Drv_HdmiRx_ColorInfoGet(&stInfo);
+    #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+    if (Drv_HdmiRxDscDec_SwitchGet() == ENABLED)
+    {
+        Drv_HdmiRxDscDec_ColorInfoGet(&stInfo);
+    }
+    #endif
+    Drv_HdmiRx_RxTimingGet(&stRxTimingInfo);//
+
+    Mod_HdmiTx_ColorSpaceCal(&stInfo,&g_stHdmiTx);
+    Mod_HdmiTx_ColorRangeCal(&stInfo,&g_stHdmiTx);
+    Mod_HdmiTx_ColorimetryCal(&stInfo,&g_stHdmiTx);
+//    Mod_HdmiTx_AspectRatioCal(&stRxTimingInfo,&g_stHdmiTx);
+    Mod_HdmiTx_AspectRatioCal(&g_stHdmiTx);
+    Mod_HdmiTx_VicCal(&stRxTimingInfo,&g_stHdmiTx);
+    Mod_HdmiTx_ColorDepthCal(&stInfo,&g_stHdmiTx); 
+}
+
+void LT86121GXE_HdmiRxAudioInfoCvt(void)
+{
+    AudioChlInfo_S stInfo;
+    Drv_HdmiRx_AudioInfoGet(&stInfo);
+    Mod_Audio_HdmiTxInfoCvt(&stInfo,&g_stHdmiTx);
+}
+
+
+void LT86121GXE_HdmiRxCscOrEncSel(void)
+{
+    g_stHdmiRx.b1CscRxEnable = DISABLED;
+    printLT(PRINT_PRIO_HIG, "\nRx_Tmsd_clk =  0x%08lx",g_stHdmiRx.ulRxTmdsClk);
+    g_stHdmiTx.ulTxPixelClk = g_stHdmiRx.ulRxPixelClk;
+    g_stHdmiTx.ulTxTmdsClk  = g_stHdmiRx.ulRxTmdsClk;
+}
+
+#if CSC_SUPPORT == ENABLED
+void LT86121GXE_HdmiRxCscCvt(void)
+{
+    if(g_stHdmiRx.b1CscRxEnable == ENABLED)
+    {
+        if((g_stHdmiRx.ucPixelEncoding == RGB_0)||(g_stHdmiRx.ucPixelEncoding == RGB_WIDE_4))
+        {
+            g_stHdmiRx.b1CscRxOutRange = FULL_RANGE;
+        }
+        else
+        {
+            g_stHdmiRx.b1CscRxOutRange = LIMIT_RANGE;
+        }
+    }
+}
+#endif
+
+void LT86121GXE_HdmiRxMsgNotify(u8 ucEvent)
+{
+    switch(ucEvent)
+    {
+        case HDMIRX_SOURECE_PLUG_EVENT:
+            g_stHdmiTx.b1UpstreamDeviceReady = TRUE;
+            break;
+
+        case HDMIRX_SOURECE_UNPLUG_EVENT:            
+            g_stHdmiTx.b1UpstreamDeviceReady = FALSE;
+            break;
+
+        case HDMIRX_VIDEO_ON_EVENT:
+            Mod_HdmiRx_TmdsClkCal();
+            LT86121GXE_HdmiRxCscOrEncSel();
+            LT86121GXE_HdmiRxColorInfoCvt();
+        
+            #if CSC_SUPPORT == ENABLED
+            LT86121GXE_HdmiRxCscCvt();
+            #endif
+            g_stHdmiTx.b1UpstreamVideoReady = TRUE;
+            break;
+
+        case HDMIRX_VIDEO_OFF_EVENT:
+            Drv_HdmiRx_SyncPolSet(DISABLED);
+            Drv_HdmiRx_TmdsPcrPllDis();
+            Drv_Sys_DecPowerDomain(TRUE);
+            Drv_Sys_EncPowerDomain(TRUE);
+            #if CSC_SUPPORT == ENABLED
+            Drv_CscRx_Init();
+            #endif
+            #if HDMIRX_DSC_BYPASS_SUPPORT == ENABLED
+            if (Drv_HdmiRxDscBy_SwitchGet() == ENABLED)
+            {
+                g_stHdmiTx.b1SrcDscByEn = ENABLED;
+            }
+            else
+            {
+                 g_stHdmiTx.b1SrcDscByEn = DISABLED;
+            }
+            #endif
+            g_stHdmiTx.b1UpstreamVideoReady = FALSE;
+            break;
+
+        case HDMIRX_HDCP_VER_CHG_EVENT:
+
+            g_stHdmiTx.ucHdcpRxVerChg = TRUE;
+//            g_stHdmiTx.ucHdcpRxVersion = Drv_HdcpRx_VerGet();
+            break;
+
+        case HDMIRX_AUDIO_CHG_EVENT:
+            LT86121GXE_HdmiRxAudioInfoCvt();
+            g_stHdmiTx.b1AudioInfoChg = TRUE;
+            break;
+
+        case HDMIRX_VRR_NOTIFY_EVENT:
+            #if HDMITX_VRR_SUPPORT == ENABLED
+            g_stHdmiTx.b1SrcVrrEn = Mod_HdmiRx_VrrSwitchGet();
+            g_stHdmiTx.b1SrcVrrChg = TRUE;  
+            #endif
+            break;
+        case HDMIRX_INTERLACE_EVENT:
+            g_stHdmiTx.b1SrcInterlaceEn  = Mod_HdmiRx_InterlaceGet();
+            g_stHdmiTx.b1SrcInterlaceChg = TRUE;  
+            break;
+        case HDMIRX_DOBLY_HDR_NOTIFY_EVENT:
+            g_stHdmiTx.b1SrcDoblyHdrEn  = Mod_HdmiRx_HdrStateGet();
+            g_stHdmiTx.b1SrcDoblyHdrChg = TRUE;  
+            break;
+        case HDMIRX_STATIC_HDR_NOTIFY_EVENT:
+            g_stHdmiTx.b1SrcStaticHdrEn  = Mod_HdmiRx_HdrStateGet();
+            g_stHdmiTx.b1SrcStaticHdrChg = TRUE;  
+            break;        
+        case HDMIRX_DYNAMIC_HDR_NOTIFY_EVENT:
+            g_stHdmiTx.b1SrcDynamicHdrEn  = Mod_HdmiRx_HdrStateGet();
+            g_stHdmiTx.b1SrcDynamicHdrChg = TRUE;  
+            break;          
+        case HDMIRX_AUDIO_MUTE_EN:
+            break;
+        case HDMIRX_AUDIO_MUTE_DIS:
+            break;
+        case HDMIRX_VIDEO_MUTE_EN:
+            break;
+        case HDMIRX_VIDEO_MUTE_DIS:
+            break;
+        default:
+            break;
+    }
+}
+
+void LT86121GXE_HdmiTxMsgNotify(u8 ucEvent)
+{
+    switch(ucEvent)
+    {
+        case HDMITX_SINK_PLUG_EVENT:
+            break;
+
+        case HDMITX_SINK_UNPLUG_EVENT:
+            
+            g_stHdmiRx.b1DownstreamDeviceReady = FALSE;
+            break;
+
+        case HDMITX_EDID_VALID_EVENT:
+        case HDMITX_EDID_INVALID_EVENT:        
+            Mod_Edid_Update(szEdidData);
+            g_stHdmiTx.b1HdmiMode = Mod_Edid_ModeDet();
+            g_stHdmiRx.b1DownstreamDeviceReady = TRUE;
+            break;
+        default:
+            break;
+    }
+}
+
+void LT86121GXE_Main_Scan(void)
+{
+    //rx handler
+    Mod_HdmiRx_Handler();
+    
+    //tx handler    
+    Mod_HdmiTx_Handler();
+}
+
+#endif

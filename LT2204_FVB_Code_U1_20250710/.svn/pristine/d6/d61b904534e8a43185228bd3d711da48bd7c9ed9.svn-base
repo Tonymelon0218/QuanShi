@@ -1,0 +1,328 @@
+C51 COMPILER V9.53.0.0   MODHDMIRXEQ                                                       02/13/2025 10:14:08 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODHDMIRXEQ
+OBJECT MODULE PLACED IN .\Objects\ModHdmiRxEq.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModHdmiRxEq.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZ
+                    -E) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG P
+                    -RINT(.\Listings\ModHdmiRxEq.lst) OBJECT(.\Objects\ModHdmiRxEq.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: FrlRx.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.06.27
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          #if RX_PORT_SIGN == HDMI_PORT
+  11          
+  12          #define EQ_ERR_UPLIMIT      0x8010
+  13          #define EQ_GOOD_MAX         0x8001
+  14          #define EQ_GOOD_MIN         0x8000
+  15          
+  16          #define CHK_EQ_ERR_UPLMT    0
+  17          #define CHK_EQ_GOOD_MAX     1
+  18          
+  19          
+  20          #if HDMIRX_EQ_STAGE == EQ_16_STAGE
+  21          u8 code HDMI20_EQ[16] = {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f};
+  22          u8 code HDMI21_EQ[16] = {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87,0x88,0x89,0x8a,0x8b,0x8c,0x8d,0x8e,0x8f};
+  23          #elif HDMIRX_EQ_STAGE == EQ_8_STAGE
+              u8 code HDMI20_EQ[8] = {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87};
+              u8 code HDMI21_EQ[8] = {0x80,0x81,0x82,0x83,0x84,0x85,0x86,0x87};
+              #endif
+  27          
+  28          
+  29          //-------------------------------------------------------------------soft eq end -------------------------
+             -------------------------------------
+  30          #if HDMIRX_EQ_MODE == FIX_MODE
+              #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+              void Mod_HdmiRxEq_Frl_FixedEqSet(void)
+              {
+                  u8 ucLoop_Eq;
+                  u16 szErrCount_Lane[4] = {0};
+                  ucLoop_Eq = 4;
+                  for(ucLoop_Eq = 0;ucLoop_Eq < 16;ucLoop_Eq++)
+                  {
+                      BKA1_13_REG = HDMI21_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_e
+             -q0rs;
+                      BKA1_15_REG = HDMI21_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_e
+             -q0rs;
+                      BKA1_17_REG = HDMI21_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_e
+             -q0rs;
+                      BKA1_19_REG = HDMI21_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_e
+             -q0rs;
+                      Drv_HdmiRx_Frl_ErrClr();
+                      Ocm_Delay1ms(10);
+                      szErrCount_Lane[0] = PACK_16_BIT(BKCD_C6_REG, BKCD_C7_REG);
+                      szErrCount_Lane[1] = PACK_16_BIT(BKCD_C8_REG, BKCD_C9_REG);
+                      szErrCount_Lane[2] = PACK_16_BIT(BKCD_CA_REG, BKCD_CB_REG);
+                      szErrCount_Lane[3] = PACK_16_BIT(BKCD_CC_REG, BKCD_CD_REG);
+C51 COMPILER V9.53.0.0   MODHDMIRXEQ                                                       02/13/2025 10:14:08 PAGE 2   
+
+                      printLT(PRINT_PRIO_HIG, "\nEq = 0x%02bx,0x%04x,0x%04x,0x%04x,0x%04x", BKA1_13_REG,szErrCount_Lane[
+             -0],szErrCount_Lane[1],szErrCount_Lane[2],szErrCount_Lane[3]);
+                  }
+              }
+              #endif
+              
+              void Mod_HdmiRxEq_Tmds_FixedEqSet(void)
+              {
+                  u8 ucLoop_Eq;
+                  u16 szErrCount_Lane[3] = {0};
+                  ucLoop_Eq = 7;
+                  for(ucLoop_Eq = 0;ucLoop_Eq < 16;ucLoop_Eq++)
+                  {
+                      BKA1_13_REG = HDMI20_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_e
+             -q0rs;
+                      BKA1_15_REG = HDMI20_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_e
+             -q0rs;
+                      BKA1_17_REG = HDMI20_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_e
+             -q0rs;
+                      BKA1_19_REG = HDMI20_EQ[ucLoop_Eq];//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_e
+             -q0rs;
+                      Drv_HdmiRx_Tmds_ErrClr();
+                      Ocm_Delay1ms(100);
+                      szErrCount_Lane[0] = PACK_16_BIT(BKCC_D8_REG, BKCC_D9_REG);
+                      szErrCount_Lane[1] = PACK_16_BIT(BKCC_DA_REG, BKCC_DB_REG);
+                      szErrCount_Lane[2] = PACK_16_BIT(BKCC_DC_REG, BKCC_DD_REG);
+              
+                      printLT(PRINT_PRIO_HIG, "\nEq = 0x%02bx,0x%04x,0x%04x,0x%04x", BKF1_7E_REG,szErrCount_Lane[0],szEr
+             -rCount_Lane[1],szErrCount_Lane[2]);
+                  }
+              }
+              #endif
+  75          //-------------------------------------------------------------------fixed eq end ------------------------
+             --------------------------------------
+  76          
+  77          void Mod_HdmiRxEq_Init(void)
+  78          {
+  79   1          #if HDMIRX_EQ_MODE == HW_MODE
+  80   1          #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+  81   1          Drv_HdmiRx_Frl_HwEqInit();
+  82   1          #endif
+  83   1          Drv_HdmiRx_Tmds_HwEqInit();
+  84   1          #endif
+  85   1      }
+  86          
+  87          void Mod_HdmiRxEq_Tmds_Set(void)
+  88          {
+  89   1          g_stHdmiRx.b1EqSucc = FALSE;
+  90   1          Drv_HdmiRx_Tmds_ErrClr();
+  91   1          
+  92   1          #if HDMIRX_EQ_MODE == SW_MODE
+                  Mod_HdmiRxEq_Tmds_EqScan();
+                  #endif
+  95   1          
+  96   1          #if HDMIRX_EQ_MODE == HW_MODE
+  97   1          Drv_HdmiRx_Tmds_HwEqEn();
+  98   1          #endif
+  99   1          
+ 100   1          #if HDMIRX_EQ_MODE == FIX_MODE
+                  Mod_HdmiRxEq_Tmds_FixedEqSet();
+                  #endif
+ 103   1      }
+C51 COMPILER V9.53.0.0   MODHDMIRXEQ                                                       02/13/2025 10:14:08 PAGE 3   
+
+ 104          
+ 105          u8 Mod_HdmiRxEq_Tmds_StateGet(u8 ucLane)
+ 106          {
+ 107   1          u8 ucRtn = UNKNOWN;
+ 108   1      
+ 109   1          #if HDMIRX_EQ_MODE == SW_MODE
+                  if (ucLane == LANE_ALL)
+                  {
+                      ucRtn = (g_stHdmiRx.b1EqSucc == 0x0f)? (SUCCESS) : (FAIL);
+                  }
+                  else
+                  {
+                      ucRtn = (g_stHdmiRx.b1EqSucc & (0x01 << ucLane))? (SUCCESS) : (FAIL);
+                  }
+                  #endif
+ 119   1      
+ 120   1          #if HDMIRX_EQ_MODE == HW_MODE
+ 121   1          if (ucLane == LANE_ALL)
+ 122   1          {
+ 123   2              if((BKCC_EF_REG & 0x77) == 0x07)
+ 124   2              {
+ 125   3                  ucRtn = SUCCESS;
+ 126   3              }
+ 127   2              else if(BKCC_EF_REG & 0x70)
+ 128   2              {
+ 129   3                  ucRtn = FAIL;
+ 130   3              }
+ 131   2          }
+ 132   1          else
+ 133   1          {
+ 134   2              if(BKCC_EF_REG & (0x04 >> ucLane))
+ 135   2              {
+ 136   3                  ucRtn = SUCCESS;
+ 137   3              }
+ 138   2              else if(BKCC_EF_REG & (0x40 >> ucLane))
+ 139   2              {
+ 140   3                  ucRtn = FAIL;
+ 141   3              }
+ 142   2          }
+ 143   1          #endif
+ 144   1      
+ 145   1          #if HDMIRX_EQ_MODE == FIX_MODE
+                  ucRtn = SUCCESS;
+                  #endif
+ 148   1      
+ 149   1          return ucRtn;
+ 150   1      }
+ 151          
+ 152          #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+ 153          void Mod_HdmiRxEq_Frl_ValSet(u8 ucLane,u8 ucEqValue)
+ 154          {
+ 155   1          switch(ucLane)
+ 156   1          {
+ 157   2              case LANE_0:
+ 158   2                  BKA1_13_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+ 159   2                  break;
+ 160   2              case LANE_1:
+ 161   2                  BKA1_15_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+ 162   2                  break;
+ 163   2              case LANE_2:
+ 164   2                  BKA1_17_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+ 165   2                  break;
+C51 COMPILER V9.53.0.0   MODHDMIRXEQ                                                       02/13/2025 10:14:08 PAGE 4   
+
+ 166   2              case LANE_3:
+ 167   2                  BKA1_19_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+ 168   2                  break;
+ 169   2              default:
+ 170   2                  BKA1_13_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d0_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+ 171   2                  BKA1_15_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d1_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+ 172   2                  BKA1_17_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d2_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d0_eq0rs;
+ 173   2                  BKA1_19_REG = ucEqValue;//[7]rgd_sw_en_dhrx_d3_eq0rs: 0-hw, 1-sw; [5:0]rgd_sw_dhrx_d1_eq0rs;
+ 174   2                  break;
+ 175   2          }
+ 176   1      }
+ 177          
+ 178          //========================================================================
+ 179          // Func Name   : eq check in pre detect
+ 180          // Description : 如果第一档eq比较差，会导致EqCheckIn中断无法启动，
+ 181          //               需要通过该函数辅助启动
+ 182          // Input       : void  
+ 183          // Output      : None
+ 184          // Return      : u8
+ 185          //========================================================================
+ 186          void Mod_HdmiRxEq_EqCheckInPreDet(void)
+ 187          {
+ 188   1          u8 ucEqIdx;
+ 189   1          for (ucEqIdx = 0; ucEqIdx < HDMIRX_EQ_STAGE; ucEqIdx++)
+ 190   1          {
+ 191   2              if((BKCD_E6_REG & BIT6_1)||(BKCD_E6_REG & BIT0_1))//eq check in int flag
+ 192   2              {
+ 193   3                  break;
+ 194   3              }
+ 195   2              Mod_HdmiRxEq_Frl_ValSet(LANE_ALL, HDMI21_EQ[ucEqIdx]);
+ 196   2              Ocm_Delay1ms(1);
+ 197   2          }
+ 198   1          if(ucEqIdx >= HDMIRX_EQ_STAGE) //pixe > 600M solve 980 change frl off，No video and eq checkin not val
+             -id
+ 199   1          {
+ 200   2              BKCD_16_REG |= 0x30;
+ 201   2              BKCD_16_REG &= 0xcf; 
+ 202   2          }
+ 203   1          memset(&BKA1_13_REG,0x00,8);
+ 204   1      }
+ 205          
+ 206          void Mod_HdmiRxEq_Frl_Set(void)
+ 207          {
+ 208   1          g_stHdmiRx.b1EqSucc = FALSE;
+ 209   1          BKCD_16_REG &= BIT1_0;//[1]rgd_eq_pass_soft: 0-dis;
+ 210   1      
+ 211   1          Drv_HdmiRx_Frl_ErrClr();
+ 212   1      
+ 213   1          #if HDMIRX_EQ_MODE == SW_MODE
+                  if (Mod_HdmiRxEq_Frl_EqScanLR() == FALSE)
+                  {
+                      Mod_HdmiRxEq_Frl_EqScanAll();
+                  }
+                  #endif
+ 219   1      
+ 220   1          #if HDMIRX_EQ_MODE == HW_MODE
+ 221   1          Drv_HdmiRx_Frl_HwEqEn();
+ 222   1          #endif
+ 223   1      
+ 224   1          #if HDMIRX_EQ_MODE == FIX_MODE
+                  Mod_HdmiRxEq_Frl_FixedEqSet();
+                  #endif
+C51 COMPILER V9.53.0.0   MODHDMIRXEQ                                                       02/13/2025 10:14:08 PAGE 5   
+
+ 227   1      }
+ 228          
+ 229          u8 Mod_HdmiRxEq_Frl_StateGet(u8 ucLane)
+ 230          {
+ 231   1          u8 ucRtn = UNKNOWN;
+ 232   1          u8 ucTemp;
+ 233   1          u8 ucLaneCnt;
+ 234   1          #if HDMIRX_EQ_MODE == SW_MODE
+                  if (ucLane == LANE_ALL)
+                  {
+                      ucRtn = (g_stHdmiRx.b1EqSucc == 0x0f)? (SUCCESS) : (FAIL);
+                  }
+                  else
+                  {
+                      ucRtn = (g_stHdmiRx.b1EqSucc & (0x01 << ucLane))? (SUCCESS) : (FAIL);
+                  }
+                  #endif
+ 244   1      
+ 245   1          #if HDMIRX_EQ_MODE == HW_MODE
+ 246   1          if (ucLane == LANE_ALL)
+ 247   1          {
+ 248   2              ucLaneCnt = ((BKCD_B5_REG & 0x0f) >= FRL_6G4LANE)?(4):(3);
+ 249   2              if(ucLaneCnt == 4)
+ 250   2              {
+ 251   3                  ucRtn = ((BKCE_B8_REG & 0xaa) == 0xaa)? (SUCCESS) : (FAIL);
+ 252   3              }
+ 253   2              else if(ucLaneCnt == 3)
+ 254   2              {
+ 255   3                  ucRtn = ((BKCE_B8_REG & 0x2a) == 0x2a)? (SUCCESS) : (FAIL);
+ 256   3              }
+ 257   2          }
+ 258   1          else
+ 259   1          {
+ 260   2              ucTemp = ucLane << 1;
+ 261   2              ucRtn = (BKCE_B8_REG & (0x02 << ucTemp))? (SUCCESS) : (FAIL);
+ 262   2          }
+ 263   1          #endif
+ 264   1      
+ 265   1          #if HDMIRX_EQ_MODE == FIX_MODE
+                  ucRtn = SUCCESS;
+                  #endif
+ 268   1          if (ucRtn == SUCCESS)
+ 269   1          {
+ 270   2              BKCD_16_REG |= BIT1_1;//[1]rgd_eq_pass_soft: 1-en;
+ 271   2          }
+ 272   1          return ucRtn;
+ 273   1      }
+ 274          #endif
+ 275          
+ 276          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    462    ----
+   CONSTANT SIZE    =     32    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+C51 COMPILER V9.53.0.0   MODHDMIRXEQ                                                       02/13/2025 10:14:08 PAGE 6   
+
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

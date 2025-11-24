@@ -1,0 +1,535 @@
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODDPLINKCTS
+OBJECT MODULE PLACED IN .\Objects\ModDpLinkCts.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModDpLinkCts.c LARGE OBJECTADVANCED OPTIMIZE(11,SI
+                    -ZE) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG 
+                    -PRINT(.\Listings\ModDpLinkCts.lst) OBJECT(.\Objects\ModDpLinkCts.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: FrlRx.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.06.27
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          #if TX_PORT_SIGN == DP_PORT
+  11          #if DPTX_CTS_SUPPORT == ENABLED
+              void Mod_DpTx_LinkQualPtnSet(u8 ucPtn)
+              {
+                  BKF5_01_REG  = 0x00;
+                  BKF5_02_REG |= BIT6_1;//[6]link train test en: 1-Test pattern transmit enable
+                  BKF5_7E_REG &= 0x88;
+                  BKF5_7F_REG &= 0x88;
+                  switch(ucPtn & 0x07)
+                  {
+                      case 0x01://D10.2 without scrambling   
+                          BKF5_7D_REG |= BIT1_1; //scrmable disable  new design in 2204 
+                          BKF5_7E_REG |= 0x11;
+                          BKF5_7F_REG |= 0x11;
+                          break;
+                      case 0x02://Symbol_Error_Measurement_Count    
+                          BKF5_7E_REG |= 0x22;
+                          BKF5_7F_REG |= 0x22;
+                          break;
+                      case 0x03://PRBS7
+                          BKF5_7E_REG |= 0x33;//lane1, 0;  33, 03
+                          BKF5_7F_REG |= 0x33;//lane3, 2; 
+                          break;
+                      case 0x04://80-bit custom pattern transmitted    
+                          BKF5_41_REG = 0xE0;//PLTPAT 80BIT, 80 Bit Custom pattern
+                          BKF5_42_REG = 0x83;//PLTPAT 80BIT
+                          BKF5_43_REG = 0x0F;//PLTPAT 80BIT
+                          BKF5_44_REG = 0x3E;//PLTPAT 80BIT
+                          BKF5_45_REG = 0xF8;//PLTPAT 80BIT
+                          BKF5_46_REG = 0xE0;//PLTPAT 80BIT
+                          BKF5_47_REG = 0x83;//PLTPAT 80BIT
+                          BKF5_48_REG = 0x0F;//PLTPAT 80BIT
+                          BKF5_49_REG = 0x3E;//PLTPAT 80BIT
+                          BKF5_4A_REG = 0xF8;//PLTPAT 80BIT
+                          BKF5_7E_REG |=0x44;                    
+                          BKF5_7F_REG |=0x44;
+                          BKF5_40_REG = 0x08;
+                          break;
+                      case 0x05://CP2520 Pattern 1
+                          BKF5_00_REG = 0x40;
+                          BKF5_0F_REG = 0x00;
+                          BKF5_40_REG = 0xfc;
+                          BKF5_7D_REG &=BIT1_0; //scramble en
+              
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 2   
+
+                          BKF5_7E_REG = 0x11;
+                          BKF5_7F_REG = 0x11;
+                          BKF5_02_REG &=BIT5_0; 
+                          Ocm_Delay1ms(1);
+                          BKF5_02_REG |=BIT5_1; 
+                          BKF5_7E_REG = 0x55;    
+                          BKF5_7F_REG = 0x55;
+                          break;
+                      case 0x06://CP2520 Pattern 2    
+                          BKF5_00_REG = 0x80;    
+                          BKF5_0F_REG = 0x00;
+                          BKF5_40_REG = 0xfc;
+                          BKF5_7D_REG &=BIT1_0;//scramble en
+              
+                          BKF5_7E_REG = 0x11;
+                          BKF5_7F_REG = 0x11;
+                          BKF5_02_REG &=BIT5_0; 
+                          Ocm_Delay1ms(1);
+                          BKF5_02_REG |=BIT5_1; 
+                          BKF5_7E_REG = 0x55;    
+                          BKF5_7F_REG = 0x55;
+                          break;
+                      case 0x07://CP2520 Pattern 3    
+                          BKF5_00_REG = 0xc0;    
+                          BKF5_01_REG |=0x80;//tps4 k28.0-
+                          BKF5_0F_REG = 0x00;
+                          BKF5_40_REG = 0xfc;
+                          BKF5_7D_REG &=BIT1_0;//scramble en
+              
+                          BKF5_7E_REG = 0x11;
+                          BKF5_7F_REG = 0x11;
+                          BKF5_02_REG &=BIT5_0; 
+                          Ocm_Delay1ms(1);
+                          BKF5_02_REG |=BIT5_1; 
+                          BKF5_7E_REG = 0x55;    
+                          BKF5_7F_REG = 0x55;
+                          break;
+                      default:
+                          break;
+                  }
+              }
+              
+              void Mod_DpTx_TestEdid(u8 b1IsInrq,u8 *pucEDID_Data)
+              {
+                  u8 ucdpcd201,ucdpcd218;
+                  if(b1IsInrq == 0)
+                  {
+                      Mod_DpTxLink_DpcdRead(0x00,0x0201,Rx_Buff,1);
+                      ucdpcd201 = Rx_Buff[0];
+                      Mod_DpTxLink_DpcdRead(0x00,0x0218,Rx_Buff,1);
+                      ucdpcd218 = Rx_Buff[0];
+                  }
+                  else
+                  {
+                      ucdpcd201 = 0x02;
+                      ucdpcd218 = 0x04; 
+                  }
+                  if((ucdpcd201&0x02)&&(ucdpcd218&0x04))
+                  {
+                      switch(pucEDID_Data[0x7e])
+                      {
+                          case 0x01://2 block
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 3   
+
+                              Tx_Buff[0] = pucEDID_Data[0xff];
+                              break;
+                          case 0x02://3 block
+                              Tx_Buff[0] = pucEDID_Data[0x17f];
+                              break;
+                          case 0x03://4 block
+                              Tx_Buff[0] = pucEDID_Data[0x1ff];
+                              break;
+                          default:
+                              Tx_Buff[0] = pucEDID_Data[0x7f];
+                              break;
+                      }
+                      Mod_DpTxLink_DpcdWrite(0x00,0x0261, Tx_Buff,1); // the checksum of the last EDID block that was re
+             -ad is written here
+                      Tx_Buff[0] = 0x05;//[2]edid checksum has been written to the "test_edid_checksum"
+                      Mod_DpTxLink_DpcdWrite(0x00,0x0260, Tx_Buff, 1);//[0]positive acknowledgement of the test_req
+                  }
+              }
+              
+              void Mod_DpTx_Automated_Test_Init(void)
+              {
+                  BKF5_02_REG &= BIT6_0; //disable test pattern
+                  #if RX_PORT_SIGN == DP_PORT
+                  BKC7_D7_REG &= 0xcf;
+                  #endif
+                  #if RX_PORT_SIGN == HDMI_PORT
+                  BKC7_D7_REG &= 0xcf;
+                  BKC7_D7_REG |= 0x10;
+                  #endif
+                  BKC7_C1_REG = 0x77; 
+                  BKC7_C0_REG = 0x30;
+                  BKC7_D5_REG = 0x01;
+                  g_stDpTx.ucMsaValue = 0x00;
+                  g_stDpTx.ucMisc0 = 0x00; 
+              }
+              
+              void Mod_DpTx_Automated_Test_Pattern(void)
+              {
+                  printLT(PRINT_PRIO_HIG,"\ntest link training");
+                          
+                  BKF5_02_REG |= BIT6_1;//[6]link train test en: 0-test pattern transmit disable
+                  BKC7_D7_REG |= 0x30; //sel pattern
+                  BKC7_C1_REG = 0x07; //pattern data from register
+              //    BKC7_D7_REG &= BIT0_0;//[0]rgd_rx_da_src_sel: 0-dp
+                  Mod_DpTxLink_DpcdRead(0x00,0x0221,Rx_Buff,1);//test_pattern
+                  BKC7_D6_REG   = (Rx_Buff[0] & 0x0f) << 4;    //dpcd-00221: ptn
+                  printLT(PRINT_PRIO_HIG,"\nucdpcd221 = 0x%02bx",Rx_Buff[0]);
+                  
+                  Mod_DpTxLink_DpcdRead(0x00,0x0222,Rx_Buff,16);//MSA
+                  BKC7_C3_REG = (((((u16)Rx_Buff[4]<<8)+Rx_Buff[5])/2)>>8); //hstart[15:8]
+                  BKC7_C4_REG = ((((u16)Rx_Buff[4]<<8)+Rx_Buff[5])/2); //hstart[7:0]
+                  BKC7_C5_REG = Rx_Buff[6]; //vstart[15:8]
+                  BKC7_C6_REG = Rx_Buff[7]; //vstart[7:0]
+                  BKC7_C7_REG = (((((u16)Rx_Buff[12]<<8)+Rx_Buff[13])/2)>>8); //hactive[15:8]
+                  BKC7_C8_REG = ((((u16)Rx_Buff[12]<<8)+Rx_Buff[13])/2); //hactive[7:0]
+                  BKC7_C9_REG = Rx_Buff[14]; //vactive[15:8]
+                  BKC7_CA_REG = Rx_Buff[15]; //vactive[7:0]
+                  BKC7_CB_REG = (((((u16)Rx_Buff[0]<<8)+Rx_Buff[1])/2)>>8); //htotal[15:8]
+                  BKC7_CC_REG = ((((u16)Rx_Buff[0]<<8)+Rx_Buff[1])/2); //htotal[7:0]
+                  BKC7_CD_REG = Rx_Buff[2]; //vtotal[15:8]
+                  BKC7_CE_REG = Rx_Buff[3]; //vtotal[7:0]
+                  BKC7_CF_REG = (((((u16)(Rx_Buff[8] & BIT7_0)<<8)+Rx_Buff[9])/2)>>8); //hsync[15:8]
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 4   
+
+                  BKC7_D0_REG = ((((u16)(Rx_Buff[8] & BIT7_0)<<8)+Rx_Buff[9])/2); //hsync[7:0]
+                  BKC7_D1_REG = Rx_Buff[11]; //vsync[7:0]
+                  if((Rx_Buff[8] & 0x80) == 0x80) //h polarity
+                  {
+                      BKC7_C0_REG &= BIT4_0;
+                  }
+                  else
+                  {
+                      BKC7_C0_REG |= BIT4_1;
+                  }
+                  if((Rx_Buff[10] & 0x80) == 0x80) //v polarity
+                  {
+                      BKC7_C0_REG &= BIT5_0;
+                  }
+                  else
+                  {
+                      BKC7_C0_REG |= BIT5_1;
+                  }
+                  
+                  Mod_DpTxLink_DpcdRead(0x00,0x0232,Rx_Buff,3);//misc0
+                  if((Rx_Buff[0] & 0x06) == 0x02) //422
+                  {
+                      BKC7_D6_REG &= 0xfc;
+                      BKC7_D6_REG |= BIT0_1;
+                      g_stDpTx.ucMsaValue &= 0xf3;
+                      g_stDpTx.ucMsaValue |= BIT2_1;
+                      g_stDpTx.ucMisc0 &= 0xfa;
+                      g_stDpTx.ucMisc0 |= 0x0a;
+                  }
+                  else if((Rx_Buff[0] & 0x06) == 0x00) //RGB
+                  {
+                      BKC7_D6_REG &= 0xfc;
+                      g_stDpTx.ucMsaValue &= 0xf3;
+                      g_stDpTx.ucMisc0 &= 0xe0;
+                  }
+                  else if((Rx_Buff[0] & 0x06) == 0x04) //444
+                  {
+                      BKC7_D6_REG &= 0xfc;
+                      BKC7_D6_REG |= BIT1_1;
+                      g_stDpTx.ucMsaValue &= 0xf3;
+                      g_stDpTx.ucMsaValue |= BIT3_1;
+                      g_stDpTx.ucMisc0 &= 0xfc;
+                      g_stDpTx.ucMisc0 |= 0x0c;
+                  }
+                  if((Rx_Buff[0] & 0x08) == 0x08) //CTA range
+                  {
+                      BKC7_D5_REG &= BIT4_0;
+                      g_stDpTx.ucMisc0 |= BIT3_1;
+                  }
+                  else //VESA range
+                  {
+                      BKC7_D5_REG |= BIT4_1;
+                      g_stDpTx.ucMisc0 &= BIT3_0;
+                  }
+                  if((Rx_Buff[0] & 0x10) == 0x10) //BTU 709
+                  {
+                      BKC7_D5_REG &= BIT5_0;
+                      g_stDpTx.ucMisc0 |= BIT4_1;
+                  }
+                  else //BTU 601
+                  {
+                      BKC7_D5_REG |= BIT5_1; 
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 5   
+
+                      g_stDpTx.ucMisc0 &= BIT4_0;
+                  }
+                  if((Rx_Buff[0] & 0xe0) == 0x00) //6 bit
+                  {
+                      BKC7_D5_REG &= 0xf8;
+                      g_stDpTx.ucMsaValue &= 0x8f;
+                      g_stDpTx.ucMisc0 &= 0x1f;
+                  }
+                  else if((Rx_Buff[0] & 0xe0) == 0x20) //8 bit
+                  {
+                      BKC7_D5_REG &= 0xf8;
+                      BKC7_D5_REG |= BIT0_1;
+                      g_stDpTx.ucMsaValue &= 0x8f;
+                      g_stDpTx.ucMsaValue |= BIT4_1;
+                      g_stDpTx.ucMisc0 &= 0x1f;
+                      g_stDpTx.ucMisc0 |= BIT5_1;
+                  }
+                  else if((Rx_Buff[0] & 0xe0) == 0x40) //10 bit
+                  {
+                      BKC7_D5_REG &= 0xf8;
+                      BKC7_D5_REG |= BIT1_1;
+                      g_stDpTx.ucMsaValue &= 0x8f;
+                      g_stDpTx.ucMsaValue |= BIT5_1;
+                      g_stDpTx.ucMisc0 &= 0x1f;
+                      g_stDpTx.ucMisc0 |= BIT6_1;
+                  }
+                  else if((Rx_Buff[0] & 0xe0) == 0x60) //12 bit
+                  {
+                      BKC7_D5_REG &= 0xf8;
+                      BKC7_D5_REG |= 0x03;
+                      g_stDpTx.ucMsaValue &= 0x8f;
+                      g_stDpTx.ucMsaValue |= 0x30;
+                      g_stDpTx.ucMisc0 &= 0x1f;
+                      g_stDpTx.ucMisc0 |= 0x60;
+                  }
+                  BKF7_17_REG = g_stDpTx.ucMsaValue;
+                  BKF7_18_REG = g_stDpTx.ucMisc0;
+                  
+              }
+              #endif
+ 279          
+ 280          void Mod_DpTx_HpdIrqHdl(void)
+ 281          {
+ 282   1          u8 ucLoop_Cnt;
+ 283   1          #if DPTX_CTS_SUPPORT == ENABLED
+                  u8 ucdpcd218,ucdpcd246,ucdpcd248;
+                  #endif
+ 286   1          u8 ucdpcd200,ucdpcd201,ucdpcd202,ucdpcd203,ucdpcd204,ucdpcd205;
+ 287   1          u8 b1IsNeedReTraining = FALSE;
+ 288   1       
+ 289   1          #if TYPECTX_EN == ENABLED
+                  if (!UCCStatus.ucUccIrq)//[7]dp tx hpd irq flag
+                      return;
+                  #endif  
+ 293   1          if (!(BKF5_F2_REG & BIT7_1))//[7]dp tx hpd irq flag
+ 294   1              return;
+ 295   1          if(g_stDpTx.ucTxState < STATE_DPTX_LINK_TRAINING_7)
+ 296   1          {
+ 297   2              #if TYPECTX_EN == ENABLED
+                      UCCStatus.ucUccIrq=0;
+                      #endif
+ 300   2              BKF5_4D_REG |= BIT5_1;//[5]dp tx hpd irq flag clr en
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 6   
+
+ 301   2              BKF5_4D_REG &= BIT5_0;//[5]dp tx hpd irq flag clr dis
+ 302   2              return;
+ 303   2          }
+ 304   1          else if(g_stDpTx.ucTxState == STATE_DPTX_LINK_TRAINING_7) 
+ 305   1          {
+ 306   2              if(g_stDpTx.ucTxLinkStep <= STATE_LINK_TPS2TPN_6)
+ 307   2              {
+ 308   3                  BKF5_4D_REG |= BIT5_1;//[5]dp tx hpd irq flag clr en
+ 309   3                  BKF5_4D_REG &= BIT5_0;//[5]dp tx hpd irq flag clr dis
+ 310   3              }
+ 311   2              return;
+ 312   2          }
+ 313   1          else
+ 314   1          {
+ 315   2              BKF5_4D_REG |= BIT5_1;//[5]dp tx hpd irq flag clr en
+ 316   2              BKF5_4D_REG &= BIT5_0;//[5]dp tx hpd irq flag clr dis
+ 317   2          }
+ 318   1          ucLoop_Cnt = 0;
+ 319   1          while((ucLoop_Cnt < 10)&&((BKF5_DF_REG & BIT1_1)== 0x00))//hpd_irq_status_rd_done_flag 
+ 320   1          {
+ 321   2              ucLoop_Cnt++;
+ 322   2              Ocm_Delay1ms(1);
+ 323   2          }
+ 324   1          if(BKF5_DF_REG & BIT1_1)
+ 325   1          {
+ 326   2              BKF5_A6_REG |= BIT3_1;
+ 327   2              BKF5_A6_REG &= BIT3_0;//hpd_irq_status_rd_done_clr
+ 328   2          }
+ 329   1          if(ucLoop_Cnt >= 10)//over time
+ 330   1          {
+ 331   2              return;
+ 332   2          }
+ 333   1          ucdpcd200 = BKF5_C8_REG;
+ 334   1          ucdpcd201 = BKF5_C7_REG;
+ 335   1          ucdpcd202 = BKF5_C9_REG;
+ 336   1          ucdpcd203 = BKF5_CA_REG;
+ 337   1          ucdpcd204 = BKF5_CB_REG;
+ 338   1          ucdpcd205 = BKF5_CC_REG;
+ 339   1          printLT(PRINT_PRIO_HIG,"\nTxIrq = 0x%02bx,0x%02bx,0x%02bx,0x%02bx,0x%02bx",ucdpcd200,ucdpcd201,ucdpcd2
+             -02,ucdpcd203,ucdpcd204);
+ 340   1          switch(g_stAuxDpTx.ucLaneCntCap)
+ 341   1          {
+ 342   2              case 1://1 lane
+ 343   2                  if ((ucdpcd202&0x0f) != 0x07)//dpcd-00202
+ 344   2                      b1IsNeedReTraining = TRUE;
+ 345   2                  break;
+ 346   2      
+ 347   2              case 2://2 lane
+ 348   2                  if (ucdpcd202 != 0x77)//dpcd-00202
+ 349   2                      b1IsNeedReTraining = TRUE;
+ 350   2                  break;
+ 351   2      
+ 352   2              case 4://4 lane
+ 353   2                  if ((ucdpcd202 != 0x77) || (ucdpcd203 != 0x77))//dpcd-00202 || dpcd-00203
+ 354   2                      b1IsNeedReTraining = TRUE;
+ 355   2                  break;
+ 356   2      
+ 357   2              default:
+ 358   2                  break;
+ 359   2          }
+ 360   1          if((ucdpcd201 & BIT2_1)&&(b1IsNeedReTraining == FALSE)&&(ucdpcd204&BIT0_1)&&((ucdpcd204 & BIT6_1)==0x0
+             -0))// hdcp irq
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 7   
+
+ 361   1          {
+ 362   2              return;
+ 363   2          }
+ 364   1          //[7]: 1-link statue updated, [6]: 1-downstream port status changed
+ 365   1          if ((ucdpcd204 & BIT6_1) || (!(ucdpcd204 & BIT0_1)))//[0]0-align not done
+ 366   1          {
+ 367   2              b1IsNeedReTraining = TRUE;
+ 368   2          }
+ 369   1          if (b1IsNeedReTraining == TRUE)
+ 370   1          {
+ 371   2              if (ucdpcd204 & BIT6_1)//dpcd-00204[6]: 1-downstream port status changed
+ 372   2              {
+ 373   3                  Mod_DpTx_SetState(STATE_DPTX_READ_SINK_INFO_4);
+ 374   3              }
+ 375   2              else
+ 376   2              {
+ 377   3                  Mod_DpTx_SetState(STATE_DPTX_LINK_TRAINING_7);
+ 378   3              }
+ 379   2              #if DPTX_HDCP_ENC_MODE != NO_HDCP
+ 380   2              if(BKF5_8C_REG &0x01)//hdcp enable
+ 381   2              {
+ 382   3                  g_stDpTx.ucHdcpRxVerChg = TRUE;
+ 383   3              }
+ 384   2              #endif
+ 385   2              #if DPTX_ADAPTIVE_SYNC_SUPPORT == ENABLED
+ 386   2              if(BKF6_0E_REG & BIT7_1)
+ 387   2              {
+ 388   3                   g_stDpTx.b1SrcVrrChg = TRUE;
+ 389   3              }
+ 390   2              #endif
+ 391   2              #if HDR_SUPPORT == ENABLED
+ 392   2              if(BKF6_0D_REG & BIT6_1)
+ 393   2              {
+ 394   3                  g_stDpTx.b1SrcStaticHdrChg = TRUE;  
+ 395   3              }
+ 396   2              if(BKF6_0D_REG & BIT5_1)
+ 397   2              {
+ 398   3                  g_stDpTx.b1SrcDoblyHdrChg = TRUE;  
+ 399   3              }
+ 400   2              #endif
+ 401   2              if(BKF6_0E_REG &0x09)
+ 402   2              {
+ 403   3                  g_stDpTx.b1AudioInfoChg = TRUE;
+ 404   3              }
+ 405   2              if(BKF7_27_REG &0x06)
+ 406   2              {
+ 407   3                  g_stDpTx.b1SrcInterlaceChg = TRUE;
+ 408   3              }
+ 409   2              if(BKF7_2A_REG & BIT4_1)
+ 410   2              {
+ 411   3                  g_stDpTx.b1SoftMsaUpdate = TRUE;
+ 412   3              }
+ 413   2              Drv_DpTx_VidOutEn(FALSE);
+ 414   2          }
+ 415   1          #if DPTX_CTS_SUPPORT == ENABLED
+                  else if (ucdpcd201 & BIT1_1)//dpcd-00201[1]: 1-automated_test_request
+                  {
+                      printLT(PRINT_PRIO_HIG, "\nCTS111111");
+                      Drv_DpTx_VidOutEn(FALSE);
+                      Mod_DpTxLink_DpcdRead(0x00,0x0218,Rx_Buff,2);
+                      ucdpcd218 = Rx_Buff[0];
+                      Mod_DpTxLink_DpcdRead(0x00,0x0246,Rx_Buff,1);
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 8   
+
+                      ucdpcd246 = Rx_Buff[0];
+                      //link training, dpcd-00218
+                      if (ucdpcd218 & BIT0_1)//[0]test_link_training: 1-request
+                      {
+                          BKF5_02_REG &= BIT6_0;//[6]link train test en: 0-test pattern transmit disable
+              
+                          Tx_Buff[0] = 0x01;//[0]test_ack: 1-ack
+                          Mod_DpTxLink_DpcdWrite(0x00,0x0260,Tx_Buff,1);
+                          
+                          Mod_DpTxLink_DpcdRead(0x00,0x0219,Rx_Buff,1);//test link rate  
+                          g_stAuxDpTx.ucLinkRateMax = Rx_Buff[0];
+                          Mod_DpTxLink_DpcdRead(0x00,0x0220,Rx_Buff,1);//test_lane_count
+                          g_stAuxDpTx.ucLaneCntMax = Rx_Buff[0];
+                          g_stDpTx.ucTxState    = STATE_DPTX_LINK_TRAINING_7;
+                          g_stDpTx.ucTxLinkStep = STATE_LINK_INIT_1;
+                          g_stDpTx.ucTxLinkTrainingCnt = 0;
+                      }
+                      if (ucdpcd218 & BIT1_1)//[0]test_link_training: 1-request
+                      {
+                          #if DPTX_AUTOMATED_CTS_SUPPORT == ENABLED
+                          Mod_DpTx_Automated_Test_Pattern();
+                          #endif
+                          
+                          //soft ptn soft msa soft misc0
+                          Tx_Buff[0] = 0x01;//[0]test_ack: nack not support
+                          Mod_DpTxLink_DpcdWrite(0x00,0x0260,Tx_Buff,1);
+              
+                      }
+                      //edid read
+                      if (ucdpcd218 & BIT2_1)//dpcd-00218[2]: 1-test_edid_read
+                      {
+                          BKF5_02_REG &= BIT6_0;//[6]link train test en: 0-test pattern transmit disable
+                          g_stAuxDpTx.b1TestEdidReadEn = TRUE;
+                          Mod_DpTxLink_SinkEdidRead(szEdidData);
+                      }
+                      //[3]requests the link layer test pattern as specified in the
+                      if (ucdpcd218 & BIT3_1)
+                      {
+                          Tx_Buff[0] = 0x01;//[0]test_ack: 1-ack
+                          Mod_DpTxLink_DpcdWrite(0x00,0x0260,Tx_Buff,1);
+                          Mod_DpTxLink_DpcdRead(0x00,0x0248,Rx_Buff,1);//link_qual_pattern_select
+                          ucdpcd248 = Rx_Buff[0];
+              
+                          Mod_DpTx_SendSwingAdjReq();
+                          if(ucdpcd248 > 0)//ptn request
+                          {
+                              Tx_Buff[0] = Tx_Buff[1] = Tx_Buff[2] = Tx_Buff[3] = ucdpcd248; 
+                              Mod_DpTxLink_DpcdWrite(0x00,0x010B,Tx_Buff,4);//lane0~ lane3 ptn set
+                              Mod_DpTx_LinkQualPtnSet(ucdpcd248);
+                          }
+                      }
+                      if ((ucdpcd218 == 0)&&(ucdpcd246 & BIT5_1))//TEST_CRC_SUPPORTED
+                      {
+                          Tx_Buff[0] = 0x00;//[0]test start
+                          Mod_DpTxLink_DpcdWrite(0x00,0x0270,Tx_Buff,1);
+                          
+                          Tx_Buff[0] = 0x02;//[0]test_ack: 1-ack
+                          Mod_DpTxLink_DpcdWrite(0x00,0x0260,Tx_Buff,1);
+                      }
+                      Drv_DpTx_VidOutEn(TRUE);
+                  }
+                  #endif 
+C51 COMPILER V9.53.0.0   MODDPLINKCTS                                                      02/13/2025 10:14:02 PAGE 9   
+
+ 485   1      }
+ 486          
+ 487          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    505    ----
+   CONSTANT SIZE    =     49    ----
+   XDATA SIZE       =   ----       6
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

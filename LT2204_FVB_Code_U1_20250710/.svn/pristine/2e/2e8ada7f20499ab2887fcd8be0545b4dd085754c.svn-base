@@ -1,0 +1,421 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: FrlRx.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.06.27
+/******************************************************************************/
+#include "include.h"
+
+#if RX_PORT_SIGN == HDMI_PORT
+
+#if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+
+HdmiRxFrlInfo_S g_stFrlRxInfo;
+
+void Mod_FrlRx_VarInit(void)
+{
+    memset(&g_stFrlRxInfo, 0, sizeof(HdmiRxFrlInfo_S));
+}
+
+//========================================================================
+// Func Name   : Mod_FrlRx_ffeStateSet
+// Description : Set register value for LPT_req in scdc field.
+//             : This action will not generate flt_update = 1 flag.
+// Input       : u8 ucState  
+//               u8 ucLane   
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_FrlRx_ffeStateSet(u8 ucState, u8 ucLane)
+{
+    switch(ucState)
+    {
+        case FFE_CHANGE:
+            Drv_HdmiRx_Reset(HDMI_ERR_DET_RST);
+            if (ucLane == LANE_0)
+            {
+                BKCD_09_REG |= BIT6_1;//[6]hdmi 21 rx lane0 ffe level change by software
+            }
+            else if (ucLane == LANE_1)
+            {
+                BKCD_09_REG |= BIT2_1;//[2]hdmi 21 rx lane1 ffe level change by software
+            }
+            else if (ucLane == LANE_2)
+            {
+                BKCD_0A_REG |= BIT6_1;//[6]hdmi 21 rx lane2 ffe level change by software
+            }
+            else if (ucLane == LANE_3)
+            {
+                BKCD_0A_REG |= BIT2_1;//[2]hdmi 21 rx lane3 ffe level change by software
+            }
+            else if (ucLane == LANE_ALL)
+            {
+                BKCD_09_REG = 0x44;//[6][2]hdmi 21 rx lane0/lane1 ffe level change by software
+                BKCD_0A_REG = 0x44;//[6][2]hdmi 21 rx lane2/lane3 ffe level change by software
+            }
+            g_stFrlRxInfo.ucPtnType = CHANGE_PATTERN;
+            break;
+        case FFE_FINISH:
+            BKCD_09_REG = 0x22;//[5][1]hdmi 21 rx lane0/lane1 ffe level finish by software.
+            BKCD_0A_REG = 0x22;//[5][1]hdmi 21 rx lane2/lane3 ffe level finish by software.
+            g_stFrlRxInfo.ucPtnType = FINISH_PATTERN;
+            break;
+        case FFE_FAILED:
+            BKCD_09_REG = 0x11;//[4][0]hdmi 21 rx lane0/lane1 ffe level fail by software.
+            BKCD_0A_REG = 0x11;//[4][0]hdmi 21 rx lane2/lane3 ffe level fail by software.
+            g_stFrlRxInfo.ucPtnType = FAILED_PATTERN;
+            break;
+    }
+}
+
+//========================================================================
+// Func Name   : Mod_FrlRx_ffeStateUpdate
+// Description : Update LPT_req in scdc field from register value(0xcd09/0xcd0a).
+//             : the action will generate flt_update = 1 flag.
+//             : the LPT_req value will be cleared after source reading LPT_req.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_FrlRx_ffeStateUpdate(void)
+{
+    BKCD_63_REG |= BIT4_1;//[4]HDMI 21 RX FFE level sync enable signal(software mode).
+    Ocm_Delay1ms(1);      //necessary for update signal valid
+    BKCD_63_REG &= BIT4_0;//[4]HDMI 21 RX FFE level sync enable signal(software mode) clr
+    BKCD_09_REG = 0x00;//clear
+    BKCD_0A_REG = 0x00;//clear
+}
+
+//========================================================================
+// Func Name   : Mod_FrlRx_ffeStateHandler
+// Description : ss
+// Input       : void  
+// Output      : None
+// Return      : u8
+//========================================================================
+void Mod_FrlRx_ffeStateHandler(void)
+{
+    u8 ucRtn, ucLaneIdx;
+
+    if (g_stFrlRxInfo.ucffeRequestNum <= g_stFrlRxInfo.ucMaxffeLvl)
+    {
+        ucRtn = Mod_HdmiRxEq_Frl_StateGet(LANE_ALL);
+        if (ucRtn == SUCCESS)
+        {
+            Mod_FrlRx_ffeStateSet(FFE_FINISH, LANE_ALL);
+        }
+        else if (g_stFrlRxInfo.ucMaxffeLvl == 0)
+        {
+            Mod_FrlRx_ffeStateSet(FFE_FAILED, LANE_ALL);
+        }
+        else
+        {
+            for(ucLaneIdx = 0 ;ucLaneIdx < LANE_ALL; ucLaneIdx++)
+            {
+                if (Mod_HdmiRxEq_Frl_StateGet(ucLaneIdx) == FAIL)
+                {
+                    Mod_FrlRx_ffeStateSet(FFE_CHANGE, ucLaneIdx);
+                }
+                if(ucLaneIdx == g_stFrlRxInfo.ucLaneCnt)
+                {
+                    break;
+                }
+            }
+            g_stFrlRxInfo.ucffeRequestNum++;
+        }
+    }
+    else
+    {
+        Mod_FrlRx_ffeStateSet(FFE_FAILED, LANE_ALL);
+    }
+    Mod_FrlRx_ffeStateUpdate();
+}
+
+//========================================================================
+// Func Name   : Mod_FrlRx_IrqHandler_FrlRateChg
+// Description : The irq handler for source update frl_rate
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_FrlRx_IrqHandler_FrlRateChg(void)
+{
+    if (!(BKCD_E6_REG & BIT0_1))
+        return;
+
+    BKCD_57_REG |= BIT0_1;//interrupt clr en
+    BKCD_57_REG &= BIT0_0;//interrupt clr dis
+    BKCE_C5_REG |= BIT6_1;//start flag clr
+    BKCE_C5_REG &= BIT6_0;//start flag clr
+    BKCE_80_REG |= BIT7_1;//[7]frl start int clr en
+    BKCE_80_REG &= BIT7_0;//[7]frl start int clr dis
+
+    if (BKCE_BB_REG & BIT5_1)//[3]frl start int
+    {
+        BKCE_C5_REG |= BIT7_1;//ptn flag clr
+        BKCE_C5_REG &= BIT7_0;//ptn flag clr
+    }
+    Mod_FrlRx_VarInit();
+    g_stFrlRxInfo.ucFrlRate   = BKCD_B5_REG & 0x0f;//get the latest frl rate.
+    g_stFrlRxInfo.ucMaxffeLvl = (BKCD_B5_REG & 0xf0) >> 4;//get the latest ffe level.
+    if (g_stFrlRxInfo.ucFrlRate > FRL_NOT_SPT)
+    {
+        BKCD_00_REG |= BIT2_1;//[2]hdmi 21 link training start enable
+        g_stFrlRxInfo.ucLaneCnt = (g_stFrlRxInfo.ucFrlRate < FRL_6G4LANE)? (3) : (4);
+        if (g_stFrlRxInfo.ucMaxffeLvl > 3)
+        {
+            g_stFrlRxInfo.ucMaxffeLvl = 3;
+        }
+        Drv_HdmiRx_TmdsPcrPllDis();
+        Drv_HdmiRx_ErrValidClr(DISABLED);
+        Drv_HdmiRx_Reset(HDMI_FRL_TRAIN_RST);
+        Drv_HdmiRx_PhySet(HDMI21);
+        Drv_HdmiRx_DigInit(HDMI21);
+        Drv_HdmiRx_ClkMux(HDMI21);
+        Drv_HdmiRx_PllModeSet(HDMI21);
+        Drv_HdmiRx_Frl_PllBandSet(g_stFrlRxInfo.ucFrlRate);
+        Drv_HdmiRx_Frl_CdrSet(g_stFrlRxInfo.ucFrlRate);
+        Drv_HdmiRx_Frl_PiSet(g_stFrlRxInfo.ucFrlRate);
+        Drv_HdmiRx_Frl_PhyCtleSet(g_stFrlRxInfo.ucFrlRate);
+        #ifdef NVIDIA_FW_EN
+        #if (CUSTOMER_DEFINED == ENABLED)
+        Drv_IOSoftLevel_Set(GPIO16_MCLKA, HIGH); //for nvidia case 1: hdmi mode, 0:dvi mode
+        Drv_IOSoftLevel_Set(GPIO17_SCLKA, HIGH); //for nvidia case 1: hdmi rx stable 0: hdmi rx unstable      
+        #endif
+        #endif
+    }
+    else
+    {
+        BKCD_00_REG &= BIT2_0;//[2]hdmi 21 link training start disable
+        BKCE_C7_REG |= BIT2_1;//[2]hdmi 21 RX sink flt updata state clr
+        BKCE_C7_REG &= BIT2_0;//[2]hdmi 21 RX sink flt updata state clr
+        Drv_HdmiRx_PhySet(HDMI20);
+        Drv_HdmiRx_DigInit(HDMI20);
+        Drv_HdmiRx_Tmds_CdrSet(HDMI20);
+        Drv_HdmiRx_Tmds_PiSet(HDMI20);
+        g_stFrlRxInfo.b1IsTrainFail = TRUE;
+        #ifdef NVIDIA_FW_EN
+        #if (CUSTOMER_DEFINED == ENABLED)
+        Drv_IOSoftLevel_Set(GPIO16_MCLKA, LOW); //for nvidia case 1: hdmi mode, 0:dvi mode
+        Drv_IOSoftLevel_Set(GPIO17_SCLKA, LOW); //for nvidia case 1: hdmi rx stable 0: hdmi rx unstable      
+        #endif
+        #endif
+    }
+    g_stFrlRxInfo.b1SrcReadPtnDone = FALSE;
+    g_stFrlRxInfo.b1IsTrainDone = FALSE;
+    if (g_stFrlRxInfo.ucFrlRate > HDMIRX_MAX_FRL_RATE)
+    {
+        g_stFrlRxInfo.ucPtnType = NOTQUEST_PATTERN;
+    }
+    else
+    {
+        g_stFrlRxInfo.ucPtnType = TRAIN_PATTERN;
+    }
+    g_stFrlRxInfo.ucffeRequestNum = 0;
+    g_stFrlRxInfo.ucEqScanCnt = 0;
+}
+
+
+//========================================================================
+// Func Name   : Mod_FrlRx_IrqHandler_SrcReadPtn
+// Description : The irq hander for source read LTP_req.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_FrlRx_IrqHandler_SrcReadPtn(void)
+{
+    if (!(BKCE_BB_REG & BIT4_1))//[5]rgod_source_rd_ptn int
+        return;
+    BKCE_C5_REG |= BIT7_1;//ptn flag clr
+    BKCE_C5_REG &= BIT7_0;//ptn flag clr
+    BKCE_81_REG |= BIT7_1;//[7]rgd_source_rd_ptn_int_clr: 1-rst en
+    BKCE_81_REG &= BIT7_0;//[7]rgd_source_rd_ptn_int_clr: 0-rst dis
+    g_stFrlRxInfo.b1SrcReadPtnDone = TRUE;
+}
+
+//========================================================================
+// Func Name   : Mod_FrlRx_IrqHandler_FltUpdate
+// Description : The irq hander for source clear frl_update.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_FrlRx_IrqHandler_FltUpdate(void)
+{
+    if (!(BKCD_E6_REG & BIT4_1))//hdmi 21 rx source flt int
+        return;
+    BKCD_57_REG |= BIT4_1;//clr update en
+    BKCD_57_REG &= BIT4_0;//clr update dis;
+    if (g_stFrlRxInfo.b1SrcReadPtnDone == TRUE) //the last DDC conmunication is reading LTP_req.
+    {
+        g_stFrlRxInfo.b1SrcReadPtnDone = FALSE;
+        if ((g_stFrlRxInfo.ucPtnType == TRAIN_PATTERN)||(g_stFrlRxInfo.ucPtnType == CHANGE_PATTERN))
+        {
+            BKCE_C8_REG |= BIT6_1;//[6]rgd_eq_check_en_clr: 1-en, stop checking eq pattern.
+            BKCE_C8_REG &= BIT6_0;//[6]rgd_eq_check_en_clr: 0-dis, start checking eq pattern.
+
+            BKCD_48_REG &= BIT4_0;//rgd_sw_frl_start_rst_n = 0, solve frl start be quickly set to 1
+
+            Mod_HdmiRxEq_EqCheckInPreDet();
+            g_stFrlRxInfo.ucEqScanCnt = 0;
+        }
+        else if (g_stFrlRxInfo.ucPtnType == FINISH_PATTERN)//in p state
+        {
+            Drv_HdmiRx_Reset(HDMI_RX_FIFO_RST);//SOLVE astro skew over design issue
+            Drv_HdmiRx_Reset(HDMI_FRL_DEC_RST);
+            Drv_HdmiRx_Reset(HDMI_FEC_DEC_RST);
+            Drv_HdmiRx_Reset(HDMI_FRL_DEPKT_RST);
+
+            Ocm_Delay1ms(10);
+            BKCD_48_REG |= BIT4_1;//rgd_sw_frl_start_rst_n = 1
+        }
+        else if (g_stFrlRxInfo.ucPtnType == NOTQUEST_PATTERN)
+        {
+            Mod_FrlRx_ffeStateSet(FFE_FAILED, LANE_ALL);
+            Mod_FrlRx_ffeStateUpdate();
+        }
+    }
+}
+
+//========================================================================
+// Func Name   : Mod_FrlRx_IrqHandler_EqCheckIn
+// Description : The irq hander for eq pattern is detected.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_FrlRx_IrqHandler_EqCheckIn(void)
+{
+    if (!(BKCD_E6_REG & BIT6_1))
+        return;
+    BKCD_57_REG |= BIT6_1;
+    BKCD_57_REG &= BIT6_0;//clear update
+    BKCE_C8_REG |= BIT6_1;//[6]rgd_eq_check_en_clr: 1-en, stop checking eq pattern.
+    Drv_HdmiRx_PhyRst();
+    Mod_HdmiRxEq_Frl_Set();
+
+    #if ((HDMIRX_EQ_MODE == SW_MODE)||(HDMIRX_EQ_MODE == FIX_MODE))
+    Mod_FrlRx_ffeStateHandler(); //there is no eq done irq in software eq mode, so need to fedback source ffe result here.
+    #endif
+}
+
+//========================================================================
+// Func Name   : Mod_FrlRx_IrqHandler_EqDone
+// Description : The irq hander for HW eq scan complete.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_FrlRx_IrqHandler_EqDone(void)
+{
+    if (!(BKCE_BB_REG & BIT1_1))//[1]rgod_eq_scan_done_int: 0-not done
+        return;
+    BKCE_80_REG |= BIT3_1;//[3]rgd_eq_scan_done_int_clr: 1-en
+    BKCE_80_REG &= BIT3_0;//[3]rgd_eq_scan_done_int_clr: 0-dis
+
+    #if HDMIRX_EQ_MODE == HW_MODE
+    if ((Mod_HdmiRxEq_Frl_StateGet(LANE_ALL) == FAIL) &&(g_stFrlRxInfo.ucEqScanCnt < HDMIRX_EQ_SCAN_MAX))
+    {
+        Drv_HdmiRx_PhyRst();
+        Mod_HdmiRxEq_Frl_Set(); //eq scan fail, restart eq scan, the max is 3 times.
+    }
+    else
+    {
+        Mod_FrlRx_ffeStateHandler();//upto max times or eq success, ffe state handle
+    }
+    g_stFrlRxInfo.ucEqScanCnt++;
+    #endif
+}
+
+
+//========================================================================
+// Func Name   : Mod_FrlRx_IrqHandler_FrlStart
+// Description : The irq hander for source clear frl_start.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Mod_FrlRx_IrqHandler_FrlStart(void)
+{
+    if (!(BKCE_BB_REG & BIT3_1))//[3]frl start int
+        return;
+    BKCE_C5_REG |= BIT6_1;//start flag clr
+    BKCE_C5_REG &= BIT6_0;//start flag clr
+    BKCE_80_REG |= BIT7_1;//[7]frl start int clr en
+    BKCE_80_REG &= BIT7_0;//[7]frl start int clr dis
+    
+    g_stFrlRxInfo.b1IsTrainDone = TRUE;
+    g_stFrlRxInfo.b1IsTrainFail = FALSE;
+}
+
+void Mod_FrlRx_FrlTask(void)
+{
+    //1 2 3 4 5 2(finish) 3 6                 = normal case
+    //1 2 3 4 5 2(ffe) 3 4 5 2(finish) 3 6    = ajust ffe
+    Mod_FrlRx_IrqHandler_FrlRateChg();//1
+    Mod_FrlRx_IrqHandler_SrcReadPtn();//2
+    Mod_FrlRx_IrqHandler_FltUpdate(); //3
+    Mod_FrlRx_IrqHandler_EqCheckIn(); //4
+    Mod_FrlRx_IrqHandler_EqDone();    //5
+    Mod_FrlRx_IrqHandler_FrlStart();  //6
+}
+
+u8 Mod_FrlRx_RateChangChk(void)
+{
+    if((BKCD_E6_REG & BIT0_1)||(BKCD_B5_REG & 0x0f))//[0]rgod_rate_chg_int: 1-rate change
+    {
+        return ENABLED;
+    }
+    else//[0]rgod_rate_chg_int: 0-no change
+    {
+        return DISABLED;
+    }
+}
+
+u8 Mod_FrlRx_TrainDoneChk(void)
+{
+    if(((BKCD_B5_REG & 0x0f) > 0)&&(g_stFrlRxInfo.b1IsTrainDone == TRUE))
+    {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+u8 Mod_FrlRx_TrainFailChk(void)
+{
+    if(((BKCD_B5_REG & 0x0f) == 0)&&(g_stFrlRxInfo.b1IsTrainFail == TRUE))
+    {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void Mod_FrlRx_FrlStartCheck(void)
+{
+    static u32 ulLocalTime = 0;
+
+    if (BKCD_08_REG & BIT4_1)
+    {
+        return;
+    }
+
+    if (g_stFrlRxInfo.ucPtnType == FINISH_PATTERN)
+    {
+        if (Ocm_Timer_IsOverFlow(&ulLocalTime, MS_10) == TRUE)
+        {
+            if (!(BKCD_E1_REG & BIT6_1))
+            {
+                BKCD_08_REG |= BIT4_1;//[4]force frl start
+                printf("\n===Sw Start===");
+            }
+        }
+    }
+    else
+    {
+        Ocm_Timer_UpdLocalTime(&ulLocalTime);
+    }
+}
+#endif
+#endif

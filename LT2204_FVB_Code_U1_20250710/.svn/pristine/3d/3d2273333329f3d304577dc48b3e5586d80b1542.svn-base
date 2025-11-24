@@ -1,0 +1,2048 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  BasicTypec.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+#if ((CHIP_SEL == LT8711GXE)||(CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP)||(CHIP_SEL == LT6711GXE))
+//u8 ucAppleDockingFlag=0;
+
+//u8 Mod_AppleDockingFlag(void)
+//{
+//    return ucAppleDockingFlag;
+//}
+
+#if TYPECRX_EN == ENABLED
+
+//================================
+//the function is used to send UCC message;
+//if length is shorter than 10bytes,the data is sent once together;
+//if longer than 10bytes,data is sent two times
+//
+//
+//================================
+void Mod_CC1Msg_Send(void)
+{
+    u8 ucSendData;
+	u8 ucSendMegSndDataOffset;
+    static u8 ucUccTotalData;
+	static u8 ucMessage_ID_Send = 0x00;
+	UCCMSG.pBuffer_Order = UCCMSG.pDataOrder;
+	ucUccTotalData = ((UCCMSG.pDataOrder[1] & 0x70)>>2)+2;
+    for(ucSendMegSndDataOffset=0; ucSendMegSndDataOffset<ucUccTotalData; ucSendMegSndDataOffset++)
+    {
+        ucSendData = *UCCMSG.pDataOrder;
+        UCCMSG.pDataOrder++;
+    	if(ucSendMegSndDataOffset<10)
+        {
+        	if(ucSendMegSndDataOffset==1)
+            {        
+            	ucSendData &=0xF0;
+            	if(UCCStatus.b1Msg_ID_Change == 1)
+                {
+                	ucMessage_ID_Send = UCCMSG.ucMessageID;
+                	UCCMSG.ucMessageID = Mod_CCPortMsgId_Cal(UCCMSG.ucMessageID);            
+                }
+            	else
+                {
+                    ;
+                }
+            	ucSendData = (ucSendData|ucMessage_ID_Send);
+                (UCCStatus.b1PowerRole)?(ucSendData |= BIT0_1):(ucSendData &= BIT0_0);
+            }
+        	else if(ucSendMegSndDataOffset == 0)
+            {
+            	ucSendData &= 0x1F;
+            	if(UCCMSG.ucCcVersion < PD30)
+                {
+                	ucSendData |=  BIT6_1;
+                }
+            	else
+                {
+                	ucSendData |=  BIT7_1;
+                }
+                (UCCStatus.b1DataRole)?(ucSendData |= BIT5_1):(ucSendData &= BIT5_0);
+            }
+        	else if((UCCStatus.b1Multi_Function)&&(ucSendMegSndDataOffset== 6))
+            {
+            	ucSendData |= BIT4_1; // Multifunction Prefered
+                //屏蔽掉这个是防止因为没有收到Goodcrc从而产生重发，导致重发时VDM版本不对问题
+//            	UCCStatus.b1Multi_Function =0;
+            }
+        	else if((UCCMSG.b1Vdm_Msg == TRUE)&&(ucSendMegSndDataOffset== 3))
+            {
+                //屏蔽掉这个是防止因为没有收到Goodcrc从而产生重发，导致重发时VDM版本不对问题
+				//UCCMSG.b1Vdm_Msg = FALSE;
+                (UCCMSG.ucCcVersion >= PD30)?(ucSendData |= BIT5_1):(ucSendData &= BIT5_0);
+            }
+        }
+    	else if(ucSendMegSndDataOffset==10)//send data enable
+        {        
+            BKFC_19_REG = 0x09; 
+        }
+        BKFC_1A_REG	= ucSendData;   
+    }
+	if(ucSendMegSndDataOffset>10)
+    {
+        ;
+    }
+    else
+    {
+        BKFC_19_REG = 0x09; 
+    }
+    
+    BKFC_23_REG = 0x01; //clr rx fifo
+    BKFC_18_REG |= BIT3_1;      //mark all data done
+    BKFC_18_REG &= BIT3_0;
+	Mod_CCPortMsg_Retry(UCC);    
+}
+
+#if UCC_EMARK_SUPPORT == ENABLED
+//================================
+//the function is used to send UCC SOP1 message;
+//if length is shorter than 10bytes,the data is sent once together;
+//if longer than 10bytes,data is sent two times
+//
+//================================
+void Mod_CC1MessageSOP1_Send(void)
+{
+    u8 ucSendData;
+	u8 ucSendMegSndDataOffset;
+    u8 ucUccTotalData;
+	ucUccTotalData = 0x06;
+    for(ucSendMegSndDataOffset=0; ucSendMegSndDataOffset<ucUccTotalData; ucSendMegSndDataOffset++)
+    {
+        ucSendData = *UCCMSG.pDataOrder;
+        UCCMSG.pDataOrder++;
+        if(ucSendMegSndDataOffset==1)
+        {        
+            ucSendData &=0xF0;            
+            ucSendData &= BIT0_0;
+        }
+        else if(ucSendMegSndDataOffset == 0)
+        {
+            ucSendData &= 0x1F;
+            if(UCCMSG.ucCcVersion < PD30)
+            {
+                ucSendData |=  BIT6_1;
+            }
+            else
+            {
+                ucSendData |=  BIT7_1;
+            }
+            ucSendData &= BIT5_0;
+        }            
+        BKFC_1A_REG	= ucSendData;      
+    }
+    BKFC_19_REG = 0x0a; 
+    BKFC_23_REG = 0x01; //clr rx fifo
+    BKFC_18_REG |= BIT3_1;      //mark all data done
+    BKFC_18_REG &= BIT3_0;    
+}
+#endif
+
+//================================
+//
+//ucCom_Type:REQ,ACK,NACK,BUSY
+//ucCommand:Discover_Modes,enter_mode,exit mode
+//
+//================================
+
+void Mod_AltMode_Handle(IN u8 ucCom_Type,IN u8 ucCommand)
+{
+	UCCMSG.szCC_ModeMsg_Buffer[2] = ucCom_Type; //NACK
+	UCCMSG.szCC_ModeMsg_Buffer[2] |= ucCommand;
+    UCCMSG.szCC_ModeMsg_Buffer[3] &= 0xf8;//Object position
+    if(ucCommand >= Enter_Mode)
+    {
+        if(((UCCMSG.szRcvDate[1]&0x07)==0)||((UCCMSG.szRcvDate[1]&0x07)==0x07))
+        {
+            UCCMSG.szCC_ModeMsg_Buffer[3] |= 0x07;//Object position
+        }
+        else
+        {
+            UCCMSG.szCC_ModeMsg_Buffer[3] |= (UCCMSG.szRcvDate[1]&0x07);//Object position
+        }
+    }
+	UCCMSG.szCC_ModeMsg_Buffer[4] = UCCMSG.szRcvDate[2];//SID&VID
+	UCCMSG.szCC_ModeMsg_Buffer[5] = UCCMSG.szRcvDate[3];//SID&VID
+}
+//void ChipMsg_Handle(u8 INOUT *pMsg_Data,u8 IN Reply)
+//{
+//    pMsg_Data[2] = pMsg_Data[2]&0x3f;
+//    pMsg_Data[2] |= Reply;
+//}
+//================================
+//
+//ucPD_Ver:PD version 2.0 and 3.0
+//pucData:data received from UCC
+//ucReply:message should be replied to UCC
+//================================
+void Mod_DiscoverID_Handle(u8 IN ucPD_Ver,u8 IN *pucData,u8 IN ucReply)
+{
+    #if NINTENDO_SWITCH == ENABLED
+    #if NINTENDO_SWITCH_HDMIHPD == ENABLED 
+    if(ucPD_Ver>=0x02)
+    {
+        //szNintendo_DisC_ID[8] = 0x40;//just for PD3.1 spec(Receptcal)
+        szNintendo_DisC_ID[8] = 0x60;//just for PD3.1 spec((PLUG)
+    }
+    else
+    {
+        szNintendo_DisC_ID[8] = 0x00;
+    }
+    szNintendo_DisC_ID[2] &= 0x3f;
+    szNintendo_DisC_ID[2] |= ucReply;
+    szNintendo_DisC_ID[4] = pucData[2];
+    szNintendo_DisC_ID[5] = pucData[3];
+    if(UCCStatus.uclaneCount == 4)
+    {
+        szNintendo_DisC_ID[18] = 0x08;
+    }
+    else
+    {
+        szNintendo_DisC_ID[18] = 0x0A;
+    }
+    if(ucPD_Ver>=0x02)
+    {
+        //szCC_DiscoverIDMsg[8] = 0x40;//just for PD3.1 spec(Receptcal)
+        szCC_DiscoverIDMsg[8] = 0x60;//just for PD3.1 spec((PLUG)
+    }
+    else
+    {
+        szCC_DiscoverIDMsg[8] = 0x00;
+    }
+    szCC_DiscoverIDMsg[2] &= 0x3f;
+    szCC_DiscoverIDMsg[2] |= ucReply;
+    szCC_DiscoverIDMsg[4] = pucData[2];
+    szCC_DiscoverIDMsg[5] = pucData[3];
+    if(UCCStatus.uclaneCount == 4)
+    {
+        szCC_DiscoverIDMsg[18] = 0x08;
+    }
+    else
+    {
+        szCC_DiscoverIDMsg[18] = 0x0A;
+    }
+    #else
+    if(ucPD_Ver>=0x02)
+    {
+        //szNintendo_DisC_ID[8] = 0x40;//just for PD3.1 spec(Receptcal)
+        szNintendo_DisC_ID[8] = 0x60;//just for PD3.1 spec((PLUG)
+    }
+    else
+    {
+        szNintendo_DisC_ID[8] = 0x00;
+    }
+    szNintendo_DisC_ID[2] &= 0x3f;
+    szNintendo_DisC_ID[2] |= ucReply;
+    szNintendo_DisC_ID[4] = pucData[2];
+    szNintendo_DisC_ID[5] = pucData[3];
+    if(UCCStatus.uclaneCount == 4)
+    {
+        szNintendo_DisC_ID[18] = 0x08;
+    }
+    else
+    {
+        szNintendo_DisC_ID[18] = 0x0A;
+    }
+    #endif
+    #else
+    if(ucPD_Ver>=0x02)
+    {
+        //szCC_DiscoverIDMsg[8] = 0x40;//just for PD3.1 spec(Receptcal)
+        szCC_DiscoverIDMsg[8] = 0x60;//just for PD3.1 spec((PLUG)
+    }
+    else
+    {
+        szCC_DiscoverIDMsg[8] = 0x00;
+    }
+    szCC_DiscoverIDMsg[2] &= 0x3f;
+    szCC_DiscoverIDMsg[2] |= ucReply;
+    szCC_DiscoverIDMsg[4] = pucData[2];
+    szCC_DiscoverIDMsg[5] = pucData[3];
+    if(UCCStatus.uclaneCount == 4)
+    {
+        szCC_DiscoverIDMsg[18] = 0x08;
+    }
+    else
+    {
+        szCC_DiscoverIDMsg[18] = 0x0A;
+    }
+    #endif
+}
+//================================
+//
+//the function is used to handle chunked message
+//
+//
+//================================
+void Mod_CC1ChunkMessage_Handle(void)
+{
+    #if PD_CHUNK_EN  == ENABLED
+    static u16 usData_Size = 0;
+	static u8 ucChunk_Num = 0;
+	static u16 usNum_Data_Obj = 0;
+	static u16 usNum_Data = 0;
+    u8 Chunked_Message[6];
+	if(UCCMSG.szHeader[3] & BIT7_1)
+    {
+    	if((UCCMSG.szHeader[3]& BIT2_1) == 0x00)//request chunk =0;
+        {
+        	if((UCCMSG.szHeader[3]&0x78)==0)//if chunk number equal 0
+            {
+            	usNum_Data_Obj = 0;
+            }
+        	usData_Size = ((u16)(UCCMSG.szHeader[3]& BIT0_1)<<8) + UCCMSG.szHeader[2];
+        	usNum_Data = ((UCCMSG.szHeader[1]&0x70)>>2)- 2;//remove Externed szHeader;
+        	usNum_Data_Obj += usNum_Data;
+        	ucChunk_Num = (UCCMSG.szHeader[3]&0x78)+8;//should less than 10
+
+        	if((usData_Size<=usNum_Data_Obj)||(ucChunk_Num>72))
+            {
+            	usNum_Data_Obj = 0;
+            	UCCMSG.pDataOrder = szCCCtrl_NotSupport;
+            	Mod_CC1Msg_Send();    
+            }
+        	else
+            {
+            	Chunked_Message[0]=UCCMSG.szHeader[0];
+            	Chunked_Message[1]=0x90;
+            	Chunked_Message[2]=0x00;
+            	Chunked_Message[3]=0x84|ucChunk_Num;
+            	Chunked_Message[4]=0x00;
+            	Chunked_Message[5]=0x00;
+            	UCCMSG.pDataOrder = Chunked_Message;
+            	Mod_CC1Msg_Send();    
+            }            
+        }
+    	else
+        {
+            ;
+        }        
+    }
+    else
+    #endif
+    {
+//        UCCMSG.pDataOrder = szCCCtrl_NotSupport;//not support msg
+//        Mod_CC1Msg_Send();
+    }
+}
+//================================
+//
+//the function is used to send sorcecap message 
+//
+//
+//================================
+void Mod_CC1SourceCapMsg_Set(void)//
+{
+   	if(DCCStatus.b1AdapterWithPD)    
+    {
+        #if PD_PPS_EN == ENABLED
+        if(UCCMSG.ucCcVersion < PD30)//PD2.0
+        {
+            UCCMSG.pDataOrder = DCCMSG.szAdapterTmp;
+        }
+        else//PD3.0
+        {
+            UCCMSG.pDataOrder = DCCMSG.szAdapterCap_For_PD30;
+        }
+        #else
+        #if NINTENDO_SWITCH_FORALL == ENABLED
+    	if(CC1NINTENDOState.b1Switch_Online == TRUE)
+        {
+            UCCMSG.pDataOrder = DCCMSG.szSwitchTmp;
+        }
+        else
+        {
+            if(UCCStatus.ucCable5A == TRUE)//5A
+            {
+                UCCMSG.pDataOrder = DCCMSG.szAdapterTmp;
+            }
+            else
+            {
+                UCCMSG.pDataOrder = DCCMSG.szAdapterTmpFor3A;
+            }
+        }
+        #else	    
+        #if FORCE_NINTENDO_SWITCH == ENABLED
+        //#if UCC_EMARK_SUPPORT == ENABLED
+        if(CC1NINTENDOState.b1Switch_Online == TRUE)
+        {
+            UCCMSG.pDataOrder = DCCMSG.szSwitchTmp;
+        }
+        else
+        {
+            if(UCCStatus.ucCable5A == TRUE)//5A
+            {
+                UCCMSG.pDataOrder = DCCMSG.szAdapterTmp;
+            }
+            else
+            {
+                UCCMSG.pDataOrder = DCCMSG.szAdapterTmpFor3A;
+            }
+        }  
+        #else
+        if(UCCStatus.ucCable5A == TRUE)//5A
+        {
+            UCCMSG.pDataOrder = DCCMSG.szAdapterTmp;
+        }
+        else
+        {
+            UCCMSG.pDataOrder = DCCMSG.szAdapterTmpFor3A;
+        }
+        #endif
+//        #else
+//        UCCMSG.pDataOrder = DCCMSG.szAdapterTmp;
+//        #endif
+        #endif
+        #endif
+    }    
+    else
+    {
+        #if NINTENDO_SWITCH == ENABLED
+        if(CC1NINTENDOState.b1Switch_Online)
+        {
+            memcpy(DCCMSG.szAdapterTmp,szNintendoSwitch_SourceCap_Msg,10);//zo	
+        }
+        else
+        #endif
+        {
+            memcpy(DCCMSG.szAdapterTmp,szCC_DataMsg[0],6);
+        }
+        UCCMSG.pDataOrder = DCCMSG.szAdapterTmp;
+    }  
+}
+#if ((PDCTS_USE == ENABLED)||(PD_PPS_EN == ENABLED))
+//================================
+//
+//the function is used to compare the object between request and adapter
+//the request object can not bigger than adapter can provide
+//
+//================================
+u8 Mod_CC1PDO_Compare(u8 IN *pucData)
+{
+    return ((pucData[1]&0x70)>>4);
+}
+
+//================================
+//
+//the function is used to compare the current between request and adapter
+//the request current can not bigger than adapter can provide
+//
+//================================
+u8 Mod_CC1RequestCur_Compare(u8 IN *pucData,u8 IN ucObject)
+{
+    static u16 Request_Cur;
+	// solve PPS request obnormal issue
+    static u16 Request_Cur_Ori;
+    if((ucObject==DCCMSG.szPPS_Object[0])||(ucObject==DCCMSG.szPPS_Object[1])||(ucObject==DCCMSG.szPPS_Object[2]))
+	{
+		Request_Cur = UCCMSG.szRcvDate[(ucObject*4)-2]&0x7f;//Request from UCC with operation current
+		Request_Cur_Ori = pucData[(ucObject*4)-2]&0x7f;
+	}
+	else
+	{
+		Request_Cur = ((u16)(UCCMSG.szRcvDate[2]&0x0f)<<6) + ((UCCMSG.szRcvDate[1]&0xfc)>>2) ;//Request from UCC with operation current
+		Request_Cur_Ori = ((u16)(pucData[(ucObject*4)-1]&0x03)<<8) + pucData[(ucObject*4)-2];
+	}
+	if(Request_Cur>Request_Cur_Ori)
+	{
+		return 0;
+	}
+	return 1;
+}
+
+//================================
+//
+//the function is used to compare the message between request and adapter
+//
+//
+//================================
+u8 Mod_CC1RequestMsg_Compare(void)
+{
+    u8 b1Rtn = 0;
+    u8 ucRequestObject;
+	ucRequestObject = (UCCMSG.szRcvDate[3]&0x70)>>4;//get Object position      
+    //Request_Cur = ((u16)(UCCMSG.szRcvDate[2]&0x0f)<<6) + ((UCCMSG.szRcvDate[1]&0xfc)>>2) ;//Request from UCC with operation current
+    if(DCCStatus.b1AdapterWithPD == TRUE)    
+    {
+        #if PD_PPS_EN == ENABLED
+        if(UCCMSG.ucCcVersion < PD30)//PD2.0
+        {
+            if(ucRequestObject <= Mod_CC1PDO_Compare(DCCMSG.szAdapterTmp))
+            {
+                ;
+            }
+            else
+            {
+                return 0;
+            }
+            b1Rtn = Mod_CC1RequestCur_Compare(DCCMSG.szAdapterTmp,ucRequestObject);
+        }
+        else//PD3.0
+        {
+            if(ucRequestObject <= Mod_CC1PDO_Compare(DCCMSG.szAdapterCap_For_PD30))
+            {
+                ;
+            }
+            else
+            {
+                return 0;
+            }
+            b1Rtn = Mod_CC1RequestCur_Compare(DCCMSG.szAdapterCap_For_PD30,ucRequestObject);
+        }
+        #else
+        if(ucRequestObject<=Mod_CC1PDO_Compare(DCCMSG.szAdapterTmp))
+        {
+            ;
+        }
+        else
+        {
+            return 0;
+        }
+        UCCMSG.pDataOrder = DCCMSG.szAdapterTmp;
+        b1Rtn = Mod_CC1RequestCur_Compare(DCCMSG.szAdapterTmp,ucRequestObject);
+        #endif
+    }    
+    else
+    {
+//        if(ucRequestObject <= Mod_CC1PDO_Compare(szCC_DataMsg[0]))
+        if(ucRequestObject <= Mod_CC1PDO_Compare(DCCMSG.szAdapterTmp))
+        {
+            ;
+        }
+        else
+        {
+            return 0;
+        }
+        b1Rtn = Mod_CC1RequestCur_Compare(DCCMSG.szAdapterTmp,1);
+        //Request_Cur_Ori = Mod_CC1RequestCur_Compare(DCCMSG.szAdapterTmp,1);
+    }
+    return b1Rtn;
+}
+#else
+#if PDCTS_USE == ENABLED
+u8 Mod_CC1RequestMsg_Compare(void)
+{
+    return 1;
+}
+#endif
+#endif
+//================================
+//
+//the function is used to receive the ucc's request message and recalculate the request message to DCC
+//
+//
+//================================
+
+u8 Mod_CC1RequestMsg_Calc(void)    //FOR REQUEST ADAPTER
+{
+    u8 ucPPS_Request = 0;
+	static u8 ucPPSPosition;
+    static u16 usRequest_Cur = 0x00;
+    #if NINTENDO_SWITCH_FORALL == ENABLED
+	if(((CC1NINTENDOState.b1IsSwitch == TRUE)||(CC1NINTENDOState.b1Switch_Online == TRUE))&&(CC1NINTENDOState.b2Switch_Ada_Online == SWITCH_ADAPTER_ALL))
+    {
+    	ucPPSPosition = 0x01;
+    }
+	else
+    #endif
+    {
+    	ucPPSPosition = (UCCMSG.szRcvDate[3]&0x70)>>4;//get Object position
+    }
+    #if PD_PPS_EN == ENABLED
+	if((ucPPSPosition==DCCMSG.szPPS_Object[0])||(ucPPSPosition==DCCMSG.szPPS_Object[1])||(ucPPSPosition==DCCMSG.szPPS_Object[2]))
+    {
+    	ucPPS_Request = 1;
+    	UCCMSG.szRequestTmp[0] = UCCMSG.szHeader[0];
+    	UCCMSG.szRequestTmp[1] = UCCMSG.szHeader[1];
+    	UCCMSG.szRequestTmp[2] = UCCMSG.szRcvDate[0];
+    	UCCMSG.szRequestTmp[3] = UCCMSG.szRcvDate[1];
+    	UCCMSG.szRequestTmp[4] = UCCMSG.szRcvDate[2];
+    	UCCMSG.szRequestTmp[5] = UCCMSG.szRcvDate[3];
+    }
+	else
+    #endif
+    {
+        #if PD_PPS_EN == ENABLED
+    	ucPPS_Request = 0;
+        #endif 
+    	memcpy(&UCCMSG.szRequestTmp[2],&DCCMSG.szAdapterCap_Ori[(ucPPSPosition*4)- 2],4);
+    	usRequest_Cur = ((u16)(UCCMSG.szRequestTmp[3]&0x03)<<8)+ UCCMSG.szRequestTmp[2];
+    	UCCMSG.szRequestTmp[0] = 0x42;
+    	UCCMSG.szRequestTmp[1] = 0x12;
+        
+        #if NINTENDO_SWITCH_FORALL == ENABLED
+    	if(((CC1NINTENDOState.b1IsSwitch == TRUE)||(CC1NINTENDOState.b1Switch_Online == TRUE))&&(CC1NINTENDOState.b2Switch_Ada_Online == SWITCH_ADAPTER_ALL))
+        {
+        	UCCMSG.szRequestTmp[5] = 0x11;//needed
+        }
+    	else
+        {
+        	UCCMSG.szRequestTmp[5] = UCCMSG.szRcvDate[3];//needed
+        }
+        #else
+    	UCCMSG.szRequestTmp[5] = UCCMSG.szRcvDate[3];//needed
+        #endif
+    	UCCMSG.szRequestTmp[3] &= 0x03;
+    	UCCMSG.szRequestTmp[3] |= (usRequest_Cur<<2);
+    	usRequest_Cur >>= 6;
+    	UCCMSG.szRequestTmp[4] = 0x00;//needed for Bit7(PD3.0)
+    	UCCMSG.szRequestTmp[4] |= (usRequest_Cur & 0x0f);
+    }    
+    return ucPPS_Request;
+}
+
+#if PINE_SUPPORT == ENABLED
+void Mod_CC1PinType_Get(u8 IN *pucData)
+{
+    UCCStatus.ucPin_Assignment = PIN_C;
+    if(((pucData[5]&0x3F)==PIN_E)||((pucData[6]&0x1F)==PIN_E))
+    {
+        UCCStatus.ucPin_Assignment = PIN_E;
+    }
+    else
+    {
+        ;
+    }
+}
+#endif
+
+void Mod_Cc1DrSwap_Set(void)
+{
+    if((UCCStatus.ucSwap_Sent & DR_Sent)== 0)
+    {
+        //TBDTBD
+        #if CHIP_SEL == LT6711GXE
+        if(UCCStatus.b1DataRole == FALSE)//
+        #else
+        if(UCCStatus.b1DataRole == TRUE)//
+        #endif
+        {
+            if((UCCStatus.ucVDM_Step & BIT3_1) == 0x00)
+            {
+                UCCStatus.ucDrSwap_En = 1;
+            }                                  
+        }
+    }
+}
+
+//================================
+//
+//the function is handle UCC VDM message
+//ucMsg_Type:VDM type
+//
+//================================
+#if CHIP_SEL != LT6711GXE
+void Mod_Cc1Ufp_VdmMsg(void)
+{
+    static u8 ucPinE_Det = ENABLED;
+    if(UCCMSG.szRcvDate[1] & BIT7_1)//Structured VDM
+    {
+        if((UCCMSG.szRcvDate[2] <= DP_ALT_MODE_HBYTE)&&(UCCMSG.szRcvDate[3] == DP_ALT_MODE_HBYTE))//UCCMSG.szRcvDate[4][5]
+        {
+            switch(UCCMSG.szRcvDate[0]&0x1F)  //Command
+            {
+                case Discover_Identity   :
+                    #if NINTENDO_SWITCH == ENABLED
+                    #if NINTENDO_SWITCH_HDMIHPD == ENABLED
+                    CC1NINTENDOState.b1NintendoRecordTxHpd = Drv_HdmiTx_HpdDet();
+                    Mod_DiscoverID_Handle(UCCMSG.ucCcVersion,UCCMSG.szRcvDate,PDACK);
+                    if(CC1NINTENDOState.b1NintendoRecordTxHpd == HIGH)
+                    {                     
+                        UCCMSG.pDataOrder =  szNintendo_DisC_ID; //Try to enter into Switch                                                  
+                    }
+                    else
+                    {
+                        UCCMSG.pDataOrder =  szCC_DiscoverIDMsg;//
+                    }                        
+                    #else
+                    Mod_DiscoverID_Handle(UCCMSG.ucCcVersion,UCCMSG.szRcvDate,PDACK);
+                    UCCMSG.pDataOrder =  szNintendo_DisC_ID;
+                    #endif
+                    #else                    
+                    Mod_DiscoverID_Handle(UCCMSG.ucCcVersion,UCCMSG.szRcvDate,PDACK);
+                    UCCMSG.pDataOrder =  szCC_DiscoverIDMsg;
+                    #endif     
+                    #if PD_PPS_EN == ENABLED
+                    if((UCCMSG.ucCcVersion < PD30)&&((UCCMSG.szHeader[0] & BIT5_1)==0x00))//DFP and PD2.0
+                    {
+                        ;//Not send
+                    }
+                    else
+                    #endif
+                    {
+                        Mod_CC1Msg_Send();
+                        UCCStatus.ucVDM_Step |= BIT0_1;
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_Identity,StrVdm);
+                    }
+                    break;
+                case Discover_SVIDs      :
+                    UCCStatus.ucVDM_Step |= BIT1_1;
+                    #if NINTENDO_SWITCH == ENABLED
+                    if(CC1NINTENDOState.b1Switch_Online == TRUE)
+                    {
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[0]; 
+                    }
+                    else
+                    {
+                        UCCMSG.pDataOrder = szCC_DataMsg[2]; 
+                    }                            
+                    #else
+                    UCCMSG.pDataOrder = szCC_DataMsg[2];  
+                    #endif
+                    Mod_CC1Msg_Send();
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_SVIDs,StrVdm);
+                    break;
+                case Discover_Modes      :    
+                    UCCStatus.ucVDM_Step |= BIT2_1;
+                    #if NINTENDO_SWITCH == ENABLED
+                    if(CC1NINTENDOState.b1Switch_Online == TRUE)
+                    {
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[1];
+                    }
+                    else
+                    {
+                        if(UCCStatus.uclaneCount == 4)
+                        {
+                            memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[3],10);                                 
+                        }
+                        else
+                        {
+                            memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[4],10);
+                        }    
+                        #if PD_PPS_EN == ENABLED
+                        if(UCCStatus.ucVDM_Step &BIT1_1)
+                        {                                                            
+                            ;    //ACK
+                        }
+                        else
+                        {                                
+                            Mod_AltMode_Handle(PDNACK,Discover_Modes);    //NACK	                                                     
+                        }       
+                        #endif
+                        UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                    }
+                    #else
+                    if(UCCStatus.uclaneCount == 4)
+                    {
+                        memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[3],10);                                 
+                    }
+                    else
+                    {
+                        memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[4],10);
+                    }    
+                    #if PD_PPS_EN == ENABLED
+                    if(UCCStatus.ucVDM_Step &BIT1_1)
+                    {                                                            
+                        ;    //ACK
+                    }
+                    else
+                    {                                
+                        Mod_AltMode_Handle(PDNACK,Discover_Modes);    //NACK	                                                     
+                    }     
+                    #endif
+                    UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                    #endif
+                    Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_Modes,StrVdm);
+                    break;
+                case Enter_Mode          :
+                    #if HUB_RESET_CTRL == ENABLED
+                    UCCStatus.b2HubResetHigh = HUBRESETHIGH_DONE;
+                    #endif
+                    UCCStatus.ucVDM_Step |= BIT3_1;
+                    #if RX_PORT_SIGN == DP_PORT
+                    Drv_DpRx_DcAuxResCtrl(ENABLED);
+                    Drv_DpRx_AcAuxTermCtrl(ENABLED);
+                    #endif
+                    #if PDCTS_USE == ENABLED
+                    if(UCCStatus.ucVDM_Step & BIT1_1)
+                    {                            
+                    //OPPO FIND X3	            
+                        if(((UCCStatus.b1DataRole == TRUE)&&(UCCStatus.ucSwap_Sent&DR_Sent_Accept))||(UCCStatus.b1DataRole == FALSE))
+                        {
+                            memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[5],6);
+                            if((UCCMSG.szRcvDate[1]&0x07)==0x01)//Object position=1
+                            {
+                                Mod_AltMode_Handle(PDACK,Enter_Mode);
+                            }
+                            else   //Object position != 1
+                            {
+                                Mod_AltMode_Handle(PDNACK,Enter_Mode);
+                            }
+                            UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                            Mod_CC1Msg_Send();    
+                        }
+                    }
+                    else
+                    {
+                        memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[5],6);
+                        Mod_AltMode_Handle(PDNACK,Enter_Mode);
+                        UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                        Mod_CC1Msg_Send();    
+                    }
+                    #else
+                    memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[5],6);
+                    Mod_AltMode_Handle(PDACK,Enter_Mode);
+                    UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                    Mod_CC1Msg_Send();    
+                    #endif
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Enter_Mode,StrVdm);
+                    break;
+                case Exit_Mode:    
+                    memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[6],6);
+                    #if PDCTS_USE == ENABLED
+                    if(UCCStatus.ucVDM_Step & BIT3_1)
+                    {
+                        if((UCCMSG.szRcvDate[1]&0x07)==0x01)
+                        {
+                            Mod_AltMode_Handle(PDACK,Exit_Mode);//Object position=1
+                        }
+                        else
+                        {
+                            Mod_AltMode_Handle(PDNACK,Exit_Mode);//Object position != 1
+                        }
+                    }
+                    else
+                    {                            
+                        Mod_AltMode_Handle(PDNACK,Exit_Mode);                                
+                    }    
+                    #else
+                    Mod_AltMode_Handle(PDACK,Exit_Mode);//Object position=1
+                    #endif
+                    UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                    Mod_CC1Msg_Send();    
+                    UCCStatus.ucVDM_Step &= 0xC7;//BIT3,BIT4,BIT5 should be cleared
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Exit_Mode,StrVdm);
+                    break;
+                case Attention           :
+                    break;
+                case DP_Status_Update    :
+                    UCCStatus.ucVDM_Step |= BIT4_1;
+                    UCCStatus.b1Multi_Function = (UCCStatus.uclaneCount == 4)?(FALSE):(TRUE);
+                    if(UCCStatus.ucVDM_Step & BIT6_1)//Attention HIGH
+                    {
+                        UCCMSG.pDataOrder = szCC_DataMsg[8];//Update HIGH
+                    }
+                    else
+                    {
+                        UCCMSG.pDataOrder = szCC_DataMsg[7];//Update LOW
+                    }
+                    //for Chormebook force to set PINE issue
+                    if((UCCMSG.szRcvDate[4] & 0x03) == 0x00)//not a source or sink device
+                    {
+                        ucPinE_Det = DISABLED;
+                    }
+                    else
+                    {
+                        ucPinE_Det = ENABLED;
+                    }
+                    Mod_CC1Msg_Send();     //
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,DP_Status_Update,StrVdm);
+                    break;
+                case DP_Config	         :
+                    UCCStatus.ucVDM_Step |= BIT5_1;                    
+                    #if TYPEC_PRSWAP_EN == ENABLED
+                    if((Drv_CC2On_Det(SINK)==TRUE)/*&&(UCCStatus.ucPRSended==0)*/&&(!UCCStatus.b1PowerRole)) //DCC 已经在
+                    {
+                        if(UCCStatus.ucPRSended == 0)//pr swap flag = 0;
+                        {
+                            UCCStatus.ucPRSended = 1;
+                        }
+                        else if(UCCStatus.ucPRSended == 2)//pr swap already sent
+                        {
+                            if(UCCStatus.b1IsCc_done == FALSE)
+                            {
+                                UCCStatus.b1IsCc_done = TRUE; //
+                            }
+                        }
+                        else//pr swap on the way
+                        {
+                            ;
+                        }
+                    }
+                    else
+                    #endif
+                    {
+                        if(UCCStatus.b1IsCc_done == FALSE)
+                        {
+                            UCCStatus.b1IsCc_done = TRUE; //
+                        }
+                    }
+                    #if PINE_SUPPORT == ENABLED
+                    if(ucPinE_Det == ENABLED)
+                    {
+                        Mod_CC1PinType_Get(UCCMSG.szRcvDate);
+                    }
+                    else
+                    {
+                        UCCStatus.ucPin_Assignment = PIN_C;
+                    }
+                    #endif
+                    UCCMSG.pDataOrder = szCC_DataMsg[9];
+                    Mod_CC1Msg_Send();        
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,DP_Config,StrVdm);
+                    #if BB_EN == ENABLED
+//                        Drv_BB_Init(ENABLED);
+                    #endif
+                    break;
+                default     :
+                    break;
+            }
+        }         
+        #if NINTENDO_SWITCH == ENABLED
+        else if((UCCMSG.szRcvDate[2]==Switch_LByte)&&(UCCMSG.szRcvDate[3]==Switch_HByte))    //Switch
+        {
+            switch(UCCMSG.szRcvDate[0]&0x1F)
+            {
+                case Enter_Mode          :
+                    //BKE3_32_REG = 0x55;//FRUG <= PHUG
+                    #if NINTENDO_SWITCH_FORALL == ENABLED
+                    if((CC1NINTENDOState.b1Switch_Online == FALSE)&&((DCCStatus.b1AdapterWithPD == FALSE)||(CC1NINTENDOState.b2Switch_Ada_Online == SWITCH_ADAPTER_15V)
+                        ||(CC1NINTENDOState.b2Switch_Ada_Online == SWITCH_ADAPTER_ALL)))
+                    {
+                        //ready to enter into NINTENDO Switch Mode
+                        UCCStatus.b2Hardreset_Hdl = HardRst_Switch;//                                                                                                    
+                    }
+                    else
+                    {                            
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[2];
+                        Mod_CC1Msg_Send();    
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Enter_Mode,StrVdm);    
+                    }
+                    CC1NINTENDOState.b1Switch_Online = TRUE;
+                    CC1NINTENDOState.b1IsSwitch = TRUE;
+                    #else
+                    #if FORCE_NINTENDO_SWITCH == ENABLED                        
+                    UCCStatus.ucVDM_Step |= BIT3_1;
+                    //PD without CC protocol and have not judge Switch Online
+                    if((CC1NINTENDOState.b1Switch_Online == FALSE)&&((DCCStatus.b1AdapterWithPD == FALSE)||(CC1NINTENDOState.b2Switch_Ada_Online == SWITCH_ADAPTER_15V)))
+                    {
+                        //ready to enter into NINTENDO Switch Mode
+                        UCCStatus.b2Hardreset_Hdl = HardRst_Switch;//                                                                                                    
+                    }
+                    else
+                    {                            
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[2];
+                        Mod_CC1Msg_Send();    
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Enter_Mode,StrVdm);    
+                    }
+                    CC1NINTENDOState.b1Switch_Online = TRUE;
+                    CC1NINTENDOState.b1IsSwitch = TRUE;
+                    #else
+                    UCCStatus.ucVDM_Step |= BIT3_1;
+                    //PD without CC protocol and have not judge Switch Online
+                    if((CC1NINTENDOState.b1Switch_Online == FALSE)&&(DCCStatus.b1AdapterWithPD == FALSE))
+                    {
+                        //ready to enter into NINTENDO Switch Mode
+                        UCCStatus.b2Hardreset_Hdl = HardRst_Switch;//                                                                                                    
+                    }
+                    else
+                    {                            
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[2];
+                        Mod_CC1Msg_Send();    
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Enter_Mode,StrVdm);    
+                    }
+                    CC1NINTENDOState.b1Switch_Online = TRUE;
+                    CC1NINTENDOState.b1IsSwitch = TRUE;
+                    #endif
+                    #endif
+                    break;     
+                default	            :
+                    break;
+            }
+        }  
+        #endif
+        #if PDCTS_USE == ENABLED
+        else
+        {
+            switch(UCCMSG.szRcvDate[0]&0x1F) //Command
+            {
+                case Discover_Identity   :    
+                    Mod_DiscoverID_Handle(UCCMSG.ucCcVersion,UCCMSG.szRcvDate,PDNACK);
+                    UCCMSG.pDataOrder = szCC_DiscoverIDMsg;
+                    Mod_CC1Msg_Send();                         
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_Identity,StrVdm);
+                    break;
+                case Discover_SVIDs      :                       
+                    memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[2],10);
+                    Mod_AltMode_Handle(PDNACK,Discover_SVIDs);    //NACK
+                    UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                    Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_SVIDs,StrVdm);
+                    break;
+                case Discover_Modes      :                       
+                    memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[3],10);
+                    Mod_AltMode_Handle(PDNACK,Discover_Modes);    //NACK
+                    UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                    Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_Modes,StrVdm);
+                    break;
+                case Enter_Mode      :                       
+                    memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[5],6);
+                    Mod_AltMode_Handle(PDNACK,Enter_Mode);    //NACK
+                    UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                    Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Enter_Mode,StrVdm);
+                    break;
+                case Exit_Mode      :                       
+                    memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCC_DataMsg[6],6);
+                    Mod_AltMode_Handle(PDNACK,Exit_Mode);    //NACK
+                    UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                    Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Exit_Mode,StrVdm);
+                    break;
+                default:
+                    break;
+            }
+        }
+        #endif
+    }  
+    
+    #if NINTENDO_SWITCH == ENABLED
+    else if(((UCCMSG.szRcvDate[1] & BIT7_1)==0x00))
+    {
+        if((UCCMSG.szRcvDate[2] == Switch_LByte)&&(UCCMSG.szRcvDate[3] == Switch_HByte))
+        {
+            Ocm_Delay1ms(1);
+            if((UCCMSG.szRcvDate[5] == 0x01))
+            {
+                if(UCCMSG.szRcvDate[6] == 0x16)
+                {
+                    UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[6];
+                    Mod_CC1Msg_Send();    
+                }
+                else if(UCCMSG.szRcvDate[6] == 0x0b)
+                {
+                    UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[7];
+                    Mod_CC1Msg_Send();    
+                }
+                else if(UCCMSG.szRcvDate[6] == 0x18)
+                {
+                    UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[8];
+                    Mod_CC1Msg_Send();    
+                }
+                else if(UCCMSG.szRcvDate[6] == 0x01)
+                {
+                    if((UCCMSG.szRcvDate[10] == 0x14)&&(UCCMSG.szRcvDate[11] == 0x80))
+                    {
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[9];
+                        Mod_CC1Msg_Send();    
+            //                        	CC1NINTENDOState.b2SwitchIntoWakeUp = Sleep_Type1;
+                    }
+                    else if((UCCMSG.szRcvDate[10] == 0x00)&&(UCCMSG.szRcvDate[11] == 0x00))
+                    {
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[3];
+                        Mod_CC1Msg_Send();
+                    }        
+                }
+                else if(UCCMSG.szRcvDate[6] == 0x10)
+                {
+                    UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[10];
+                    Mod_CC1Msg_Send();
+                }
+                else if(UCCMSG.szRcvDate[6] == 0x06)
+                {
+                    UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[11];
+                    Mod_CC1Msg_Send();
+                }
+                else if(UCCMSG.szRcvDate[6] == 0x20)
+                {
+                    UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[12];
+                    Mod_CC1Msg_Send();
+                }
+                else if(UCCMSG.szRcvDate[6] == 0x1c)
+                {
+                    if(UCCMSG.szRcvDate[4]==0x01)
+                    {                
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[4];
+                        Mod_CC1Msg_Send();
+                        CC1NINTENDOState.b2SwitchIntoSleep = Sleep_Type0;
+                    }
+                    else if(UCCMSG.szRcvDate[4]==0x00)
+                    {
+                        //Switch Enter into Sleep
+                        UCCMSG.pDataOrder = szCC_Nintendo_DataMsg[5];
+                        Mod_CC1Msg_Send();
+                        CC1NINTENDOState.b2SwitchIntoWakeUp = Sleep_Type0;
+                    }
+                }
+            }
+        } 
+    }
+    #endif
+    else //unstructure
+    {
+        if(UCCMSG.ucCcVersion >= PD30)
+        {
+            UCCMSG.pDataOrder = szCCCtrl_NotSupport;
+            Mod_CC1Msg_Send();    
+            UCCMSG.ucLastMsgType = 0xff;
+        }
+    }
+}
+#else
+void Mod_Cc1Dfp_VdmMsg(void)
+{
+    static u8 b1PinMode = 0;
+    static u8 b1HpdState = 0;
+ 
+    switch(UCCMSG.szRcvDate[0]&0x1F)  //Command
+    {
+        case Discover_Identity   : 
+            g_stDpTx.b1DpTxAppleFlag=0;  
+            if((UCCMSG.szRcvDate[4]==0xac)&&(UCCMSG.szRcvDate[5]==0x05))
+            {
+              g_stDpTx.b1DpTxAppleFlag=1;
+            }
+            UCCMSG.pDataOrder =  szCCData_REQDiscoverSvid;
+            Mod_CC1Msg_Send();
+            UCCStatus.ucVDM_Step |= BIT0_1;
+            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_SVIDs,StrVdm);
+
+            break;
+        case Discover_SVIDs      :
+            UCCMSG.pDataOrder = szCCData_REQDiscoverModes;
+            UCCStatus.ucVDM_Step |= BIT1_1;
+            Mod_CC1Msg_Send();
+            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Discover_Modes,StrVdm);
+            break;
+        case Discover_Modes      : 
+            b1PinMode = 0;    
+            if((UCCMSG.szRcvDate[4]&0x03) == 0x02)//DP SOURCE
+            {
+                UCCMSG.ucLastMsgType = 0xff;
+            }
+            else
+            {
+                UCCStatus.ucVDM_Step |= BIT2_1;
+                if(((UCCMSG.szRcvDate[5]&0x0c)== 0x08)||((!UCCMSG.szRcvDate[5])&&(((UCCMSG.szRcvDate[6]&0x0c)==0x08))))
+                {
+                    if(UCCStatus.uclaneCount == FOUR_LANE)
+                    {
+                        UCCStatus.uclaneCount = TWO_LANE;
+                    }
+                }
+                else if(((UCCMSG.szRcvDate[5]&0x0c)== 0x0c)||((!UCCMSG.szRcvDate[5])&&(((UCCMSG.szRcvDate[6]&0x0c)==0x0c))))
+                {
+                    b1PinMode = 1;
+                } 
+                memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCCData_REQEnterMode,6);    
+                if(UCCStatus.ucVDM_Step &BIT1_1)
+                {                                                            
+                    ;    //ACK
+                }
+                else
+                {                                
+                    Mod_AltMode_Handle(PDNACK,Discover_Modes);    //NACK                                                         
+                }    
+                UCCMSG.pDataOrder = UCCMSG.szCC_ModeMsg_Buffer;
+                Mod_CC1Msg_Send();    
+                UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Enter_Mode,StrVdm);
+            } 
+            break;
+        case Enter_Mode          :
+            UCCStatus.ucVDM_Step |= BIT3_1;
+            memcpy(UCCMSG.szCC_ModeMsg_Buffer,szCCData_REQEnterMode,6);
+
+            Mod_AltMode_Handle(PDACK,Enter_Mode);//ack
+
+            UCCMSG.pDataOrder = szCCData_REQDpStatusUpdate;
+            Mod_CC1Msg_Send();  
+            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Enter_Mode,StrVdm);
+        
+            break;
+        case Exit_Mode           :      
+            UCCStatus.ucVDM_Step &= 0xC7;//BIT3,BIT4,BIT5 should be cleared
+            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,Exit_Mode,StrVdm);
+            break;
+        case Attention           :
+        break;
+        case DP_Status_Update    :
+            UCCStatus.ucVDM_Step |= BIT4_1;
+            if((b1PinMode == 1)&&(UCCMSG.szRcvDate[4]&0x10))
+            {
+                if(UCCStatus.uclaneCount == FOUR_LANE)
+                {
+                    UCCStatus.uclaneCount = TWO_LANE;
+                }
+            }
+            if(UCCStatus.uclaneCount == FOUR_LANE)
+            {
+                UCCMSG.pDataOrder = szCCData_REQDpConfig_PINCE;//Update HIGH
+            }
+            else
+            {
+                UCCMSG.pDataOrder = szCCData_REQDpConfig_PIND;//Update LOW
+            }
+            b1HpdState = (UCCMSG.szRcvDate[4]&BIT7_1)?(TRUE):(FALSE);
+            Mod_CC1Msg_Send();
+            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Vdm_Msg,DP_Config,StrVdm);
+                    
+            break;
+        case DP_Config             :
+            UCCStatus.ucVDM_Step |= BIT5_1;
+            UCCMSG.ucLastMsgType = 0xff;
+            if(b1HpdState == HIGH)
+            {
+                UCCStatus.b2AttentionType = ATTENTION_HIGH;
+            }
+            else
+            {
+                UCCStatus.b2AttentionType = ATTENTION_LOW;
+            }
+            #if TYPEC_PRSWAP_EN == ENABLED
+            if((Drv_CC2On_Det(SINK)==TRUE)&&(!UCCStatus.b1PowerRole)) //DCC 已经在
+            {
+                if(UCCStatus.ucPRSended == 0)//pr swap flag = 0;
+                {
+                    UCCStatus.ucPRSended = 1;
+                }
+                else if(UCCStatus.ucPRSended == 2)//pr swap already sent
+                {
+                    if(UCCStatus.b1IsCc_done == FALSE)
+                    {
+                        UCCStatus.b1IsCc_done = TRUE; //
+                    }
+                }
+                else//pr swap on the way
+                {
+                    ;
+                }
+            }
+            else
+            #endif
+            {
+                if(UCCStatus.b1IsCc_done == FALSE)
+                {
+                    UCCStatus.b1IsCc_done = TRUE; //
+                }
+            }
+            break;
+        default     :
+            break;
+    }
+}
+#endif
+void Mod_CC1VdmMsg_Analysis(u8 ucMsg_Type)
+{
+    if(ucMsg_Type == Vendor_Defined)
+    {
+        switch  (UCCMSG.szRcvDate[0]&0xC0)//ACK NACK INIT BUSY
+        {
+            case Init: //Command
+                //DFP 模式下，才接收Attention
+                #if CHIP_SEL == LT6711GXE
+                if(UCCStatus.b1CcDataRoleSet == DFP)
+                {
+                    switch  (UCCMSG.szRcvDate[0]&0x1F)
+                    {
+                        case Attention    :                        
+                            if((UCCStatus.ucVDM_Step & BIT5_1) == BIT5_1)
+                            {
+                                if(UCCMSG.szRcvDate[4]&BIT7_1)//
+                                {
+                                    if(UCCMSG.szRcvDate[5]&BIT0_1)
+                                    {
+                                        UCCStatus.b2AttentionType = ATTENTION_IRQ;
+                                    }
+                                    else
+                                    {
+                                        UCCStatus.b2AttentionType = ATTENTION_HIGH;
+                                    }
+                                }
+                                else
+                                {
+                                    UCCStatus.b2AttentionType = ATTENTION_LOW;
+                                }
+                            }
+                            break;
+                        default                 :
+                            break;
+                    }
+                }
+                else//UFP 模式下，才接收Attention
+                #else
+                {
+                    Mod_Cc1Ufp_VdmMsg();
+                }
+                #endif
+                break;
+            case ACK:
+                //DFP模式下才接受ACK
+                #if CHIP_SEL == LT6711GXE
+                if(UCCStatus.b1CcDataRoleSet == DFP)
+                {
+                    Mod_Cc1Dfp_VdmMsg();
+                }     
+                #endif
+                break;
+            case NACK: //Command
+                //DFP模式下处理NACK
+                if(UCCStatus.b1CcDataRoleSet == DFP)
+                {
+                    ;
+                }
+                break;
+            case BUSY: //Command
+                //DFP模式下处理BUSY
+                if(UCCStatus.b1CcDataRoleSet == DFP)
+                {
+                    switch(UCCMSG.szRcvDate[0]&0x1F)  //Command
+                    {
+                        case Discover_Identity   :   
+                        case Discover_SVIDs      :
+                        case Discover_Modes      : 
+                        case Enter_Mode          :
+                            UCCStatus.b2VdmBusy = AMS_READY;
+                            UCCMSG.pLast_DataOrder = UCCMSG.pBuffer_Order;                            
+                            break;
+                        case Exit_Mode           :      
+                            UCCStatus.b2Hardreset_Hdl = HardRst_Initate;
+                            break;
+                        case Attention           :
+                        case DP_Status_Update    :                                                
+                        case DP_Config           :
+                        default                  :
+                            break;
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+//================================
+//
+//the function is handle UCC message
+//ucMsg_Type:message type;control,data,chunked
+//ucLength:Control or data message
+//ucExt:extended and not extended message
+//================================
+void Mod_CC1PdMsg_Analysis(u8 ucMsg_Type,u8 ucLength,u8 ucExt)  //UFP message
+{
+    static u8 ucPrSwapRecCnt = 0;
+    if(ucExt == 0x00)//Not Extented
+    {
+        if(ucLength == 0x00)   //Control Message
+        {
+            switch(ucMsg_Type)
+            {
+                case GoodCRC  :
+                case GotoMin  : 
+                    break;
+                case Accept   :
+                    if(UCCStatus.ucFlow_Step == 2)//receive source cap
+                    {
+                        UCCStatus.ucFlow_Step = 3;
+                    }
+                    if(UCCMSG.ucLastMsgType == Mod_CC1MsgType_Calc(Ctrl_Msg,PS_RDY,StrVdm))
+                    {                        
+                        if(UCCStatus.ucFlow_Step == 1)
+                        {
+                            UCCMSG.pDataOrder = szCCCtrl_SoftReset;
+                            Mod_CC1Msg_Send();                            
+                        }
+                    }
+                    #if TYPEC_DRSWAP_EN == ENABLED	        
+                    if(UCCMSG.ucLastMsgType==Mod_CC1MsgType_Calc(Ctrl_Msg,DR_Swap,StrVdm))
+                    {
+                        UCCStatus.ucSwap_Sent &= DR_No_Sent;
+                        UCCStatus.ucSwap_Sent |= DR_Sent_Accept;
+                        //TBDTBD
+                        if(UCCStatus.b1DataRole == TRUE)//DFP to UFP 
+                        {
+                            UCCStatus.b2DisIdSend_En = INITIATE_NONE;
+                            UCCStatus.b1DataRole = FALSE;
+                            UCCStatus.b1CcDataRoleSet = UFP;
+                        }
+                        else//UFP to DFP
+                        {
+                            if(UCCStatus.b2DisIdSend_En == INITIATE_NONE)
+                            {
+                                UCCStatus.b2DisIdSend_En = INITIATE_READY;
+                            }
+                            UCCMSG.ucLastMsgType = 0xff;
+                            UCCStatus.b1DataRole = TRUE;
+                            UCCStatus.b1CcDataRoleSet = DFP;
+                        }
+                    }
+                    else if(UCCMSG.ucLastMsgType==Mod_CC1MsgType_Calc(Ctrl_Msg,VCONN_Swap,StrVdm))
+                    {
+                        UCCAmsType.ucVconnSwap_Ams = AMS_GOING;
+                        Mod_Cc1DrSwap_Set();
+                    }
+                    else if(UCCMSG.ucLastMsgType==Mod_CC1MsgType_Calc(Ctrl_Msg,PR_Swap,StrVdm))
+                    {
+                        UCCAmsType.ucPrSwap_Ams = AMS_GOING;
+                        if(UCCStatus.ucPRSwaping == 1)
+                        {
+                            UCCStatus.ucPRSwaping = 2;//pr swap enter into Accept
+                        }
+                        if(UCCStatus.ucPRSwaped == 1)
+                        {
+                            UCCStatus.ucPRSwaped = 2;
+                        }
+                        UCCStatus.b1PowerRole = TRUE;
+                    }
+                    #endif
+                    break;
+                case Reject                 :
+                    #if NINTENDO_SWITCH == ENABLED                    
+                    if(UCCMSG.ucLastMsgType==Mod_CC1MsgType_Calc(Ctrl_Msg,PR_Swap,StrVdm))
+                    {      
+                        #if NINTENDO_SWITCH_HDMIHPD == ENABLED
+                        CC1NINTENDOState.b1NintendoRecordTxHpd = Drv_HdmiTx_HpdDet();
+                        #endif
+                        #if NINTENDO_SWITCH_FORALL == ENABLED
+                    	if(((CC1NINTENDOState.b2Switch_Ada_Online != NOT_SWITCH)||(DCCStatus.b1AdapterWithPD == FALSE))&&((UCCStatus.ucVDM_Step&BIT2_1)==0x00))
+                        {                          
+                            UCCStatus.b2Hardreset_Hdl = HardRst_Switch;    
+                        }     
+                        #else
+                        #if FORCE_NINTENDO_SWITCH == ENABLED
+                        if(((CC1NINTENDOState.b2Switch_Ada_Online != NOT_SWITCH)||(DCCStatus.b1AdapterWithPD == FALSE))&&((UCCStatus.ucVDM_Step&BIT2_1)==0x00))
+                        {                          
+                            UCCStatus.b2Hardreset_Hdl = HardRst_Switch;    
+                        }     
+                        #else
+                        //ready to enter into NINTENDO Switch Mode                       
+                        if(((CC1NINTENDOState.b2Switch_Ada_Online == SWITCH_ADAPTER)||(DCCStatus.b1AdapterWithPD == FALSE))&&((UCCStatus.ucVDM_Step&BIT2_1)==0x00))
+                        {                          
+                            UCCStatus.b2Hardreset_Hdl = HardRst_Switch;    
+                        }    
+                        #endif
+                        #endif
+                    }
+                    #endif
+                case Not_Support    :
+                    if(UCCMSG.ucLastMsgType==Mod_CC1MsgType_Calc(Ctrl_Msg,PR_Swap,StrVdm))
+                    {
+                        UCCAmsType.ucPrSwap_Ams = AMS_DONE;
+                        ADAPTER_GPIO_CTRL(IN LOW);
+                        UCCStatus.b1PrDone = TRUE;
+                        UCCStatus.ucPRSwaping = 0;
+                        UCCStatus.ucPRSwaped = 3;
+                        if(UCCStatus.b1IsCc_done == FALSE)//fixed
+                        {
+                            UCCStatus.b1IsCc_done = TRUE; // Hdmi_Edid = 0x02;
+                        }
+                    }
+                    else if(UCCMSG.ucLastMsgType==Mod_CC1MsgType_Calc(Ctrl_Msg,VCONN_Swap,StrVdm))
+                    {
+                        Mod_Cc1DrSwap_Set();
+                        UCCAmsType.ucVconnSwap_Ams = AMS_DONE;	
+                    }
+                    else if(UCCMSG.ucLastMsgType==Mod_CC1MsgType_Calc(Ctrl_Msg,DR_Swap,StrVdm))
+                    {                        
+                        UCCStatus.ucSwap_Sent |= DR_Sent_Reject;
+                        UCCMSG.ucLastMsgType = 0xff;                                                                        
+                    }
+                    break;
+                case Ping              :    
+                    break; 
+                case PS_RDY   : 
+                    ucPrSwapRecCnt = 0;
+                    UCCStatus.ucFlow_Step = 1;
+                    UCCStatus.b1PrSwapDone = FALSE;
+                    #if TYPEC_PRSWAP_EN == ENABLED
+                    if((UCCStatus.ucPRSwaping)&&((UCCStatus.ucPRSwaped==2)||(UCCStatus.ucPRSwaped==3))) //SEND PS_RDY RECIEVE PS_RDY
+                    {
+                        //UCCStatus.ucPRSwaping = 1;
+//                        UCCAmsType.ucPrSwap_Ams = AMS_DONE;
+                        UCCStatus.ucPRSwaped = 3;
+                        if(UCCMSG.ucCcVersion >= PD30)
+                        {
+                            DRV_RpCur_Sel(UCC,Rp_SinkTxOK);
+                        }
+                        else
+                        {
+                            DRV_RpCur_Sel(UCC,Rp_SinkTxNG);
+                        }
+                        Ocm_Delay1ms(10);//needed,when use CC protocol tool,CC will float for more than 10ms;
+                        SOURCE_GPIO_CTRL(IN HIGH);
+                        ADAPTER_GPIO_CTRL(IN HIGH);
+                        DRV_PowerRole_Set(UCC,SOURCE);
+                        UCCStatus.b1Toggle_DFP_EN = TRUE;
+                        UCCStatus.b1PowerRole = TRUE;
+                        UCCStatus.b1PrSwapDone = TRUE;
+                        UCCStatus.b1PsRdy_Send  = TRUE;
+                    	Ocm_Delay1ms(50);
+                        Ocm_Timer2ForPsRdy_Set();
+                    }
+                    if(UCCStatus.ucPRSwaped == 6)
+                    {               
+                        UCCStatus.b1PrDone = TRUE;
+                        UCCStatus.ucPRSwaping = 0;
+                        UCCStatus.b1PowerRole = FALSE;
+                        UCCStatus.ucPRSwaped = 2;    
+                        if(UCCStatus.b1IsCc_done == FALSE)//fixed
+                        {
+                            UCCStatus.b1IsCc_done = TRUE; // Hdmi_Edid = 0x02;
+                        }
+                    }
+                    #endif
+                    #if TYPEC_DRSWAP_EN == ENABLED
+                    #if VCONNSWAP_SUPPORT == ENABLED 
+                    if(UCCMSG.ucLastMsgType == Mod_CC1MsgType_Calc(Ctrl_Msg,VCONN_Swap,StrVdm))
+                    {
+                    	UCCStatus.b1IsVconnSource = FALSE;
+//                        Mod_Cc1DrSwap_Set();
+                        UCCAmsType.ucVconnSwap_Ams = AMS_DONE;	
+						Mod_CC1Vconn_Off();
+                    }      
+                    if(((UCCStatus.ucSwap_Sent&Vconn_Sent) == 0)&&(UCCStatus.b1IsVconnSource == TRUE))
+                    {
+                        UCCStatus.b1VconnSwap_En = TRUE;
+                    }
+                    else
+                    {
+                        Mod_Cc1DrSwap_Set();
+                    }
+                    #else
+                    Mod_Cc1DrSwap_Set();
+                    #endif
+                    if((Drv_CC2On_Det(SINK)== TRUE)&&(UCCStatus.ucPRSended==0)&&(UCCStatus.b1PowerRole == FALSE)&&(UCCStatus.ucFRSwaping==FRSWAP_NULL))
+                    {
+                        UCCStatus.ucPRSended = 1;
+                    }
+                    #endif
+					#if PDVERSION == PD31
+					if(UCCStatus.b1Pd31Test == 1)
+					{
+						UCCStatus.b1Pd31Test = 0;
+						UCCMSG.pDataOrder = szEprMod_Msg;
+						Mod_CC1Msg_Send(); 
+					}
+					else
+					{
+						UCCMSG.pDataOrder = szEprKeepAlive_Msg;
+						Mod_CC1Msg_Send();
+					}
+					#endif
+                    break;
+                case Get_Source_Cap ://20210728
+                    if(Drv_CC2On_Det(SINK) == TRUE)
+                    {                                  
+                        Mod_CC1SourceCapMsg_Set();
+                        if(Drv_CC1RpOn_Scan() == 1)//TEST.PD.PROT.SRC.1
+                        {
+                            UCCStatus.ucFlow_Step = 5;
+                        }
+                        else  //TEST.PD.PROT.SRC.2
+                        {
+                            ;
+                        }
+                    }
+                    else
+                    {
+                        UCCMSG.pDataOrder = szCCCtrl_Reject;
+                    }
+                    Mod_CC1Msg_Send();            
+                    break;
+                case Get_Sink_Cap   :
+                    if((UCCStatus.ucFlow_Step == 2)||(UCCStatus.ucFlow_Step == 6))    //TDA2.2.1//TEST.PD.PORT.SRC.06//TEST.PD.PORT.SNK.08
+                    {
+                        if(Drv_CC1RpOn_Scan()==1)
+                        {
+                            UCCStatus.b1Flag_Source_Send = TRUE;
+                        }
+                        UCCMSG.ucMessageID = 0x00;
+                        UCCMSG.pDataOrder = szCCCtrl_SoftReset;
+                        Mod_CC1Msg_Send();                        
+                    }    
+                    #if PDCTS_USE == ENABLED
+                    else if(UCCStatus.ucFlow_Step ==3)
+                    {
+                        if(Mod_CC1DetOff_Judge() == FALSE)
+                        {
+                            UCCStatus.b2Hardreset_Hdl = HardRst_Initate;
+                        }
+                    }
+                    #endif
+                    else
+                    {
+                        UCCStatus.ucFlow_Step = 0x01;
+                        if(UCCMSG.ucCcVersion >= PD30)
+                        {
+                        	UCCMSG.pDataOrder = szCCData_SinkCapPD30;                        
+                        }
+                        else
+                        {
+                        	UCCMSG.pDataOrder = szCCData_SinkCapPD20;
+                        }
+                        Mod_CC1Msg_Send();
+                    }                    
+                    break;
+                case DR_Swap        :
+                    #if TYPEC_DRSWAP_EN == ENABLED
+                    if(UCCStatus.ucVDM_Step&0xf8)
+                    {
+                        if(Mod_CC1DetOff_Judge() == FALSE)
+                        {
+                            UCCStatus.b2Hardreset_Hdl = HardRst_Initate;
+                        }
+                    }
+                    else
+                    {
+                        UCCStatus.b1WaitMsg_Receive = FALSE;
+                        #if CHIP_SEL == LT6711GXE
+                        if(UCCStatus.b1DataRole == TRUE)//DFP to UFP 
+                        {
+                            if(UCCStatus.b2DisIdSend_En == INITIATE_NONE)
+                            {
+                                UCCStatus.b2DisIdSend_En = INITIATE_READY;
+                            }
+                            UCCStatus.ucDrSwap_En = 0;
+                            UCCMSG.pDataOrder = szCCCtrl_Reject;
+                            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Reject,StrVdm);
+                            Mod_CC1Msg_Send();    
+                        }
+                        else
+                        {       
+                            UCCStatus.ucDrSwap_En = 2;
+                            #if HUB_RESET_CTRL == ENABLED
+                            UCCStatus.b2HubResetHigh = HUBRESETHIGH_PRE;
+                            #endif
+                            UCCMSG.pDataOrder = szCCCtrl_Accept;
+                            Mod_CC1Msg_Send();
+                            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,DR_Swap,StrVdm);
+                        }	
+                        #else
+                        
+                        if(UCCStatus.b1DataRole == FALSE)
+                        {
+                            UCCStatus.ucDrSwap_En = 0;
+                            UCCMSG.pDataOrder = szCCCtrl_Reject;
+                            Mod_CC1Msg_Send();
+                        }
+                        else
+                        {
+                            #if HUB_RESET_CTRL == ENABLED
+                            UCCStatus.b2HubResetHigh = HUBRESETHIGH_PRE;
+                            #endif
+                            UCCStatus.ucDrSwap_En = 2;
+                            UCCMSG.pDataOrder = szCCCtrl_Accept;
+                            Mod_CC1Msg_Send();
+                            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,DR_Swap,StrVdm);
+                        }        
+                        #endif
+                        UCCStatus.ucSwap_Sent &= DR_No_Sent;
+                        UCCStatus.ucSwap_Sent |= DR_Sent_Accept;
+                    }
+                    #endif
+                    break;
+                case PR_Swap :    
+                    #if PDCTS_USE == ENABLED
+                    if(Drv_CC2On_Det(SINK) == FALSE)//Adapter unplug
+                    {                        
+                        UCCMSG.pDataOrder = szCCCtrl_Reject;  
+                    	Mod_CC1Msg_Send();
+                        UCCMSG.ucLastMsgType = 0xff;
+                    }
+                    else
+                    {    
+                        if(BKA2_B1_REG&BIT2_1)//Rp as source
+                        {
+                            ADAPTER_GPIO_CTRL(LOW);
+                            UCCStatus.ucFlow_Step = 2;
+                            UCCStatus.ucPRSwaping = 1;
+                            UCCStatus.ucPRSwaped = 4;
+                            UCCMSG.pDataOrder = szCCCtrl_Accept;
+                            Mod_CC1Msg_Send();
+                            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Accept,StrVdm);
+                        }
+                        else
+                        {                           
+                            UCCStatus.ucPRSwaping = 2;//TEST.PD.PORT.SRC.09
+                            UCCStatus.ucPRSwaped = 2;
+                            UCCMSG.pDataOrder = szCCCtrl_Accept;
+                            Mod_CC1Msg_Send();
+                            UCCMSG.ucLastMsgType = 0xff;
+                        }
+                    }
+                    #else
+                    //solve a display PD issue
+                    if(ucPrSwapRecCnt >= 10)
+                    {
+                        ucPrSwapRecCnt = 0;
+                        UCCMSG.pDataOrder = szCCCtrl_NotSupport;            
+                    }
+                    else
+                    {
+                        ucPrSwapRecCnt++;
+                        UCCMSG.pDataOrder = szCCCtrl_Reject;   
+                    }
+                    Mod_CC1Msg_Send();
+                    UCCMSG.ucLastMsgType = 0xff;
+//                    UCCAmsType.ucPrSwap_Ams = AMS_DONE;
+                    #endif
+                    break;
+                case VCONN_Swap	    ://20210804
+                    #if TYPEC_DRSWAP_EN == ENABLED
+                    UCCStatus.b1WaitMsg_Receive = FALSE; 
+                    #if VCONNSWAP_SUPPORT == ENABLED                   
+                    UCCStatus.b1VconnSwap_En = FALSE;
+                    #endif
+                    Drv_CC1Ra_Det();
+                    UCCStatus.ucSwap_Sent |= Vconn_Sent;
+//                    #if PDCTS_USE == ENABLED
+                    UCCStatus.b1SwapToVconnSource = FALSE;
+                    UCCMSG.pDataOrder = szCCCtrl_Accept;                   
+                    Mod_CC1Msg_Send();                                               
+                    if(UCCStatus.b1IsVconnSource == TRUE)
+                    {            
+                        UCCMSG.ucLastMsgType = 0xff;
+                        UCCStatus.b1IsVconnSource = FALSE;                        
+                    } 
+                    else
+                    {
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Accept,StrVdm);
+                        UCCStatus.b1IsVconnSource = TRUE;
+                        UCCStatus.b1SwapToVconnSource = TRUE;
+                    }
+//                    #else
+//                    if((Drv_CC2On_Det(SINK)==TRUE)&&(UCCStatus.b1IsVconnSource == TRUE))
+//                    {
+//                        UCCMSG.pDataOrder = szCCCtrl_Accept;
+//                        UCCStatus.b1IsVconnSource = FALSE;
+//                    	UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,VCONN_Swap,StrVdm);
+//                        UCCAmsType.ucVconnSwap_Ams = AMS_GOING;
+//                    }                    
+//                    else
+//                    {
+//                        UCCMSG.pDataOrder = szCCCtrl_Reject; 
+//                        UCCAmsType.ucVconnSwap_Ams = AMS_DONE;	                        
+//                    }    
+//                    Mod_CC1Msg_Send();   
+//                    #endif
+                    Mod_Cc1DrSwap_Set();
+                    #endif
+                    break;
+                case Wait           : 
+                    if(UCCMSG.ucLastMsgType == Mod_CC1MsgType_Calc(Ctrl_Msg,PR_Swap,StrVdm))
+                    {
+                        UCCAmsType.ucPrSwap_Ams = AMS_READY;
+                        UCCStatus.ucPRSwaping = 0;
+                    }
+                    UCCStatus.b1WaitMsg_Receive = TRUE;
+                    UCCMSG.pLast_DataOrder = UCCMSG.pBuffer_Order;
+                    break;
+                case Soft_Reset     :
+                    UCCMSG.ucMessageID = 0;
+//                    if(Drv_CC1RpOn_Scan()== 1)
+                    if(UCCStatus.b1PowerRole == TRUE)
+                    {
+                        UCCStatus.b1Flag_Source_Send = TRUE;
+                    }
+                    UCCMSG.pDataOrder = szCCCtrl_Accept;//send ACCEPT
+                    Mod_CC1Msg_Send();
+                    UCCMSG.ucLastMsgType = 0xff;
+                    break;
+                case Get_Source_Cap_Extended     : //20210728
+                    if(Drv_CC2On_Det(SINK) == TRUE)
+                    {                    
+                        szCC_SourceCapExt[27] = UCCMSG.szPDP_Value[0];
+                        UCCMSG.pDataOrder = szCC_SourceCapExt;
+                    }
+                    else
+                    {                            
+                        UCCMSG.pDataOrder = szCCCtrl_NotSupport;            
+                    }    
+                    Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = 0xff;
+                    break;
+                case FR_Swap :
+                    #if TYPEC_FRSWAP_EN  == ENABLED
+                //发起FRTrig，并且收到了FRSWAP
+                    if(UCCStatus.ucFRSwaping)
+                    {
+                        if(UCCStatus.b1PowerRole)
+                        {                           
+                            UCCMSG.pDataOrder = szCCCtrl_Accept;
+                            Mod_CC1Msg_Send();
+                            //UCCStatus.b1PowerRole = FALSE;
+                            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,FR_Swap,StrVdm);                          
+                        }
+                        else
+                        {
+                            UCCStatus.ucFRSwaping = FRSWAP_NULL;
+                            UCCMSG.pDataOrder = szCCCtrl_Reject;//reject
+                            Mod_CC1Msg_Send();
+                            UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Reject,StrVdm);
+                        }
+                    }
+                    else
+                    {
+                        if(Mod_CC1DetOff_Judge() == FALSE)
+                        {
+                            UCCStatus.b2Hardreset_Hdl = HardRst_Initate;
+                        }
+                    }
+                    #else
+                    UCCMSG.pDataOrder = szCCCtrl_NotSupport;//reject
+                    Mod_CC1Msg_Send();
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Not_Support,StrVdm);
+                    #endif
+                    break;                                
+                case Get_Status     :             
+                case Get_PPS_Status     :
+                case Get_Country_Codes  :
+                    UCCMSG.pDataOrder = szCCCtrl_NotSupport;//Not support
+                    Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Not_Support,StrVdm);
+                    break;  
+				#if PDVERSION == PD31
+				//New To PD3.1
+				case Get_Sink_Cap_Extended :				
+					if(UCCStatus.b1PowerRole)
+					{
+						;
+					}
+					else
+					{
+						UCCMSG.pDataOrder = szSink_CapExtended_Msg;
+						Mod_CC1Msg_Send();   
+						UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ext_Msg,Sink_Capabilities_Extended,StrVdm);
+					}
+					break;
+				case Get_Source_Info :
+					if(UCCStatus.b1PowerRole)
+					{
+						szSource_Info_Msg[2] = UCCMSG.szPDP_Value[0];
+						szSource_Info_Msg[3] = UCCMSG.szPDP_Value[0];
+						szSource_Info_Msg[4] = UCCMSG.szPDP_Value[0];
+						UCCMSG.pDataOrder = szSource_Info_Msg;
+						Mod_CC1Msg_Send();   
+						UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Data_Msg,Source_Info,StrVdm);
+					}
+					else
+					{
+						;
+					}
+					break;
+				case Get_Revision :
+					UCCMSG.pDataOrder = szRevision_Msg;
+					Mod_CC1Msg_Send();   
+					UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Data_Msg,Revision,StrVdm);
+					break;
+				#endif
+                default :
+                    if(UCCMSG.ucCcVersion >= PD30)
+                    {
+                        UCCMSG.pDataOrder = szCCCtrl_NotSupport;//not support
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Not_Support,StrVdm);
+                    }
+                    else
+                    {
+                        UCCMSG.pDataOrder = szCCCtrl_Reject;
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Reject,StrVdm);
+                    }                        
+                    Mod_CC1Msg_Send();    
+                    break;
+            }
+        }
+        else //Data Message
+        {
+            switch (ucMsg_Type)
+            {
+                case Source_Capabilities   :
+                    #if HUB_RESET_CTRL == ENABLED
+                    UCCStatus.b2HubResetHigh = HUBRESETHIGH_PRE;
+                    #endif
+       
+                    //#if ((LT8711UXD == DISABLED)||(TYPEC_INPUT_TYPE == FEMALE))
+                    Drv_CC1Flip_Judge(&UCCStatus);
+                    //#endif
+                    UCCStatus.b2Toggle_enable = 0x00;
+                    UCCStatus.ucFlow_Step = 2;
+                    UCCStatus.ucContract_Succeed = 1;
+                    if(UCCMSG.ucCcVersion < PD30)
+                    {
+                        ;
+                    }
+                    else
+                    {
+                        UCCMSG.ucCcVersion = (UCCMSG.szHeader[0]&0xc0)>>6;
+                    }
+					Mod_CCPortSaveDataToTmp(&UCCMSG,ucLength);
+					#if UCCRequest_PointedVol == ENABLED
+                    Mod_CCPortToPointedPdo(&UCCMSG,ucLength,&UCCStatus);
+					#endif
+					Mod_CCPortRequestMsg_Cal(&UCCMSG,0x01,UCCStatus.ucRequestPdo);//unchunked
+                    UCCStatus.b1PowerRole = FALSE;
+                   
+					#if CCTRY_MODE != NO_TRY
+                    UCCStatus.b2TRYTIMES = TRYTIMES;
+					#endif
+                    		
+                    UCCMSG.pDataOrder = UCCMSG.szRequest_Buffer; //UFP_SINK 1
+                    Mod_CC1Msg_Send();
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Data_Msg,Request,StrVdm);
+                    break;
+                case Request :
+                    Ocm_Delay1ms(3);//For OPPO R17
+                    #if TYPEC_FRSWAP_EN  == ENABLED
+                	DCCStatus.b1FrTriggle = FALSE;
+                    Drv_Cc2VbusDet_IntClr(TRUE);
+                    Drv_Cc2VbusDet_IntSet(DISABLED);
+                    #endif
+                    UCCStatus.ucFlow_Step = 4;
+                    if(UCCMSG.ucCcVersion < PD30)
+                    {
+                        ;
+                    }
+                    else
+                    {
+                        UCCMSG.ucCcVersion = (UCCMSG.szHeader[0]&0xc0)>>6;
+                    }
+                    if(UCCMSG.ucCcVersion >= PD30)
+                    {
+                        DRV_RpCur_Sel(UCC,Rp_SinkTxOK);
+                    }
+                    else
+                    {
+                        DRV_RpCur_Sel(UCC,Rp_SinkTxNG);
+                    }
+                    UCCStatus.b1PowerRole = TRUE;                                                        
+                    
+                    #if PD_PPS_EN == ENABLED
+                    if(((Mod_CC1RequestMsg_Calc() == 1)&&(UCCMSG.ucCcVersion < PD30))||(Mod_CC1RequestMsg_Compare() == 0))//PD2.0 request PPS,reject
+                    {
+                        UCCMSG.pDataOrder = szCCCtrl_Reject;
+                        Mod_CC1Msg_Send();//DFP_SOURCE 2//UFP_SINK 5
+                        UCCMSG.ucLastMsgType = 0xff; //Accept time must less than 15ms
+                    }
+                    else
+                    {                               
+                        UCCMSG.pDataOrder = szCCCtrl_Accept;
+                        Mod_CC1Msg_Send();//DFP_SOURCE 2//UFP_SINK 5
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Accept,StrVdm);
+                    }    
+                    #else
+                    Mod_CC1RequestMsg_Calc(); //request DCC For the Power cal
+                    #if PDCTS_USE == ENABLED
+                    if(Mod_CC1RequestMsg_Compare() == 0)//PD2.0 request PPS,reject
+                    {
+                        UCCMSG.pDataOrder = szCCCtrl_Reject;
+                        Mod_CC1Msg_Send();//DFP_SOURCE 2//UFP_SINK 5
+                        UCCMSG.ucLastMsgType = 0xff; //Accept time must less than 15ms
+                        if(UCCStatus.b1DataRole)//huawei Mate10 request Current Mismatch
+                        {
+                            #if VCONNSWAP_SUPPORT == ENABLED     
+                            if(((UCCStatus.ucSwap_Sent&Vconn_Sent) == 0)&&(UCCStatus.b1IsVconnSource == TRUE))
+                            {
+                                UCCStatus.b1VconnSwap_En = TRUE;
+                            }
+                            else
+                            {
+                                Mod_Cc1DrSwap_Set();
+                            }
+                            #else
+                        	if((UCCStatus.ucSwap_Sent & DR_Sent)== 0)
+                            {
+                                Mod_Cc1DrSwap_Set();
+                            }
+                            #endif
+                        }
+                        UCCStatus.ucFlow_Step = 1;
+                        UCCStatus.b1PrDone = TRUE;
+                    }
+                    else
+                    #endif
+                    {
+                        UCCMSG.pDataOrder = szCCCtrl_Accept;
+                        Mod_CC1Msg_Send();//DFP_SOURCE 2//UFP_SINK 5
+                        UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Accept,StrVdm);                                               
+                    }
+                    #endif
+                    break;
+                case BIST	                :  
+//                    #if PDCTS_USE == ENABLED
+                    if(UCCMSG.szRcvDate[3]== 0x50)//TDA.2.1.1.1
+                    {
+                        UCCAmsType.ucBist_Ams = 0;
+                        BKFC_17_REG |= 0x80;
+                        BKFC_1A_REG =  0x43;     
+                        BKFC_19_REG =  0x09;
+                        Ocm_Delay1ms(40);
+                        BKFC_17_REG &= 0x7F;    
+                    }
+                    else //TEST.PD.PHY.PORT.1
+                    {
+                        UCCAmsType.ucBist_Ams = 1;
+                    }
+//                    #endif
+                    break;
+                case Sink_Capabilities      :                                                      
+                case Battery_Status         :                                                      
+                    break; 
+                case Alert                  :                                                                                                  
+                case Get_Country_Info       : 
+                case EPR_Mode:
+                    UCCMSG.pDataOrder = szCCCtrl_NotSupport;//not support
+                    Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Not_Support,StrVdm);
+                    break; 
+				case Enter_USB :
+                case EPR_Request :
+					UCCMSG.pDataOrder = szCCCtrl_Reject;//PD3.1 spec 6.3.4
+					Mod_CC1Msg_Send();    
+                    UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Reject,StrVdm);
+					break;
+                case Vendor_Defined :                            
+                    UCCMSG.b1Vdm_Msg = TRUE;
+                    Mod_CC1VdmMsg_Analysis(ucMsg_Type);   //xxxmsg = Vendor Defined Msg
+                    break;
+                default :
+                    break;
+            }
+        }
+    }
+    else
+    {
+        switch (ucMsg_Type)
+        {
+            //
+            case Source_Cap_Extended   :                                              
+            case Status            :   
+            case Battery_Capabilities:
+            case Manufacturer_Info  :  
+            case Security_Response  :
+            case Firmware_Update_Response  :
+            case PPS_Status          : 
+            case Country_Info          :
+            case Country_Codes      :
+            break;//No Need To response
+            
+            case Get_Battery_Cap    : 
+            case Get_Battery_Status :                                                      
+            case Get_Manufacturer_Info :                                                  
+            case Security_Request   :                                                                                                 
+            case Firmware_Update_Request  :                                                      
+                UCCMSG.pDataOrder = szCCCtrl_NotSupport;//not support msg
+                Mod_CC1Msg_Send();
+                UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,Not_Support,StrVdm);
+                break;
+				#if PDVERSION == PD31
+			case EPR_Source_Capabilities :
+				UCCMSG.pDataOrder = szEprRequest_Msg;
+				Mod_CC1Msg_Send();    
+				UCCMSG.ucLastMsgType = 0xff;
+				break;
+				#endif
+            default                 : 
+                Mod_CC1ChunkMessage_Handle();
+                break;
+        }    
+    }
+}
+
+#endif
+
+#endif

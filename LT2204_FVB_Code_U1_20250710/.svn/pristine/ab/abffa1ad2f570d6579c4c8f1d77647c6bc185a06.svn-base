@@ -1,0 +1,1410 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: ChipDpTx.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.05.30
+/******************************************************************************/
+#include "include.h"
+
+#if TX_PORT_SIGN == DP_PORT
+
+u8 Tx_Buff[16];
+u8 Rx_Buff[16];
+DpTxAuX_S g_stAuxDpTx;
+
+bool Mod_DpTxLink_SingleDpcdWriteDH(u8 cmd_addr, u16 addr, u8 *buf,u8 len)
+{
+    u16 Loopx;
+    u8 ReplyStatus;
+
+    if(Mod_DpTx_SinkHpdDet() == NO_ACTION)
+    {
+        Ocm_Delay1ms(1);//filter the irq 0.5-1ms 
+    }
+
+    if(Mod_DpTx_SinkHpdDet() == HIGH)
+    {
+        BKF5_2B_REG = cmd_addr;
+        BKF5_2B_REG = (addr >>8 )& 0xff;
+        BKF5_2B_REG = addr & 0xff;
+        if(len)
+        {
+            BKF5_2B_REG = len-1;
+        }
+        for(Loopx = 0; Loopx < len; Loopx++)
+        {
+            BKF5_2B_REG = buf[Loopx];
+        }
+        BKF5_2C_REG = 0x00;//start write
+        Ocm_Delay1us(100);//for cts test request
+        for(Loopx = 0; Loopx < 400; Loopx ++)
+        {
+            Ocm_Delay1us(10);
+            if(BKF5_30_REG & BIT0_1)//[0]the aux transaction detect
+            {
+                ReplyStatus = BKF5_2B_REG;
+                if(ReplyStatus == 0x00)//ack
+                {
+                    return 0;
+                }
+                else
+                {
+                    return 1;
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+bool Mod_DpTxLink_SingleDpcdReadDH(u8 cmd_addr, u16 addr, u8 *buf, u8 len)
+{
+    u16 Loopx; 
+    u8 Loopy;
+    u8 ReplyStatus;
+
+    if(Mod_DpTx_SinkHpdDet() == NO_ACTION)
+    {
+        Ocm_Delay1ms(1);//filter the irq 0.5-1ms 
+    }
+
+    if(Mod_DpTx_SinkHpdDet() == HIGH)
+    {
+        BKF5_2B_REG = cmd_addr;
+        BKF5_2B_REG = (addr >>8 )& 0xff;
+        BKF5_2B_REG = addr & 0xff;
+        if(len)
+        {
+            BKF5_2B_REG = len-1;
+        }
+        BKF5_2C_REG = 0x00; //start read
+        memset(&buf[0],0x00,len);//init
+        Ocm_Delay1us(100);//for cts test request
+        for(Loopx = 0; Loopx < 400; Loopx++)
+        {
+            Ocm_Delay1us(10);
+            if(BKF5_30_REG & BIT0_1)//[0]the aux transaction detect
+            {
+                ReplyStatus = BKF5_2B_REG;
+                if(ReplyStatus == 0x00) //ack
+                {
+                    for(Loopy = 0; Loopy < len; Loopy++)
+                    {
+                        buf[Loopy] = BKF5_2B_REG;
+                    }
+                    return 0;
+                }
+                else
+                {
+                    return 1;
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+void Mod_DpTxLink_DpcdRead(u8 addrhigh,u16 addr, u8 *buf, u8 len)
+{
+    bool Ret;
+    u8 Loopx;
+    u8 CmdAdress;
+    CmdAdress = (0x90)|(addrhigh&0x0f);
+    for(Loopx = 0; Loopx < 7; Loopx++)
+    {
+        Ret = Mod_DpTxLink_SingleDpcdReadDH(CmdAdress,addr, buf, len);
+        if(Ret)
+        {
+            continue;
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+
+void Mod_DpTxLink_DpcdWrite(u8 addrhigh, u16 addr, u8 *buf, u8 len)
+{
+    bool Ret;
+    u8 Loopx;
+    u8 CmdAdress;
+
+    CmdAdress = (0x80)|(addrhigh&0x0f);
+    for(Loopx = 0; Loopx < 7; Loopx++)
+    {
+        Ret = Mod_DpTxLink_SingleDpcdWriteDH(CmdAdress,addr, buf, len);
+        if(Ret)
+        {
+            continue;
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+void Mod_DpTxLink_I2cOverAuxWrite(u8 ucCmd, u16 usAddr, u8 *Buf, u8 ucLen)
+{
+    bool ucRet;
+    u8 ucIndex;
+
+    for(ucIndex = 0; ucIndex < 7; ucIndex++)
+    {
+        ucRet = Mod_DpTxLink_SingleDpcdWriteDH(ucCmd,usAddr,Buf,ucLen);
+        if(ucRet)
+        {
+            continue;
+        }
+        break;
+    }
+}
+
+void Mod_DpTxLink_I2cOverAuxRead(u8 ucCmd, u16 usAddr, u8 *Buf, u8 ucLen)
+{
+    bool ucRet;
+    u8 ucIndex;
+
+    for(ucIndex = 0; ucIndex < 7; ucIndex++)
+    {
+        ucRet = Mod_DpTxLink_SingleDpcdReadDH(ucCmd,usAddr,Buf,ucLen);
+        if(ucRet)
+        {
+            continue;
+        }
+        break;
+    }
+}
+
+u32 Mod_DpTx_LinkBandWidthGet(void)
+{
+    u32 ulDpTxlaneWidht;
+    ulDpTxlaneWidht = (u32)g_stAuxDpTx.ucLinkRateMax *g_stAuxDpTx.ucLaneCntMax * 9000;
+    return ulDpTxlaneWidht ;
+    //hbr3: 8100 x 4 x 0.8 /24 = 1080000
+    //10800000 /4/30(0x1e) = 9000
+}
+
+u8 Mod_DpTx_LaneGet(void)
+{
+    return g_stAuxDpTx.ucLaneCntCap;
+}
+
+void Mod_DpTxLink_SinkCapRead(void)
+{
+    u8 ucread_dpcd_version_cnt;
+    u8 b1IsExtend;
+    u8 ucTemp_LinkRate,ucTemp_LaneCount;
+    Rx_Buff[0] = 0x00;
+    ucread_dpcd_version_cnt = 0;
+    while((ucread_dpcd_version_cnt < 10)&&((Rx_Buff[0] < 0x10)||(Rx_Buff[0] > 0x21)))//DPCD VERSION
+    {
+        ucread_dpcd_version_cnt++;
+        Tx_Buff[0] = 0x02;
+        Mod_DpTxLink_DpcdWrite(0x00,0x0600,Tx_Buff,1);//[2:0]1-normal work, 2-power down state
+        Mod_DpTxLink_DpcdRead(0x00,0x0000,Rx_Buff,1);
+    }
+    if(ucread_dpcd_version_cnt >= 10)
+    {
+        printLT(PRINT_PRIO_HIG,"\nDp tx aux error");
+    }
+    if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+    {
+        return;
+    }
+    #if DPTX_CTS_SUPPORT == ENABLED
+    Mod_DpTxLink_DpcdRead(0x00,0x0080, Rx_Buff, 16);
+    #endif
+    Mod_DpTxLink_DpcdRead(0x00, 0x000e, Rx_Buff, 1);
+    g_stAuxDpTx.ucTrainInterval = Rx_Buff[0] & 0x0f;
+    if(g_stAuxDpTx.ucTrainInterval > 4)
+    {
+        g_stAuxDpTx.ucTrainInterval = 4;
+    }
+    
+    b1IsExtend = (Rx_Buff[0] & BIT7_1)?(TRUE):(FALSE);
+    Rx_Buff[0] = 0x00;
+    ucread_dpcd_version_cnt = 0;
+    while((ucread_dpcd_version_cnt < 10)&&((Rx_Buff[0] < 0x10) ||(Rx_Buff[0] > 0x21)))//DPCD must have valid value
+    {
+        ucread_dpcd_version_cnt++;
+        if (b1IsExtend == TRUE)//Present at DPCD Addresses
+        {
+            Mod_DpTxLink_DpcdRead(0x00, 0x2210, Rx_Buff, 1);
+            g_stAuxDpTx.b1SinkVscSupport = (Rx_Buff[0] & BIT3_1)?(TRUE):(FALSE);
+            Mod_DpTxLink_DpcdRead(0x00,0x2200, Rx_Buff, 16);
+        }
+        else
+        {
+            Mod_DpTxLink_DpcdRead(0x00,0x0000,Rx_Buff,16);
+            g_stAuxDpTx.b1SinkVscSupport = FALSE;
+        }
+    }
+
+    g_stDpTx.b1VscEnable = (g_stAuxDpTx.b1SinkVscSupport)?(TRUE):(FALSE);
+
+    g_stAuxDpTx.ucDpVersion = Rx_Buff[0];
+    ucTemp_LinkRate   = ((Rx_Buff[1] > 0x1e)&&(Rx_Buff[1]<0x30))? (0x1e) : (Rx_Buff[1]);
+    ucTemp_LaneCount  = (Rx_Buff[2] & 0x1f);
+    g_stAuxDpTx.b1MsaIgnoreCap = (Rx_Buff[7] & BIT6_1)? (TRUE) : (FALSE);
+    #if DPTX_SSC_SUPPORT == ENABLED
+    g_stAuxDpTx.b1SscCap = (Rx_Buff[3] & BIT0_1)? (TRUE) : (FALSE);
+    #endif
+    #if DPTX_TPS3_SUPPORT == ENABLED
+    g_stAuxDpTx.ucTps3En = (Rx_Buff[2] & BIT6_1) >> 6;
+    #endif
+    #if DPTX_TPS4_SUPPORT == ENABLED
+    g_stAuxDpTx.ucTps4En = (Rx_Buff[3] & BIT7_1) >> 7;
+    #endif
+    Mod_DpTxLink_DpcdRead(0x00,0x0007,Rx_Buff,1);
+    printLT(PRINT_PRIO_TEST, "\nDpTx msa ignore1 cap is 0x%02bx", Rx_Buff[0]);
+    if((g_stAuxDpTx.b1MsaIgnoreCap == TRUE)&&((Rx_Buff[0] & BIT6_1) == 0x00))
+    {
+         g_stAuxDpTx.b1MsaIgnoreCap = FALSE;
+    }
+    printLT(PRINT_PRIO_TEST, "\nDpTx ssc cap is %bd", g_stAuxDpTx.b1SscCap);
+    printLT(PRINT_PRIO_TEST, "\nDpTx msa ignore2 cap is %bd", g_stAuxDpTx.b1MsaIgnoreCap);
+    
+    Mod_DpTxLink_DpcdRead(0x00,0x0008,Rx_Buff,1); //
+    g_stAuxDpTx.ucHbeCap = (Rx_Buff[0] & BIT3_1) >> 3;
+    printLT(PRINT_PRIO_TEST, "\nDpTx hbe cap is %bd", g_stAuxDpTx.ucHbeCap);
+    
+    Mod_DpTxLink_DpcdRead(0x00,0x006f,Rx_Buff,1); //
+    if(Rx_Buff[0]==0x04)
+    {
+    g_stAuxDpTx.ucDscBPPCap=0;
+    }
+    else{g_stAuxDpTx.ucDscBPPCap=1;}
+
+    printLT(PRINT_PRIO_TEST, "\nDpTx DSC BPP =0x%bd", Rx_Buff[0]);
+        
+        
+    Mod_DpTxLink_DpcdRead(0x00,0x0060,Rx_Buff,1); //
+    if(Rx_Buff[0]&=0x01)
+    {
+     g_stAuxDpTx.ucDscSupportCap=1;
+    }
+    else{g_stAuxDpTx.ucDscSupportCap=0;}
+    printLT(PRINT_PRIO_TEST, "\nDpTx DSC support =0x%bd", Rx_Buff[0]);
+    
+    if(ucTemp_LinkRate == 0)//edp case
+    {
+        Mod_DpTxLink_DpcdRead(0x00,0x0010, Rx_Buff, 16);
+        g_stAuxDpTx.ucEdpLinkRateCap  = 0;
+        while(g_stAuxDpTx.ucEdpLinkRateCap < 8)
+        {
+            if((Rx_Buff[g_stAuxDpTx.ucEdpLinkRateCap<<1]==0x00)&&(Rx_Buff[(g_stAuxDpTx.ucEdpLinkRateCap<<1)+1]== 0x00))
+            {
+                g_stAuxDpTx.ucEdpLinkRateCap++;
+            }
+            else
+            {
+                if((Rx_Buff[g_stAuxDpTx.ucEdpLinkRateCap<<1] == 0xA4)&&(Rx_Buff[(g_stAuxDpTx.ucEdpLinkRateCap<<1)+1]== 0x1F))
+                {
+                    ucTemp_LinkRate = RBR;
+                    break;
+                }
+                else if((Rx_Buff[g_stAuxDpTx.ucEdpLinkRateCap<<1] == 0xbc)&&(Rx_Buff[(g_stAuxDpTx.ucEdpLinkRateCap<<1)+1]==0x34))
+                {
+                    ucTemp_LinkRate = HBR;
+                    break;
+                }
+                else if((Rx_Buff[g_stAuxDpTx.ucEdpLinkRateCap<<1] == 0x78)&&(Rx_Buff[(g_stAuxDpTx.ucEdpLinkRateCap<<1)+1]== 0x69))
+                {
+                    ucTemp_LinkRate = HBR2;
+                    break;
+                }
+                else if((Rx_Buff[g_stAuxDpTx.ucEdpLinkRateCap<<1] == 0x34)&&(Rx_Buff[(g_stAuxDpTx.ucEdpLinkRateCap<<1)+1]== 0x9e))
+                {
+                    ucTemp_LinkRate = HBR3;
+                    break;
+                }
+            }
+        }
+    }
+    g_stAuxDpTx.ucLinkRateMax = min(ucTemp_LinkRate,DPTX_MAX_LINK_RATE);
+    g_stAuxDpTx.ucLaneCntMax  = min(ucTemp_LaneCount,DPTX_MAX_LANE_CNT);;
+    printLT(PRINT_PRIO_HIG, "\nLinkRate/LaneCnt = 0x%02bx,0x%02bx", g_stAuxDpTx.ucLinkRateMax,g_stAuxDpTx.ucLaneCntMax);
+    #if TYPECTX_EN == ENABLED
+    if((g_stDpTx.b1IsDpOrTypec == TYPEC_INTF)&&(g_stAuxDpTx.ucLaneCntMax > UCCStatus.uclaneCount))
+    {
+        g_stAuxDpTx.ucLaneCntMax = UCCStatus.uclaneCount;
+    }
+    #endif 
+    Mod_DpTxLink_DpcdRead(0x00,0x2214, Rx_Buff, 1);
+    g_stAuxDpTx.ucASyncCap = (Rx_Buff[0] & 0x01)? (ENABLED) : (DISABLED);
+    printLT(PRINT_PRIO_TEST, "\nDp tx adaptive sync is %bd", g_stAuxDpTx.ucASyncCap);
+    g_stAuxDpTx.b1TestEdidReadEn = FALSE;
+    
+    #if ((DPTX_DSC_ENC_SUPPORT == ENABLED) || (DPTX_DSC_BYPASS_SUPPORT == ENABLED))
+    Mod_DpTxLink_DpcdRead(0x00,0x0060, Rx_Buff, 16);
+    g_stAuxDpTx.ucDscCap = (Rx_Buff[0] & 0x01)? (TRUE) : (FALSE);//[0]dsc support flag
+    g_stAuxDpTx.ucDscSliceCap    = Rx_Buff[4];
+    g_stAuxDpTx.ucDscColorFormat = Rx_Buff[9]&0x1f;
+    #endif
+
+    #if ((DPTX_DSC_ENC_SUPPORT == ENABLED) || (DPTX_DSC_BYPASS_SUPPORT == ENABLED) || (DPTX_FEC_ENC == ENABLED))
+    Mod_DpTxLink_DpcdRead(0x00,0x0090, Rx_Buff, 1);
+    g_stAuxDpTx.ucFecCap = ((Rx_Buff[0]&0x0f) == 0x0f)? (TRUE) : (FALSE);//[3:0]fec capability flag
+     printLT(PRINT_PRIO_TEST, "\ng_stAuxDpTx.ucFecCap is %bd", g_stAuxDpTx.ucFecCap);
+    #endif
+
+    Mod_DpTxLink_DpcdRead(0x00,0x0021, Rx_Buff, 1);
+    Mod_DpTxLink_DpcdRead(0x00,0x0200, Rx_Buff, 6);
+    g_stAuxDpTx.ucSinkCnt = Rx_Buff[0]&0x3f;
+    
+    Mod_DpTxLink_DpcdRead(0x00,0x0400, Rx_Buff, 9);
+    Tx_Buff[0] = 0x00;
+    Tx_Buff[1] = 0x00;
+    Tx_Buff[2] = 0x1b;
+    Tx_Buff[3] = 0x42;
+    Tx_Buff[4] = 0x55;
+    Tx_Buff[5] = 0x4a;
+    Tx_Buff[6] = 0x78;
+    Tx_Buff[7] = 0x4d;
+    Tx_Buff[8] = 0x00;
+    Mod_DpTxLink_DpcdWrite(0x00,0x0300,Tx_Buff, 9);
+    
+    #ifdef NVIDIA_FW_EN
+    #if (CUSTOMER_DEFINED == ENABLED)
+    g_stAuxDpTx.b1SscCap         = FALSE;
+    g_stAuxDpTx.b1SinkVscSupport = FALSE;
+    g_stAuxDpTx.ucASyncCap       = ENABLED;
+    g_stAuxDpTx.ucHbeCap         = DISABLED;
+    #endif
+    #endif
+}
+
+
+void Mod_DpTxLink_SinkEdidRead(u8 *pucEdidData)
+{
+    #if ((DPTX_EDID_READ_EN == ENABLED)||(DEBUG_DPTX_EDID_PRINT_EN == ENABLED))
+    u16 usLoop_Cnt;
+    #endif
+    #if DPTX_EDID_READ_EN == ENABLED
+    u8 ucIndex;
+    u8 ucCheckSum;
+    u8 ucEdidReadStep = 0;
+    u8 ucEdidReadCnt;
+    if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+    {
+        return;
+    }
+    ucEdidReadCnt = 0;
+    memcpy(pucEdidData, szEdidDefault, 512);
+    while(ucEdidReadCnt < 5)
+    {
+        ucEdidReadCnt++;
+        ucEdidReadStep = 0;   
+        if(ucEdidReadStep == 0) //read init
+        {
+            Tx_Buff[0] = 0x00;
+            Mod_DpTxLink_I2cOverAuxWrite(0x40,0x0030,Tx_Buff,1);//init edid block address
+            Mod_DpTxLink_I2cOverAuxWrite(0x40,0x0050,Tx_Buff,1);//init edid address
+            Mod_DpTxLink_I2cOverAuxRead(0x50,0x0050,Rx_Buff,8);//read edid
+            Mod_DpTxLink_I2cOverAuxRead(0x10,0x0050,Rx_Buff,0);//read edid stop
+            if((Rx_Buff[0] == 0x00)&&(Rx_Buff[1] == 0xff)&&(Rx_Buff[2] == 0xff)&&(Rx_Buff[7] == 0x00))
+            {
+                ucEdidReadStep = 1;
+                ucEdidReadCnt  = 5;
+            }
+            if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+            {
+                break;
+            }
+        }
+        if(ucEdidReadStep == 1)//read edid
+        {
+            for(usLoop_Cnt = 0; usLoop_Cnt < 4; usLoop_Cnt++)//total: 4block
+            {
+                if(usLoop_Cnt >= 2)//
+                {
+                    Tx_Buff[0] = 0x01;
+                    Mod_DpTxLink_I2cOverAuxWrite(0x40,0x0030,Tx_Buff,1);//init edid block address
+                }
+                Tx_Buff[0] = ((usLoop_Cnt&0x01) == 0x00)?(0x00):(0x80);
+                Mod_DpTxLink_I2cOverAuxWrite(0x40,0x0050,Tx_Buff,1);//init edid address
+                for(ucIndex = 0; ucIndex < 8; ucIndex++ )//read_one block
+                {
+                    if(ucIndex < 7)
+                    {
+                        Mod_DpTxLink_I2cOverAuxRead(0x50,0x0050,&pucEdidData[(usLoop_Cnt<<7)+(ucIndex<<4)],16);//block edid read
+                    }
+                    else
+                    {
+                        Mod_DpTxLink_I2cOverAuxRead(0x10,0x0050,&pucEdidData[(usLoop_Cnt<<7)+(ucIndex<<4)],16);//the block last edid read
+                    }
+                }
+                if(pucEdidData[0x7e] > 0x03)
+                {
+                    pucEdidData[0x7e] = 0x03;
+                }
+                if(usLoop_Cnt >= pucEdidData[0x7e])
+                {
+                    ucEdidReadStep = 2;
+                    break;
+                }
+                if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+                {
+                    break;
+                }
+            }
+        }
+        if(ucEdidReadStep == 2)//check the edid checksum
+        {
+            for(usLoop_Cnt = 0;usLoop_Cnt < 4;usLoop_Cnt++)
+            {
+                ucCheckSum = 0;
+                for(ucIndex = 0; ucIndex < 0x7f; ucIndex++ )//cal checksum
+                {
+                    ucCheckSum += pucEdidData[ucIndex + (usLoop_Cnt<<7)];//
+                }
+                ucCheckSum = (256 - ucCheckSum) & 0xff;
+                if (ucCheckSum != pucEdidData[0x7f + (usLoop_Cnt<<7)])//check sum err
+                {
+                    printLT(PRINT_PRIO_HIG, "\nWARNING: the edid check sum is err, use default edid");
+                    pucEdidData[0x7f + (usLoop_Cnt<<7)] = ucCheckSum;
+                    ucEdidReadStep = 0xff;
+                    break;
+                }
+                if(usLoop_Cnt >= pucEdidData[0x7e])
+                {
+                    ucEdidReadStep = 3;
+                    break;
+                }
+                if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+                {
+                    break;
+                }
+            }
+        }          
+    }
+    if(ucEdidReadStep == 0xff)
+    {
+        memcpy(pucEdidData, szEdidDefault, 512);
+    }
+
+    if(pucEdidData[0x7e] == 0)
+    {   
+        pucEdidData[0x7e] = 1;
+        memcpy(&pucEdidData[128], &szEdidDefault[128], 128);
+    }
+    #if HDMIRX_FORCE_2BLOCKEDID
+     pucEdidData[0x7e] = 1;
+    #endif
+    #else //DPTX_EDID_READ_EN != ENABLED
+    memcpy(pucEdidData, szEdidDefault, 512);
+    #endif
+    #if DPTX_CTS_SUPPORT == ENABLED
+    Mod_DpTx_TestEdid(g_stAuxDpTx.b1TestEdidReadEn,pucEdidData);
+    #endif
+    #if DEBUG_DPTX_EDID_PRINT_EN == ENABLED//EDID print
+    for(usLoop_Cnt = 0; usLoop_Cnt < 128 * (pucEdidData[0x7e] + 1); usLoop_Cnt++)
+    {
+        if((usLoop_Cnt & 0x0f) == 0)
+        {
+            printLT(PRINT_PRIO_TEST, "\n");
+        }
+        printLT(PRINT_PRIO_TEST, "0x%02bx,", pucEdidData[usLoop_Cnt]);
+        if(usLoop_Cnt > 512)
+        {
+            break;
+        }
+    }
+    #endif
+}
+
+bool Mod_DpTx_SinkStatusRead(u8 ucStep)
+{ 
+    if(ucStep == 1)
+    {
+        Ocm_Delay1us(100);
+    }
+    else if(ucStep == 2)
+    {
+        switch(g_stAuxDpTx.ucTrainInterval)
+        {
+            case 0x00:
+                Ocm_Delay1us(800);
+                break;
+            default:
+                Ocm_Delay1ms((g_stAuxDpTx.ucTrainInterval<<2));
+                break;
+        }
+    }
+    if(ucStep <= 2)
+    {
+        Mod_DpTxLink_DpcdRead(0x00,0x0202,Rx_Buff,3);
+        printLT(PRINT_PRIO_TEST, "\nRd202 = 0x%02bx,0x%02bx,0x%02bx",Rx_Buff[0],Rx_Buff[1],Rx_Buff[2]);
+    }
+    else //in case irq det 102 write 0
+    {
+        Ocm_Delay1ms(1);
+        Mod_DpTxLink_DpcdRead(0x00,0x0200,Rx_Buff,6);
+        Rx_Buff[0] = Rx_Buff[2];
+        Rx_Buff[1] = Rx_Buff[3];
+        Rx_Buff[2] = Rx_Buff[4];
+    }
+    #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+    g_stDpTx.ucTxLinkTrainSinkState[0] = Rx_Buff[0];
+    g_stDpTx.ucTxLinkTrainSinkState[1] = Rx_Buff[1];
+    g_stDpTx.ucTxLinkTrainSinkState[2] = Rx_Buff[2];
+    #endif
+    if(ucStep == 1)//first phase
+    {
+        #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+        switch(g_stAuxDpTx.ucLaneCntCap)
+        {
+            case 0x01:
+                if((Rx_Buff[0] & 0x01) == 0x01)
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 0;
+                    return SUCCESS; //tps1 link train successed
+                }
+                else if(((Rx_Buff[0] & 0x01) != 0x01) && (g_stDpTx.ucTxLinkTrainingCnt >= DPTX_TRAINING_MAX_CNT))
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                }
+                break;
+            case 0x02:
+                if((Rx_Buff[0] & 0x11) == 0x11)
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 0;
+                    return SUCCESS; //tps1 link train successed
+                }
+                else if(((Rx_Buff[0] & 0x11) != 0x11) && (g_stDpTx.ucTxLinkTrainingCnt >= DPTX_TRAINING_MAX_CNT))
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                }
+                break;
+            case 0x04:
+                if(((Rx_Buff[0] & 0x11) == 0x11) && ((Rx_Buff[1] & 0x11) == 0x11))
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 0;
+                    return SUCCESS; //tps1 link train successed
+                }
+                else if((((Rx_Buff[0] & 0x11) != 0x11) || ((Rx_Buff[1] & 0x11) != 0x11)) && (g_stDpTx.ucTxLinkTrainingCnt >= DPTX_TRAINING_MAX_CNT))
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                }
+                break;
+            default:
+                break;
+        }
+        #else
+        switch(g_stAuxDpTx.ucLaneCntCap)
+        {
+            case 0x01:
+                if((Rx_Buff[0] & 0x01) == 0x01)
+                {
+                    return SUCCESS; //tps1 link train successed
+                }
+                break;
+            case 0x02:
+                if((Rx_Buff[0] & 0x11) == 0x11)
+                {
+                    return SUCCESS; //tps1 link train successed
+                }
+                break;
+            case 0x04:
+                if(((Rx_Buff[0] & 0x11) == 0x11) && ((Rx_Buff[1] & 0x11) == 0x11))
+                {
+                    return SUCCESS; //tps1 link train successed
+                }
+                break;
+            default:
+                break;
+        }
+        #endif
+    }
+    else if(ucStep >= 2)//second phase
+    {
+        #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+        switch(g_stAuxDpTx.ucLaneCntCap)
+        {
+            case 0x01:
+                if((Rx_Buff[0] & 0x01) == 0x01)
+                {
+                    if(((Rx_Buff[0] & 0x07) == 0x07) && ((Rx_Buff[2] & 0x01) == 0x01))
+                    {
+                        return SUCCESS; //tps2 link train successed
+                    }
+                    else if(((Rx_Buff[0] & 0x07) == 0x01) && ((Rx_Buff[2] & 0x01) != 0x01) && (g_stDpTx.ucTxLinkTrainingCnt >= DPTX_TRAINING_MAX_CNT))
+                    {
+                        g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                    }
+                }
+                else
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                }
+                break;
+            case 0x02:
+                if((Rx_Buff[0] & 0x11) == 0x11)
+                {
+                    if(((Rx_Buff[0] & 0x77) == 0x77) && ((Rx_Buff[2] & 0x01) == 0x01))
+                    {
+                        return SUCCESS; //tps2 link train successed
+                    }
+                    else if(((Rx_Buff[0] & 0x77) == 0x11) && ((Rx_Buff[2] & 0x01) != 0x01) && (g_stDpTx.ucTxLinkTrainingCnt >= DPTX_TRAINING_MAX_CNT))
+                    {
+                        g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                    }
+                }
+                else
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                }
+                break;
+            case 0x04:
+                if(((Rx_Buff[0] & 0x11) == 0x11) && ((Rx_Buff[1] & 0x11) == 0x11))
+                {
+                    if(((Rx_Buff[0] & 0x77) == 0x77) && ((Rx_Buff[1] & 0x77) == 0x77) && ((Rx_Buff[2] & 0x01) == 0x01))
+                    {
+                        return SUCCESS; //tps2 link train successed
+                    }
+                    else if(((Rx_Buff[0] & 0x77) == 0x11) && ((Rx_Buff[1] & 0x77) == 0x11) && ((Rx_Buff[2] & 0x01) != 0x01) && (g_stDpTx.ucTxLinkTrainingCnt >= DPTX_TRAINING_MAX_CNT))
+                    {
+                        g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                    }
+                }
+                else
+                {
+                    g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+                }
+                break;
+            default:
+                break;
+        }
+        #else
+        if ((Rx_Buff[2] & 0x01) != 0x01)//align not done
+        {
+            return FAIL;
+        }
+        switch(g_stAuxDpTx.ucLaneCntCap)
+        {
+            case 0x01:
+                if((Rx_Buff[0] & 0x07) == 0x07)
+                {
+                    return SUCCESS; //tps2 link train successed
+                }
+                break;
+            case 0x02:
+                if((Rx_Buff[0] & 0x77) == 0x77)
+                {
+                    return SUCCESS; //tps2 link train successed
+                }
+                break;
+            case 0x04:
+                if(((Rx_Buff[0] & 0x77) == 0x77) && ((Rx_Buff[1] & 0x77) == 0x77))
+                {
+                    return SUCCESS; //tps2 link train successed
+                }
+                break;
+            default:
+                break;
+        }
+        #endif
+    }
+
+    return FAIL; //link train failed
+}
+
+u8 Mod_DpTx_SwPreMap(u8 ucVal)
+{
+    if(ucVal == 0x08)
+    {
+        return 0x07;
+    }
+    else if(ucVal == 0x09)
+    {
+        return 0x08;
+    }       
+    else if(ucVal == 0x0c)
+    {
+        return 0x09;
+    }
+    else if(ucVal <= 0x06)
+    {
+        return ucVal;
+    }
+    return 0x00;
+}
+
+void Mod_DpTx_SendSwingAdjReq(void)
+{
+    u8 szLaneSwPre[4];
+    u8 ucLaneIndex, ucTemp;
+
+    Tx_Buff[0] = Tx_Buff[1] = Tx_Buff[2] = Tx_Buff[3] = 0;
+    ucTemp = (g_stAuxDpTx.ucLaneCntCap == 4)? (2) : (1);
+    Mod_DpTxLink_DpcdRead(0x00,0x0206,Rx_Buff,ucTemp);
+    printLT(PRINT_PRIO_TEST, "\nRd206 = 0x%02bx,0x%02bx",Rx_Buff[0],Rx_Buff[1]);
+
+    szLaneSwPre[0] = Rx_Buff[0] & 0x0f;       //lane0 sw and pre
+    szLaneSwPre[1] = (Rx_Buff[0] >> 4) & 0x0f;//lane1 sw and pre
+    szLaneSwPre[2] = Rx_Buff[1] & 0x0f;       //lane2 sw and pre
+    szLaneSwPre[3] = (Rx_Buff[1] >> 4) & 0x0f;//lane3 sw and pre
+    for (ucLaneIndex = 0; ucLaneIndex < g_stAuxDpTx.ucLaneCntCap; ucLaneIndex++)
+    {
+        //set swing and pre
+        ucTemp = Mod_DpTx_SwPreMap(szLaneSwPre[ucLaneIndex]);
+        Drv_DpTx_LaneSwingSet(g_stDpTx.b1IsDpOrTypec, ucTemp, ucLaneIndex);
+
+        //update swing and pre
+        g_stAuxDpTx.ucVoltSwing = szLaneSwPre[ucLaneIndex] & 0x03;//swing
+        g_stAuxDpTx.ucPreEmphase = (szLaneSwPre[ucLaneIndex] & 0x0c) >> 2;//pre
+        if (g_stAuxDpTx.ucVoltSwing == 0x03)
+        {
+            g_stAuxDpTx.ucVoltSwing |= 0x04;//DPCD-00103 [2]max_swing_reached
+        }
+        if ((g_stAuxDpTx.ucPreEmphase + g_stAuxDpTx.ucVoltSwing) > 3)
+        {
+            g_stAuxDpTx.ucPreEmphase = 0;//look at Swing_Pre_Value[]
+        }
+        if (g_stAuxDpTx.ucPreEmphase == 0x03)
+        {
+            g_stAuxDpTx.ucPreEmphase |= 0x04;//DPCD-00103 [5]max_pre-emphasis_reached
+        }
+        Tx_Buff[ucLaneIndex] = g_stAuxDpTx.ucVoltSwing + (g_stAuxDpTx.ucPreEmphase << 3);
+    }
+    Mod_DpTxLink_DpcdWrite(0x00,0x0103,Tx_Buff,g_stAuxDpTx.ucLaneCntCap);
+}
+
+#if DPTX_LINKTRAIN_REDUCTION == ENABLED
+bool Mod_DPTx_BandWidth_Capable_Judge(u32 pixel_clk,u8 rate,u8 number)
+{
+    u8 Color_Space,Color_Depth;
+    #if DPTX_DSC_ENC_SUPPORT == ENABLED
+    u16 Dsc_BppGet;
+    #endif
+    bool Capable_Enough;
+    float Dsc_Bpp = 1;
+    switch(g_stDpTx.ucVscDb16 & 0xf0)
+    {
+        case 0x00: 
+            Color_Space = 30; //RGB
+            break;
+        case 0x10: 
+            Color_Space = 30; //Ycbcr444
+            break;
+        case 0x20: 
+            Color_Space = 20; //Ycbcr422
+            break;
+        case 0x30:
+            Color_Space = 15; //Ycbcr420
+            break;
+        default:
+            break;
+    }
+    switch(g_stDpTx.ucVscDb17 & 0x07)
+    {
+        case 0x00:
+            Color_Depth = 6;
+            break;
+        case 0x01:
+            Color_Depth = 8;
+            break;
+        case 0x02:
+            Color_Depth = 10;
+            break;
+        case 0x03:
+            Color_Depth = 12;
+            break;
+        case 0x04:
+            Color_Depth = 16;
+            break;
+        default:
+            break;
+    }
+//    printLT(PRINT_PRIO_TEST, "\npixel_clk: %-8ld", pixel_clk);
+//    printLT(PRINT_PRIO_TEST, "\nColor_Space Color_Depth: 0x%02bx 0x%02bx", Color_Space,Color_Depth);
+//    printLT(PRINT_PRIO_TEST, "\nrate number = 0x%02bx 0x%02bx;",rate,number);
+//    printLT(PRINT_PRIO_TEST, "\ng_stDscEncInfo.usBpp = 0x%04x",g_stDscEncInfo.usBpp);
+    #if DPTX_DSC_ENC_SUPPORT == ENABLED
+    Dsc_BppGet = Drv_DpTxDscEnc_BppGet();
+    if(g_stDpTx.b1EncodeEn == ENABLED)
+    {
+        if((Color_Space == 20) || (Color_Space == 15))
+        {
+            Dsc_BppGet >>= 1;
+        }
+        Dsc_Bpp = (float)Dsc_BppGet/16;
+        printLT(PRINT_PRIO_TEST, "\nDsc_Bpp: %2f", Dsc_Bpp);
+        
+        if(((float)(Dsc_Bpp * pixel_clk)) > (rate * number * 216000))
+        {
+            Capable_Enough = 0;
+        }
+        else
+        {
+            Capable_Enough = 1;
+        } 
+    }
+    #endif
+    if(g_stDpTx.b1EncodeEn == DISABLED)
+    {
+        if((pixel_clk * Color_Space * Color_Depth) > (rate * number * 2160000))
+        {
+            Capable_Enough = 0;
+        }
+        else
+        {
+            Capable_Enough = 1;
+        } 
+    }
+    return Capable_Enough;
+}
+
+void Mod_DPTx_Link_BandWidth_Reduce(void)
+{
+    u8 Lane_Count_Change = 0;
+    u8 Target_Lane_CR_Done = 0;
+    u8 Lane_Rate_Flg,Lane_Count_Flg;
+    u8 Lane_Rate[4] ={RBR,HBR,HBR2,HBR3};
+    u8 Lane_Count[3]={ONE_LANE,TWO_LANE,FOUR_LANE};
+    static u8 Orig_Lane_Rate,Orig_Lane_Count;
+    
+    printLT(PRINT_PRIO_TEST, "\n!!! = 0x%02bx;",g_stAuxDpTx.ucLinkRateCap);
+    //Determine what can be done to reduce the current bandwidth
+    switch(g_stAuxDpTx.ucLaneCntCap)
+    {
+        case ONE_LANE:
+            Lane_Count_Flg = 0;
+            break;
+        case TWO_LANE:
+            Lane_Count_Flg = 1;
+            break;
+        case FOUR_LANE:
+            Lane_Count_Flg = 2;
+            break;
+        default:
+            break;
+    }
+    switch(g_stAuxDpTx.ucLinkRateCap)
+    {
+        case RBR:
+            Lane_Rate_Flg = 0;
+            break;
+        case HBR:
+            Lane_Rate_Flg = 1;
+            break;
+        case HBR2:
+            Lane_Rate_Flg = 2;
+            break;
+        case HBR3:
+            Lane_Rate_Flg = 3;
+            break;
+        default:
+            break;
+    }
+    if(g_stDpTx.ucTxLinkReduceNumber == 0)
+    {
+        Orig_Lane_Rate  = Lane_Rate_Flg;
+        Orig_Lane_Count = Lane_Count_Flg;
+    }
+    
+    if(g_stDpTx.ucTxLinkTpsState == 1) //TPS1 transmit
+    {
+        if(Lane_Rate_Flg > 0) //reduce lane rate
+        {
+            Lane_Rate_Flg -= 1;
+        }
+        else 
+        {
+            if((Lane_Count_Flg > 0)&&((g_stDpTx.ucTxLinkTrainSinkState[0]&0x01) == 0x01)) //reduce lane count
+            {
+                Lane_Rate_Flg = Orig_Lane_Rate;               
+                if((g_stDpTx.ucTxLinkTrainSinkState[0]&0x11) == 0x11)
+                {
+                    Lane_Count_Flg = 1;
+                }
+                else if((g_stDpTx.ucTxLinkTrainSinkState[0]&0x11) == 0x01)
+                {
+                    Lane_Count_Flg = 0;
+                } 
+            }
+            else if((g_stDpTx.ucTxLinkTrainSinkState[0]&0x01) != 0x01)
+            {
+                g_stDpTx.ucTxLinkStopReduction = 1;
+            }
+        }
+    }
+    else //TPS2/3/4 transmit
+    {
+        //reduce lane Count
+        if((Lane_Count_Flg > 0)&&((g_stDpTx.ucTxLinkTrainSinkState[0]&0x01) == 0x01))
+        {
+            Lane_Count_Flg -= 1;
+            Lane_Count_Change = 1;
+        }
+        //reduce lane rate
+        if((Lane_Rate_Flg > 0)&&(Lane_Count_Change != 1))
+        {
+            if(Orig_Lane_Count != 0)
+            {
+                Lane_Count_Flg = Orig_Lane_Count;   
+            }
+            Lane_Rate_Flg -= 1;
+        }
+        else if((Lane_Rate_Flg == 0)&&(Lane_Count_Change != 1))
+        {
+            g_stDpTx.ucTxLinkStopReduction = 1;
+        }
+    }
+    
+    if(Mod_DPTx_BandWidth_Capable_Judge(g_stHdmiRx.ulRxPixelClk,Lane_Rate[Lane_Rate_Flg],Lane_Count[Lane_Count_Flg]) == TRUE)
+    {
+        if(g_stDpTx.ucTxLinkStopReduction != 1)
+        {
+            g_stDpTx.ucTxLinkReduceNumber++;
+            g_stAuxDpTx.ucLinkRateCap = Lane_Rate[Lane_Rate_Flg];
+            g_stAuxDpTx.ucLaneCntCap = Lane_Count[Lane_Count_Flg];
+            printLT(PRINT_PRIO_TEST, "\n!!!!!Reduce Lane Rate = 0x%02bx;\n!!!!!Reduce Lane Count = 0x%02bx;",Lane_Rate[Lane_Rate_Flg],Lane_Count[Lane_Count_Flg]);
+        }
+    }
+    else
+    {
+        g_stDpTx.ucTxLinkStopReduction = 1;
+    }
+}
+#endif
+
+void Mod_DpTx_LinkBandWidthSet(void)
+{
+    #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+    if(g_stDpTx.ucTxLinkTrainingCnt == 0)
+    {
+        g_stAuxDpTx.ucLinkRateCap = g_stAuxDpTx.ucLinkRateMax;
+        g_stAuxDpTx.ucLaneCntCap  = g_stAuxDpTx.ucLaneCntMax;
+    }
+    if((g_stDpTx.ucTxLinkTrainingCnt > 0)&&(g_stDpTx.ucTxLinkTpsState > 0) && (g_stDpTx.ucTxLinkStopDrvAdjust == 1))
+    {
+        g_stDpTx.ucTxLinkStopDrvAdjust = 0;
+        Mod_DPTx_Link_BandWidth_Reduce();
+    }
+    #else
+    g_stAuxDpTx.ucLinkRateCap = g_stAuxDpTx.ucLinkRateMax;
+    g_stAuxDpTx.ucLaneCntCap  = g_stAuxDpTx.ucLaneCntMax;
+    #endif
+    
+    #ifdef NVIDIA_FW_EN
+    #if (CUSTOMER_DEFINED == ENABLED)
+    if(g_stDpTx.ulTxPeakClk <= 300000)//<= 300MHz
+    {
+        if((g_stAuxDpTx.ucLinkRateMax >= HBR)&&(g_stAuxDpTx.ucLaneCntCap == FOUR_LANE))
+        {
+            g_stAuxDpTx.ucLinkRateCap = HBR;//0x0a->0x1e
+        }
+    }
+    else if(g_stDpTx.ulTxPeakClk <= 600000)//300~600Mhz
+    {
+        if((g_stAuxDpTx.ucLinkRateMax >= HBR2)&&(g_stAuxDpTx.ucLaneCntCap == FOUR_LANE))
+        {
+            g_stAuxDpTx.ucLinkRateCap = HBR2;//0x0a->0x1e
+        }
+    }
+    else
+    {
+        if((g_stAuxDpTx.ucLinkRateMax >= HBR3)&&(g_stAuxDpTx.ucLaneCntCap == FOUR_LANE))
+        {
+            g_stAuxDpTx.ucLinkRateCap = HBR3;//0x0a->0x1e
+        }
+    } 
+    #endif
+    #endif
+
+    BKF5_5F_REG = g_stAuxDpTx.ucLinkRateCap; //06:1.62G 0A:2.7G 14:5.4G
+    BKF5_7C_REG = g_stAuxDpTx.ucLaneCntCap;
+}
+
+void Mod_DpTx_LinkTrainInit(void)
+{
+    u8 DpcdRead600=0;
+    u8 TempConut=0;
+    #if ((DPTX_DSC_ENC_SUPPORT == ENABLED) || (DPTX_DSC_BYPASS_SUPPORT == ENABLED) || (DPTX_FEC_ENC == ENABLED))
+    if ((g_stAuxDpTx.ucFecCap == TRUE)&&(g_stDpTx.b1FecEnable == ENABLED))
+    {
+        Tx_Buff[0] = 0x01;
+    }
+    else
+    {
+        Tx_Buff[0] = 0x00;
+    }
+    Mod_DpTxLink_DpcdWrite(0x00,0x0120,Tx_Buff,1);
+    Tx_Buff[0] = 0x03;
+    Mod_DpTxLink_DpcdWrite(0x00,0x0280,Tx_Buff,1);//[1:0]fec state clr
+    #endif
+
+    //power on
+
+
+    
+    while((TempConut < 10)&&(!(DpcdRead600&=0x01)))//DPCD VERSION
+    {
+        TempConut++;
+        Tx_Buff[0] = 0x01;
+        Mod_DpTxLink_DpcdWrite(0x00,0x0600,Tx_Buff, 1);
+        Ocm_Delay1ms(5);
+        Mod_DpTxLink_DpcdRead(0x00,0x0600,Rx_Buff,1);
+        DpcdRead600=Rx_Buff[0];
+        printLT(PRINT_PRIO_TEST, "\nDPCD600 = 0x%02bx",DpcdRead600);
+    }
+    //link rate set
+    Mod_DpTxLink_DpcdRead(0x00,0x0100,Rx_Buff, 1);
+    Tx_Buff[0] = g_stAuxDpTx.ucLinkRateCap;
+    Mod_DpTxLink_DpcdWrite(0x00,0x0100,Tx_Buff, 1);
+    printLT(PRINT_PRIO_TEST, "\nWr100 = 0x%02bx",Tx_Buff[0]);
+    if(g_stAuxDpTx.ucEdpLinkRateCap > 0)//edp case
+    {
+        Tx_Buff[0] = g_stAuxDpTx.ucEdpLinkRateCap;
+        Mod_DpTxLink_DpcdWrite(0x00,0x0115,Tx_Buff, 1);
+    }
+    //link cnt set
+    Mod_DpTxLink_DpcdRead(0x00,0x0101,Rx_Buff,1);
+    Tx_Buff[0] = (g_stAuxDpTx.ucLaneCntCap|0x80);//enhance mode en
+    Mod_DpTxLink_DpcdWrite(0x00,0x0101,Tx_Buff,1);
+    printLT(PRINT_PRIO_TEST, "\nWr101 = 0x%02bx",Tx_Buff[0]);
+
+    //ssc set
+    Mod_DpTxLink_DpcdRead(0x00,0x0107,Rx_Buff,1);
+    Tx_Buff[0] = (g_stAuxDpTx.b1SscCap == TRUE)?(0x10):(0x00);
+    Mod_DpTxLink_DpcdWrite(0x00,0x0107,Tx_Buff,1);
+    printLT(PRINT_PRIO_TEST, "\nWr107 = 0x%02bx",Tx_Buff[0]);
+
+    //main_link_channel_coding_set
+    Tx_Buff[0] = 0x01;
+    Mod_DpTxLink_DpcdWrite(0x00,0x0108,Tx_Buff,1);
+
+    if(g_stAuxDpTx.ucEdpLinkRateCap > 0)
+    {
+        Drv_DpTx_EdpScrambleSet(ENABLED);
+        Tx_Buff[0] = 0x01;
+        Mod_DpTxLink_DpcdWrite(0x00,0x010a,Tx_Buff,1);
+    }
+}
+
+void Mod_DpTx_FailSet(void)
+{
+    Drv_DpTx_ScrambleEn(DISABLED);
+    Drv_DpTx_TrainFailSet();
+    Tx_Buff[0] = 0x00;
+    Mod_DpTxLink_DpcdWrite(0x00, 0x0102, Tx_Buff, 1);//00   
+}
+
+u8 Mod_DpTx_LinkTrainFirst(void)
+{
+    u8 ucLane;
+    u8 ucIndex;
+    u8 ucRet = FAIL;
+    Tx_Buff[0] = 0x21;//tps1
+    g_stAuxDpTx.ucVoltSwing = 0;
+    g_stAuxDpTx.ucPreEmphase = 0;
+    for(ucLane = 0; ucLane < g_stAuxDpTx.ucLaneCntCap; ucLane++)
+    {
+        Tx_Buff[ucLane + 1] = 0x00;//swing0 & pre0, start
+        Drv_DpTx_LaneSwingSet(g_stDpTx.b1IsDpOrTypec, 0, ucLane);
+    }
+    #if ((DPTX_DSC_ENC_SUPPORT == ENABLED) || (DPTX_DSC_BYPASS_SUPPORT == ENABLED) || (DPTX_FEC_ENC == ENABLED))
+    Drv_DpTx_FecEn(DISABLED);
+    #endif
+    Drv_DpTx_ScrambleEn(ENABLED);
+    Drv_DpTx_TrainFirstSet();
+    #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+    g_stDpTx.ucTxLinkTpsState = 1;
+    #endif
+    Ocm_Delay1ms(1);
+
+    printLT(PRINT_PRIO_TEST, "\nWr102 = 0x%02bx",Tx_Buff[0]);
+    Mod_DpTxLink_DpcdWrite(0x00, 0x0102, Tx_Buff, (g_stAuxDpTx.ucLaneCntCap + 1));
+    for (ucIndex = 0; ucIndex < 6; ucIndex++)
+    {
+        ucRet = Mod_DpTx_SinkStatusRead(1);//first phase
+        if(g_stAuxDpTx.ucVoltSwing & 0x04)//max swing level 3 times ,min swing level 1+4 times
+        {
+            g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+            break;//up to max volt swing value, so break
+        }
+        if((ucRet == FAIL) && (ucIndex < 4))//link trin failed
+        {
+            Mod_DpTx_SendSwingAdjReq();
+        }
+        else
+        {
+            break;
+        }
+    }
+    if (ucRet == FAIL)
+    {
+       #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+        if ((g_stAuxDpTx.ucLinkRateCap == RBR) && (g_stAuxDpTx.ucLaneCntCap == ONE_LANE))
+        {
+            Mod_DpTx_FailSet();
+        }
+        else
+        {
+            g_stDpTx.ucTxLinkStopDrvAdjust = 1;
+        }
+        #else
+        Mod_DpTx_FailSet();
+        #endif
+    }
+    return ucRet;
+}
+
+u8 Mod_DpTx_LinkTrainSecond(void)
+{
+    u8 ucRet = FAIL;
+    u8 ucIndex;
+    #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+    if((g_stAuxDpTx.ucTps4En) && (g_stDpTx.ucTxLinkTrainingCnt < (g_stDpTx.ucTxLinkReduceNumber + 3)))
+    {
+        Tx_Buff[0] = 0x07;
+        Drv_DpTx_ScrambleEn(ENABLED);
+        Drv_DpTx_TrainSecSetForTps4();
+        g_stDpTx.ucTxLinkTpsState = 4;
+    }
+    else if((g_stAuxDpTx.ucTps3En) && (g_stDpTx.ucTxLinkTrainingCnt < (g_stDpTx.ucTxLinkReduceNumber + 3)))
+    {
+        Tx_Buff[0] = 0x23;
+        Drv_DpTx_TrainSecSetForTps3();
+        g_stDpTx.ucTxLinkTpsState = 3;
+    }
+    else
+    {
+        Tx_Buff[0] = 0x22;
+        Drv_DpTx_TrainSecSetForTps2();
+        g_stDpTx.ucTxLinkTpsState = 2;
+    }
+    #else
+    if((g_stAuxDpTx.ucTps4En) && (g_stDpTx.ucTxLinkTrainingCnt < 3))
+    {
+        Tx_Buff[0] = 0x07;
+        Drv_DpTx_ScrambleEn(ENABLED);
+        Drv_DpTx_TrainSecSetForTps4();
+    }
+    else if((g_stAuxDpTx.ucTps3En) && (g_stDpTx.ucTxLinkTrainingCnt < 3))
+    {
+        Tx_Buff[0] = 0x23;
+        Drv_DpTx_TrainSecSetForTps3();
+    }
+    else
+    {
+        Tx_Buff[0] = 0x22;
+        Drv_DpTx_TrainSecSetForTps2();
+    }
+    #endif
+    printLT(PRINT_PRIO_TEST, "\nWr102 = 0x%02bx",Tx_Buff[0]);
+    Mod_DpTxLink_DpcdWrite(0x00,0x0102,Tx_Buff,1);
+
+    for(ucIndex = 0; ucIndex < g_stAuxDpTx.ucLaneCntCap; ucIndex++)
+    {
+        Tx_Buff[ucIndex] = g_stAuxDpTx.ucVoltSwing + (g_stAuxDpTx.ucPreEmphase << 3);
+    }
+    Mod_DpTxLink_DpcdWrite(0x00,0x0103,Tx_Buff,g_stAuxDpTx.ucLaneCntCap);//g_LaneCount
+
+    for(ucIndex = 0; ucIndex < 6; ucIndex++)
+    {
+        ucRet = Mod_DpTx_SinkStatusRead(2);//second phase
+        #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+        if((ucRet == FAIL) && (g_stDpTx.ucTxLinkStopDrvAdjust == 1))
+        {
+            break;
+        }
+        #endif
+        if((ucRet == FAIL) && (ucIndex < 5))//link train failed
+        {
+            Mod_DpTx_SendSwingAdjReq();
+        }
+        else
+        {
+            break;
+        }
+    }
+    if (ucRet == FAIL)
+    {
+        Mod_DpTx_FailSet();
+    }
+    return ucRet;
+}
+
+u8 Mod_DpTx_LinkTrainVidPtn(void)
+{
+    u8 ucRet = FAIL;
+    u8 ucIndex;
+
+    Drv_DpTx_ScrambleEn(g_stAuxDpTx.b1ScrambleCap);
+    Drv_DpTx_TrainPtnSet();
+    Tx_Buff[0] = (g_stAuxDpTx.b1ScrambleCap == TRUE)?(0x00):(0x20);
+    printLT(PRINT_PRIO_TEST, "\nWr102 = 0x%02bx",Tx_Buff[0]);
+    Mod_DpTxLink_DpcdWrite(0x00,0x0102,Tx_Buff,1);
+    #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+    g_stDpTx.ucTxLinkTpsState = 0;
+    #endif
+    #if ((DPTX_DSC_ENC_SUPPORT == ENABLED) || (DPTX_DSC_BYPASS_SUPPORT == ENABLED) || (DPTX_FEC_ENC == ENABLED))
+    if((g_stAuxDpTx.ucFecCap == TRUE)&&(g_stDpTx.b1FecEnable == ENABLED))
+    {
+        Drv_DpTx_FecEn(ENABLED);
+        printLT(PRINT_PRIO_TEST, "\nDp tx fec set");
+    }
+    #endif
+
+    #if DPTX_ADAPTIVE_SYNC_SUPPORT == ENABLED
+    if ((g_stAuxDpTx.b1MsaIgnoreCap == TRUE) &&(Mod_DpTx_LinkBandWidthGet() >= 1080000) &&(g_stHdmiRx.usFramerate>g_stDpEdidInfo.ucMinVerticalRate))//&&(g_stAuxDpTx.ucASyncCap == ENABLED)(Mod_DpTx_LinkBandWidthGet() >= 1080000)
+    {
+        Mod_DpTxLink_DpcdRead(0x00,0x0107,Rx_Buff,1);
+        Tx_Buff[0] = BIT7_1|Rx_Buff[0];////[7]msa timing ignore
+        Mod_DpTxLink_DpcdWrite(0x00,0x0107,Tx_Buff,1);
+        printLT(PRINT_PRIO_TEST, "\nWr107 = 0x%02bx", Tx_Buff[0]);
+    }
+    #endif
+
+    ucIndex = 3;
+    while(ucIndex--)
+    {
+        ucRet = Mod_DpTx_SinkStatusRead(3);
+        if (ucRet == SUCCESS)
+        {
+            break;
+        }
+        if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+        {
+            break;
+        }
+    }
+    if (ucRet == SUCCESS)
+    {
+        ;
+    }
+    else
+    {
+        Mod_DpTx_FailSet();
+    }
+    return ucRet;
+}
+
+u8 Mod_DpTx_LinkTraining(void)
+{
+    u8 ucRet = FAIL;
+    if((g_stDpTx.ucTxState < STATE_DPTX_LINK_TRAINING_7)||(g_stDpTx.ucTxLinkStartEn == FALSE))
+    {
+        g_stDpTx.ucTxLinkStep = STATE_LINK_NOTSTRAT_0; 
+        return FAIL;
+    }
+    if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+    {
+        return FAIL;
+    }
+    switch(g_stDpTx.ucTxLinkStep)
+    {
+        case STATE_LINK_INIT_1:
+            #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+            if((g_stDpTx.ucTxLinkTrainingCnt >= DPTX_TRAINING_MAX_CNT) && (g_stDpTx.ucTxLinkStopDrvAdjust == 1) && (g_stDpTx.ucTxLinkStopReduction == 1))
+            {
+                g_stDpTx.ucTxLinkStopReduction = 0;
+                printLT(PRINT_PRIO_TEST, "\nTrain Fail");
+                g_stDpTx.ucTxLinkStep = STATE_LINK_FAIL_9;
+            }
+            else
+            {
+                Drv_DpTx_IrqDet(DISABLED);
+                Drv_DpTx_EdpScrambleSet(DISABLED);
+                Mod_DpTx_LinkBandWidthSet();
+                g_stDpTx.ucTxLinkStep++;
+                g_stDpTx.ucTxLinkTrainingCnt++;
+            }
+            #else
+            if(g_stDpTx.ucTxLinkTrainingCnt >= DPTX_TRAINING_MAX_CNT)
+            {
+                printLT(PRINT_PRIO_TEST, "\nTrain Fail");
+                g_stDpTx.ucTxLinkStep = STATE_LINK_FAIL_9;
+            }
+            else
+            {
+                Drv_DpTx_IrqDet(DISABLED);
+                Drv_DpTx_EdpScrambleSet(DISABLED);
+                Mod_DpTx_LinkBandWidthSet();
+                g_stDpTx.ucTxLinkStep++;
+                g_stDpTx.ucTxLinkTrainingCnt++;
+            }
+            #endif
+            break;
+        case STATE_LINK_TXPLLCAL_2:
+            Drv_DpTx_TxPllCali(g_stAuxDpTx.ucLinkRateCap);
+            #if DPTX_SSC_SUPPORT == ENABLED
+            if (g_stAuxDpTx.b1SscCap == TRUE)
+            {
+                Drv_DpTx_SscSet(g_stAuxDpTx.ucLinkRateCap);
+            }
+            #endif
+            if (Drv_DpTx_PllStableCheck() == STABLE)
+            {
+                g_stDpTx.ucTxLinkStep++;
+            }
+            break;
+        case STATE_LINK_FECPLLCAL_3:
+            #if ((DPTX_DSC_ENC_SUPPORT == ENABLED) || (DPTX_DSC_BYPASS_SUPPORT == ENABLED) || (DPTX_FEC_ENC == ENABLED))
+            #if (DPTX_FEC_ENC == ENABLED)
+            g_stDpTx.b1FecEnable = ENABLED;
+            #endif
+            Drv_DpTx_FecPllInit();
+            if ((g_stAuxDpTx.ucFecCap == TRUE)&&(g_stDpTx.b1FecEnable == ENABLED))
+            {
+                Drv_DpTx_FecPllCal();
+                if (Drv_DpTx_FecPllStableCheck() == STABLE)
+                {
+                    g_stDpTx.ucTxLinkStep++;
+                }
+            }
+            else
+            #endif
+            {
+                g_stDpTx.ucTxLinkStep++;
+            }
+            break;
+        case STATE_LINK_CONFIG_4:
+            Drv_DpTx_Reset();
+            Mod_DpTx_LinkTrainInit();
+            g_stDpTx.ucTxLinkStep++;
+            break;
+        case STATE_LINK_TPS1TPN_5:
+            ucRet = Mod_DpTx_LinkTrainFirst();
+            (ucRet == FAIL)?(g_stDpTx.ucTxLinkStep = STATE_LINK_INIT_1):(g_stDpTx.ucTxLinkStep++);
+            break;
+        case STATE_LINK_TPS2TPN_6:
+            ucRet = Mod_DpTx_LinkTrainSecond();
+            (ucRet == FAIL)?(g_stDpTx.ucTxLinkStep = STATE_LINK_INIT_1):(g_stDpTx.ucTxLinkStep++);
+            break;
+        case STATE_LINK_VIDPTN_7:
+            ucRet = Mod_DpTx_LinkTrainVidPtn();
+            (ucRet == FAIL)?(g_stDpTx.ucTxLinkStep = STATE_LINK_INIT_1):(g_stDpTx.ucTxLinkStep++);
+            break;
+        case STATE_LINK_SUCCESS_8:
+            #if ((DPTX_DSC_ENC_SUPPORT == ENABLED)||(DPTX_DSC_BYPASS_SUPPORT == ENABLED))
+            if ((g_stAuxDpTx.ucFecCap == TRUE)&&(g_stDpTx.b1FecEnable == ENABLED))
+            {
+                Mod_DpTxLink_DpcdRead(0x00,0x0280, Rx_Buff, 1);
+            }
+            #endif  
+            #if ((DPTX_DSC_ENC_SUPPORT == ENABLED)||(DPTX_DSC_BYPASS_SUPPORT == ENABLED))
+            if ((g_stDpTx.b1EncodeEn == ENABLED)||(g_stDpTx.b1TxDscByEn == ENABLED))
+            {
+                Tx_Buff[0] = 0x01;
+                Mod_DpTxLink_DpcdWrite(0x00,0x0160,Tx_Buff,1);//Decompression is enabled
+            }
+            #endif
+            ucRet = SUCCESS;
+            Drv_DpTx_IrqDet(ENABLED);
+            g_stDpTx.ucTxLinkStep = STATE_LINK_PALYBACK_10;
+            break;
+        case STATE_LINK_FAIL_9:
+            break;
+        case STATE_LINK_PALYBACK_10:
+            break;
+        default:
+            break;
+    }
+    return ucRet;    
+}
+#endif

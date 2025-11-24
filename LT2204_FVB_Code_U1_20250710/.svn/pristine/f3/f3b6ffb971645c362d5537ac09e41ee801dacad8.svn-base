@@ -1,0 +1,737 @@
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODTMDSRX
+OBJECT MODULE PLACED IN .\Objects\ModTmdsRx.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModTmdsRx.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE)
+                    - REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRI
+                    -NT(.\Listings\ModTmdsRx.lst) OBJECT(.\Objects\ModTmdsRx.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: FrlRx.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.06.27
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          #if RX_PORT_SIGN == HDMI_PORT
+  11          
+  12          #ifdef NVIDIA_FW_EN
+              
+              #if SLEEP_MODE == ENABLED
+              
+              StructSleepInfo g_stSleep;
+              //-------------------------------------------------------------SLEEP MOde1--------------------------------
+             --------------------------
+              // hdmi rx 5v or dp hpd not in ,IC will enter sleep mode 1
+              
+              void Mod_Sleep_DigPowerDown(void)
+              {
+                  BKC9_10_REG = 0x20; //
+                  BKC9_11_REG = 0x00; //hdmi20rx
+                  BKC9_13_REG = 0xe0; 
+                  BKC9_14_REG = 0x00; //hdcp_rx
+                  BKC9_15_REG = 0x00; //csd
+                  BKC9_16_REG = 0x00; //csc
+                  BKC9_17_REG = 0x00; //ptn/rxlin_fmt
+                  BKC9_18_REG = 0x00; //audio
+                  BKC9_19_REG = 0x00; //acr
+                  BKC9_1A_REG = 0x00; //earc
+                  BKC9_1D_REG = 0x00; 
+                  BKC9_1E_REG = 0x00; //csc_in_syn/vichk
+              
+                  BKCD_46_REG = 0x78; //hdmi21_rx
+                  BKCD_61_REG = 0x03; //pixpcr
+              
+                  BKE1_20_REG = 0x00; //bb/cec
+                  BKE1_21_REG = 0x00; 
+                  BKE1_22_REG = 0x00; 
+                  BKE1_23_REG = 0x00; 
+                  BKE1_24_REG = 0x00; 
+                  BKE1_25_REG = 0x30; //dhrx
+                  BKE1_26_REG = 0x00; 
+                  BKE1_27_REG = 0x00; //dhtx
+                  BKE1_28_REG = 0x00; 
+                  BKE1_29_REG = 0x00; //dsc
+                  BKE1_2A_REG = 0x00; 
+              
+                  BKE1_2B_REG = 0x00; //lmtx
+                  BKE1_2C_REG = 0x01; //csc/isp
+                  BKE1_2D_REG = 0xFF; //i2c/dma/ocm/mcu
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 2   
+
+                  BKE1_2E_REG = 0xF8; //spi/ana_reg/ctrl/int/top/typec
+                  BKE1_2F_REG = 0x03; //top
+                  BKE1_30_REG = 0x0c; //dhrx/tx/ucc1/ucc2_rterm_clk
+                  BKE1_31_REG = 0x00; //audpll
+                  BKE1_32_REG = 0x00; //pcrpll
+                  BKE1_33_REG = 0x00; //secpll
+                  BKE1_34_REG = 0x03; //dhrxpll
+                  BKE1_35_REG = 0x00; //dhtxpll
+                  BKE1_36_REG = 0x00; //earcpll
+                  BKE1_37_REG = 0x00; //lmtxpll
+                  BKE1_38_REG = 0x77; //syspll
+              
+                  BKE9_89_REG = 0x00; //hdcp_tx
+                  BKED_08_REG = 0x00; 
+                  BKED_09_REG = 0x00; 
+                  BKED_0A_REG = 0x00; //hdmitx20/21
+              
+                  BKEE_F1_REG = 0x00; //clk_group0
+                  BKEE_F2_REG = 0x00; //clk_group1
+                  BKEE_F3_REG = 0x00; //clk_group2
+                  BKEE_F4_REG = 0x00; //clk_group3
+                  BKEE_F5_REG = 0x00; //clk_group4
+                  BKEE_F6_REG = 0x00; //clk_group5
+                  BKEE_F7_REG = 0x00; //clk_group6
+              
+                  BKEF_F1_REG = 0x00; //clk_group0
+                  BKEF_F2_REG = 0x00; //clk_group1
+                  BKEF_F3_REG = 0x00; //clk_group2
+                  BKEF_F4_REG = 0x00; //clk_group3
+                  BKEF_F5_REG = 0x00; //clk_group4
+                  BKEF_F6_REG = 0x00; //clk_group5
+                  BKEF_F7_REG = 0x00; //clk_group6
+              
+                  BKF5_84_REG = 0x00; 
+                  BKF5_85_REG = 0x00; 
+                  BKF5_86_REG = 0x00; //dptx 
+              }
+              
+              void Mod_Sleep_AnaPowerDown(void)
+              {
+                  //sysclk sel 25M
+                  BKE6_E9_REG &= 0x8f;//clk sel 25M 
+                  //A1
+                  BKA1_01_REG = 0x20; //u3sw
+                  BKA1_08_REG = 0x04; //dhrx
+                  BKA1_09_REG = 0x00; //dhrx term disable
+                  BKA1_0A_REG = 0x00; //dhrx d0-d3 clk det
+                  BKA1_0B_REG = 0x00;//dhrx d0-d3 dig clk disable
+                  BKA1_1F_REG = 0x0F; //rxpi
+                  BKA1_30_REG = 0xE0; //dhrxpll_pd
+                  BKA1_3C_REG = 0x00; //fastio
+                  BKA1_48_REG = 0xC0; //dhtxpll
+                  BKA1_58_REG = 0x01; //dhtx disable
+                  BKA1_59_REG = 0x00;//dhtx read clk disable
+                  BKA1_5A_REG = 0x00;//dhtx rterm disable
+                  BKA1_5B_REG = 0x00;//dhtx0-dhtx1 pre tap
+                  BKA1_5C_REG = 0x00;//dhtx2-dhtx3 pre tap
+                  //A2
+                  BKA2_00_REG = 0x10; //lmtxpll
+                  BKA2_10_REG = 0x00; //lmtxpll dclk 
+                  BKA2_12_REG = 0x10; //lmtx0
+                  BKA2_27_REG = 0x10; //lmtx1
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 3   
+
+                  BKA2_3C_REG = 0x10; //lmtx2
+                  BKA2_51_REG = 0x10; //lmtx3
+                  BKA2_98_REG = 0x00; //arc term disable
+                  BKA2_A9_REG = 0x80; //ucc1
+                  BKA2_B3_REG = 0x80; //ucc2
+                  //A3
+                  BKA3_00_REG = 0x80; //syspll
+                  BKA3_08_REG = 0x10; //audpll
+                  BKA3_14_REG = 0x34; //earcpll
+                  BKA3_20_REG = 0x10; //pcrpll
+                  BKA3_2F_REG = 0x10; //secpcrpll
+                  BKA3_57_REG = 0x22; //dhrx_aux
+                  BKA3_6C_REG = 0x22; //dhtx_aux
+                  BKA3_78_REG = 0x00; 
+                  BKA3_79_REG = 0x00; 
+                  BKA3_7A_REG = 0x00; //analog top clk  
+              }
+              
+              //hdmi rx 5v high and dp hpd high ,will exit the sleep mode
+              void Mod_Sleep_DigPowerOn(void)
+              {
+                  BKC9_10_REG = 0xFF; //
+                  BKC9_11_REG = 0xFF; //hdmi20rx
+                  BKC9_13_REG = 0xFF; 
+                  BKC9_14_REG = 0xF8; //hdcp_rx
+                  BKC9_15_REG = 0xFE; 
+                  BKC9_16_REG = 0xE0; //csc
+                  BKC9_17_REG = 0xFE; //ptn/rxlin_fmt
+                  BKC9_18_REG = 0xFF; 
+                  BKC9_19_REG = 0xFF; //acr
+                  BKC9_1A_REG = 0xC0; //earc
+                  BKC9_1D_REG = 0x0F; 
+                  BKC9_1E_REG = 0xC0; //csc_in_syn/vichk
+              
+                  BKCD_46_REG = 0xFF; //hdmi21_rx
+                  BKCD_61_REG = 0x7F; //pixpcr
+              
+                  BKE1_20_REG = 0x0F; //bb/cec
+                  BKE1_21_REG = 0x7F; 
+                  BKE1_22_REG = 0x0B; 
+                  BKE1_23_REG = 0xFF; 
+                  BKE1_24_REG = 0xFF; 
+                  BKE1_25_REG = 0xF3; //sec pcr disable dhrx
+                  BKE1_26_REG = 0xFF; 
+                  BKE1_27_REG = 0xF8; //dhtx
+                  BKE1_28_REG = 0xEF; //dsc decode
+                  BKE1_29_REG = 0xFE; //dsc encode
+                  BKE1_2A_REG = 0xFD; 
+                  BKE1_2B_REG = 0xFF; //lmtx
+                  BKE1_2C_REG = 0xC1; //csc/isp
+                  BKE1_2D_REG = 0xFF; //i2c/dma/ocm/mcu
+                  BKE1_2E_REG = 0xFF; //spi/ana_reg/ctrl/int/top/typec
+                  BKE1_2F_REG = 0xFF; //top
+                  BKE1_30_REG = 0x0F; //dhrx/tx/ucc1/ucc2_rterm_clk
+                  BKE1_31_REG = 0x77; //audpll
+                  BKE1_32_REG = 0x77; //pcrpll
+                  BKE1_33_REG = 0x77; //secpll
+                  BKE1_34_REG = 0xFF; //dhrxpll
+                  BKE1_35_REG = 0xFF; //dhtxpll
+                  BKE1_36_REG = 0xF7; //earcpll
+                  BKE1_37_REG = 0xFF; //lmtxpll
+                  BKE1_38_REG = 0xFF; //syspll
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 4   
+
+              
+                  BKE9_89_REG = 0xFF; //hdcp_tx
+                  BKED_08_REG = 0xFF; 
+                  BKED_09_REG = 0xFC; 
+                  BKED_0A_REG = 0xF8; //hdmitx20/21
+              
+                  //decode
+                  BKEE_F1_REG = 0xff; //clk_group0
+                  BKEE_F2_REG = 0xFF; //clk_group1
+                  BKEE_F3_REG = 0xFF; //clk_group2
+                  BKEE_F4_REG = 0xFF; //clk_group3
+                  BKEE_F5_REG = 0xFF; //clk_group4
+                  BKEE_F6_REG = 0xFF; //clk_group5
+                  BKEE_F7_REG = 0xFF; //clk_group6
+              
+                  //encode
+                  BKEF_F1_REG = 0xff; //clk_group0
+                  BKEF_F2_REG = 0xff; //clk_group1
+                  BKEF_F3_REG = 0xff; //clk_group2
+                  BKEF_F4_REG = 0xff; //clk_group3
+                  BKEF_F5_REG = 0xff; //clk_group4
+                  BKEF_F6_REG = 0xff; //clk_group5
+                  BKEF_F7_REG = 0xff; //clk_group6
+              
+                  BKF5_84_REG = 0xFF; 
+                  BKF5_85_REG = 0xFF; 
+                  BKF5_86_REG = 0xFF; //dptx
+              }
+              
+              void Mod_Sleep_AnaPowerOn(void)
+              {
+                  //sysclk sel 25M
+                  BKE6_E9_REG &= 0x8f;//clk sel 25M
+                  
+                  BKA1_01_REG = 0x20; //u3sw
+                  BKA1_08_REG = 0x04; //dhrx
+                  BKA1_09_REG = 0x0F; //dhrx term enable
+                  BKA1_0A_REG = 0x00; //dhrx d0-d3 clk det
+                  BKA1_0B_REG = 0x8f;//dhrx d0-d3 dig clk disable
+                  BKA1_1F_REG = 0x0F; //rxpi
+                  BKA1_30_REG = 0xE0; //dhrxpll_pd
+                  BKA1_3C_REG = 0x00; //fastio
+                  BKA1_48_REG = 0xC0; //dhtxpll
+                  BKA1_58_REG = 0x01; //dhtx disable
+                  BKA1_59_REG = 0xC0;//dhtx read clk disable
+                  BKA1_5A_REG = 0x00;//dhtx rterm disable
+                  BKA1_5B_REG = 0x00;//dhtx0-dhtx1 pre tap
+                  BKA1_5C_REG = 0x00;//dhtx2-dhtx3 pre tap
+                  //A2
+                  BKA2_00_REG = 0x10; //lmtxpll
+                  BKA2_10_REG = 0xC8; //lmtxpll dclk 
+                  BKA2_12_REG = 0x10; //lmtx0
+                  BKA2_27_REG = 0x10; //lmtx1
+                  BKA2_3C_REG = 0x10; //lmtx2
+                  BKA2_51_REG = 0x10; //lmtx3
+                  BKA2_98_REG = 0x01; //arc
+                  BKA2_A9_REG = 0x80; //ucc1
+                  BKA2_B3_REG = 0x80; //ucc2
+                  //A3
+                  BKA3_00_REG = 0x80; //syspll
+                  BKA3_08_REG = 0x10; //audpll
+                  BKA3_14_REG = 0x24; //earcpll
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 5   
+
+                  BKA3_20_REG = 0x10; //pcrpll
+                  BKA3_2F_REG = 0x10; //secpcrpll
+                  BKA3_57_REG = 0x22; //dhrx_aux
+                  BKA3_6C_REG = 0x22; //dhtx_aux
+                  BKA3_78_REG = 0xff; 
+                  BKA3_79_REG = 0xff; 
+                  BKA3_7A_REG = 0xff; //analog top clk  
+              }
+              
+              void Mode_Sleep_HdmiRxPowerdown(u8 b1PowerDownEn)
+              {
+                  static u32 ulCurrentTime = 0;
+                  switch(g_stSleep.ucRxPowerdownState)
+                  {
+                      case SLEEP_INIT_0:
+                          g_stSleep.ucRxPowerdownState = SLEEP_ENTER_1 ;
+                          g_stSleep.ucRxPowerdownChgFlag = TRUE;
+                          break;
+                      case SLEEP_ENTER_1:
+                          if(g_stSleep.ucRxPowerdownChgFlag == TRUE)
+                          {
+                              g_stSleep.ucRxPowerdownChgFlag = FALSE;
+                              Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                          }
+                          if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_500) == TRUE)
+                          {
+                              printLT(PRINT_PRIO_HIG, "\nHdmiRx PowerDown");
+                              Drv_Sys_DHRxPowerDomain(TRUE);
+                              Drv_Sys_DHTxPowerDomain(TRUE);
+                              Mod_Sleep_AnaPowerDown();
+                              Mod_Sleep_DigPowerDown();
+                              g_stSleep.ucRxPowerdownState = SLEEP_EXIT_4;
+                              
+                          }
+                          break;
+                      case SLEEP_EXIT_4:
+                          if(b1PowerDownEn == DISABLED)
+                          {
+                              Drv_Sys_DHRxPowerDomain(FALSE);
+                              Drv_Sys_DHTxPowerDomain(FALSE);
+                              Mod_Sleep_AnaPowerOn();
+                              Mod_Sleep_DigPowerOn(); 
+                              Drv_System_XtalSet();
+                              printLT(PRINT_PRIO_HIG, "\nHdmiRx PowerOn"); 
+                              Drv_HdmiRx_PowerOnInit();
+                              Drv_DpTx_PowerOnInit();
+                              Drv_Sys_HdcpKeyLoad();  //solve RX/TX power domain ,key will lost issue
+                              g_stSleep.ucRxPowerdownState = SLEEP_END_5;    
+                          }
+                          break;
+                    case SLEEP_END_5:      
+                          break;
+                      default:
+                          break;
+                  }
+              }
+              
+              void Mode_Sleep_DpTxPowerdown(u8 b1PowerDownEn)
+              {
+                  static u32 ulCurrentTime = 0;
+                  switch(g_stSleep.ucTxPowerdownState)
+                  {
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 6   
+
+                      case SLEEP_INIT_0:
+                          g_stSleep.ucTxPowerdownState = SLEEP_ENTER_1 ;
+                          g_stSleep.ucTxPowerdownChgFlag = TRUE;
+                          break;
+                      case SLEEP_ENTER_1:
+                          if(g_stSleep.ucTxPowerdownChgFlag == TRUE)
+                          {
+                              g_stSleep.ucTxPowerdownChgFlag = FALSE;
+                              Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                          }
+                          if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_500) == TRUE)
+                          {
+                              printLT(PRINT_PRIO_HIG, "\nDpTx PowerDown");
+                              Drv_Sys_DHRxPowerDomain(TRUE);
+                              Drv_Sys_DHTxPowerDomain(TRUE);
+                              Mod_Sleep_AnaPowerDown();
+                              Mod_Sleep_DigPowerDown();
+                              g_stSleep.ucTxPowerdownState = SLEEP_EXIT_4;
+                              
+                          }
+                          break;
+                      case SLEEP_EXIT_4:
+                          if(b1PowerDownEn == DISABLED)
+                          {
+                              Drv_Sys_DHRxPowerDomain(FALSE);
+                              Drv_Sys_DHTxPowerDomain(FALSE);
+                              Mod_Sleep_AnaPowerOn();
+                              Mod_Sleep_DigPowerOn();
+                              Drv_System_XtalSet();   
+                              printLT(PRINT_PRIO_HIG, "\nDpTx PowerOn");
+                              Drv_HdmiRx_PowerOnInit();
+                              Drv_DpTx_PowerOnInit();
+                              Drv_Sys_HdcpKeyLoad();//solve RX/TX power domain ,key will lost issue
+                              g_stSleep.ucTxPowerdownState = SLEEP_END_5;
+                                  
+                          }
+                          break;
+                    case SLEEP_END_5:      
+                          break;
+                      default:
+                          break;
+                      
+                  } 
+              }
+              //----------------------------------------------------------SLEEP MOde1 END ------------------------------
+             ---------------------------------
+              
+              //----------------------------------------------------------SLEEP MOde2-----------------------------------
+             ---------------------------------
+              
+              //5v high and dp tx hpd high
+              
+              // rterm toggle for source det 
+              //1s 0-200ms rterm is on 200-1000ms rterm is off
+              
+              void Mode_Sleep_RtermSet(u8 b1TermEn)
+              {
+                  if(b1TermEn == ENABLED)
+                  {
+                      BKA1_08_REG |= BIT3_1;//[3]rg_dhrx_en: 0-dis, 1-en;
+                      BKA1_09_REG = 0x0f;
+                  }
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 7   
+
+                  else
+                  {
+                      BKA1_08_REG |= BIT3_1;//[3]rg_dhrx_en: 0-dis, 1-en;
+                      BKA1_09_REG = 0x00; //rterm disable
+                  } 
+              }
+              
+              void Mode_Sleep_AnaPowerSet(u8 b1IsSleep)
+              {
+                  if(b1IsSleep == ENABLED)
+                  {
+                      BKA3_00_REG &= BIT7_0;//[7]rg_syspll_pd: 0-normal work, 1-power down;
+                      BKE1_0F_REG &= BIT3_0;
+                      BKE1_0F_REG |= BIT3_1; //SYSPLL SW RESET
+              
+                      
+                      BKA1_08_REG |= BIT3_1;//[3]rg_dhrx_en: 0-dis, 1-en;
+                      BKA1_09_REG = 0xff;
+                      BKA1_0A_REG = 0xf8;//d2 d3 pkdet enable
+                       
+                      BKA1_1F_REG = 0x10;//[4]rg_dhrxpi_bias_en: 1-en
+                                         //[3:0]rg_dhrxpi_pd: 4'b0000 = four channel normal
+                       
+                      BKA1_30_REG = 0x68;// rxpll on
+                      BKA1_30_REG &= BIT6_0;//[6]rg_dhrxpll_rst_n: 0-en
+                      BKA1_30_REG |= BIT6_1;//[6]rg_dhrxpll_rst_n: 1-dis
+                       
+                      BKA1_48_REG = 0x50;///TX PLL POWER DOWN
+                      BKA1_58_REG |= BIT7_1;///TX PHY enable
+                      
+                      BKA3_20_REG &= BIT4_0;//pcrpll pd
+                      
+                      #if SYSCLK == SYS_CLK_40M
+                      BKE6_E9_REG |= 0x50;//
+                      #endif
+                      #if SYSCLK == SYS_CLK_48M
+                      BKE6_E9_REG |= 0x60;//
+                      #endif
+                  }
+                  else
+                  {
+                      BKE6_E9_REG &= 0x8f;//clk sel 25M
+                      
+                      BKA1_08_REG |= BIT3_1;//[3]rg_dhrx_en: 0-dis, 1-en;
+                      BKA1_09_REG = 0x0f;
+                      BKA1_0A_REG = 0xC8;//d2 d3 pkdet enable
+                       
+                      BKA1_1F_REG = 0x0f;//[4]rg_dhrxpi_bias_en: 0-dis;
+                                         //[3:0]rg_dhrxpi_pd: 4'b1111 = four channel power down.
+              
+                      BKA1_30_REG |= BIT7_1; //dhrxpll_pd
+                      BKA1_30_REG &= BIT3_0; //dhrxpll bias pd    
+              
+                      BKA1_48_REG |= BIT7_1;///TX PLL POWER DOWN
+                      BKA1_48_REG &= BIT4_0;//Ttxpll ibas down
+                      BKA1_58_REG &= BIT7_0;///TX PHY disable
+                      
+                      BKA3_20_REG |= BIT4_1;//pcrpll pd
+                      
+                      BKA3_00_REG = 0x80;// [7]rg_syspll_pd: 0-normal work, 1-power down; 
+                  }
+              }
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 8   
+
+              
+              void Mod_Sleep_TmdsNoVideoDet(void)
+              {
+                  static u32 ulCurrentTime = 0;
+                  switch(g_stSleep.ucSleepState)
+                  {
+                      case SLEEP_INIT_0:
+                          if((g_stHdmiRx.ucHdmiVer == HDMI21)&&(Drv_System_IntSrcGet(IRQ_TMDS_PKDET_INT) == FALSE))//hdm
+             -i2.1 no peakdet
+                          {
+                              g_stSleep.ucSleepState = SLEEP_ENTER_1;
+                              g_stSleep.ucSleepChgFlag = TRUE;  
+                          }
+                          else if((g_stHdmiRx.ucHdmiVer <= HDMI20)&&(((BKE3_24_REG & BIT5_1) == 0x00)||(Drv_System_IntSr
+             -cGet(IRQ_TMDS_PKDET_INT) == FALSE))) //hdmi2.0 peak or clk not det
+                          {
+                              g_stSleep.ucSleepState = SLEEP_ENTER_1;
+                              g_stSleep.ucSleepChgFlag = TRUE; 
+                          }
+                          else 
+                          {
+                               g_stSleep.ucSleepState = SLEEP_INIT_0; 
+                          }
+                          break;
+                      case SLEEP_ENTER_1:
+                          if(g_stSleep.ucSleepChgFlag == TRUE)
+                          {
+                              g_stSleep.ucSleepChgFlag = FALSE;
+                              Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                          }
+                          if(Ocm_Timer_IsOverFlow(&ulCurrentTime, SECOND_6) == TRUE)
+                          {
+                              printLT(PRINT_PRIO_HIG, "\nRx Sleep");
+                              g_stHdmiRx.ucRxState = STATE_HDMIRX_TMDSCLK_STB_CHK_5;
+                              Mode_Sleep_AnaPowerSet(DISABLED);
+                              Mod_Sleep_DigPowerDown(); 
+                              Drv_System_IntSet(IRQ_HDMIRX_FRL_INT, OFF);
+                              g_stSleep.ucSleepState = SLEEP_TOGGLE_RTERM_ON_2;
+                              g_stSleep.ucSleepChgFlag = TRUE; 
+                                  
+                          }
+                          if((g_stHdmiRx.ucHdmiVer == HDMI21)&&(Drv_System_IntSrcGet(IRQ_TMDS_PKDET_INT) == TRUE))//hdmi
+             -2.1 peak det true
+                          {
+                               g_stSleep.ucSleepState = SLEEP_INIT_0;
+                          }
+                          else if((g_stHdmiRx.ucHdmiVer <= HDMI20)&&(BKE3_24_REG & BIT5_1)) //hdmi2.0 clk det
+                          {
+                               g_stSleep.ucSleepState = SLEEP_INIT_0;
+                          }
+                          break;
+                      case SLEEP_TOGGLE_RTERM_ON_2://toggle term_on
+                          if(g_stSleep.ucSleepChgFlag == TRUE)
+                          {
+                              g_stSleep.ucSleepChgFlag = FALSE;
+                              Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                          }
+                          if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_800) == TRUE)
+                          {
+                              g_stSleep.ucSleepState   = SLEEP_TOGGLE_RTERM_OFF_3;
+                              g_stSleep.ucSleepChgFlag = TRUE;  
+                              Mode_Sleep_RtermSet(ENABLED); 
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 9   
+
+                          }
+                          break;
+                      case SLEEP_TOGGLE_RTERM_OFF_3: //toggle_term off
+                          if(g_stSleep.ucSleepChgFlag == TRUE)
+                          {
+                              g_stSleep.ucSleepChgFlag = FALSE;
+                              Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                          }
+                          if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_300) == TRUE)
+                          {
+                              g_stSleep.ucSleepState   = SLEEP_TOGGLE_RTERM_ON_2;
+                              g_stSleep.ucSleepChgFlag = TRUE; 
+                              Mode_Sleep_RtermSet(DISABLED);
+                          }
+                          break;
+                      case SLEEP_EXIT_4:
+                          break;
+                      case SLEEP_END_5:
+                          break;
+                      default:
+                          break;
+                  }
+                  if(((Drv_System_IntSrcGet(IRQ_TMDS_PKDET_INT) == TRUE)&&((BKE3_24_REG & BIT5_1)||(BKCD_E6_REG & 0x51)|
+             -|(BKCD_B5_REG & 0x0f)))// pkdet enable
+                    ||(BKCA_BD_REG & BIT0_1))//hdcp det
+                  {
+                      if((g_stSleep.ucSleepState == SLEEP_TOGGLE_RTERM_OFF_3)||(g_stSleep.ucSleepState == SLEEP_TOGGLE_R
+             -TERM_ON_2))
+                      {
+                          g_stSleep.ucSleepState  = SLEEP_EXIT_4;
+                          Mode_Sleep_AnaPowerSet(ENABLED);
+                          printLT(PRINT_PRIO_HIG, "\nToggle End");     
+                      }
+                  }
+              }
+              
+              void Mod_Sleep_TmdsPowerOn(void)
+              {
+                  if(g_stSleep.ucSleepState < SLEEP_EXIT_4)
+                  {
+                       return;
+                  }
+                  if((Drv_System_IntSrcGet(IRQ_TMDS_PKDET_INT) == TRUE)&&(BKE3_24_REG & BIT5_1)&&((BKCD_B5_REG & 0x0f)==
+             - 0x00))
+                  {
+                      g_stSleep.ucSleepState = SLEEP_INIT_0;
+                      Mod_Sleep_DigPowerOn();
+                      g_stHdmiRx.ucRxState = STATE_HDMIRX_TMDSCLK_STB_CHK_5;
+                      g_stHdmiRx.b1RxStateChanged = TRUE;
+                      printLT(PRINT_PRIO_HIG, "\nTmds Exit"); 
+              
+                  }
+              }
+              
+              void Mod_Sleep_FrlPowerOn(void)
+              {
+                  if(g_stSleep.ucSleepState < SLEEP_EXIT_4)
+                  {
+                       return;
+                  }
+                  if((Drv_System_IntSrcGet(IRQ_TMDS_PKDET_INT) == TRUE)&((BKCD_E6_REG & 0x51)||(BKCD_B5_REG & 0x0f)))
+                  {
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 10  
+
+                      g_stSleep.ucSleepState = SLEEP_INIT_0;
+                      Mod_Sleep_DigPowerOn();
+                      Drv_System_IntSet(IRQ_HDMIRX_FRL_INT, ON);
+                      g_stHdmiRx.ucRxState = STATE_HDMIRX_WAIT_FRL_TRAIN_7;
+                      g_stHdmiRx.b1RxStateChanged = TRUE;
+                      printLT(PRINT_PRIO_HIG, "\nFrl Exit");
+                  }
+              }
+              
+              //----------------------------------------------------------SLEEP MOde2 END-------------------------------
+             ---------------------------------
+              
+              #endif
+              
+              #if SOFT_POWER_DOWN == ENABLED
+              
+              // HDMI RX DP TX video on ,it will close setting not used
+              void Mod_Sleep_PowerDownSet(u8 b1IsPowerDown)
+              {
+                  //analog 
+                  BKA2_98_REG = 0x00; //arc
+                  BKA3_14_REG = 0x34; //earcpll    
+                  
+                  //digit    
+                  BKC9_10_REG = 0xff; //
+                  BKC9_11_REG = 0xff; //hdmi20rx
+                  BKC9_13_REG = 0xff; 
+                  BKC9_14_REG = 0xF8; //hdcp_rx
+                  if((g_stHdmiRx.b1CscRxEnable == DISABLED)&&(b1IsPowerDown == TRUE))
+                  {
+                      BKC9_15_REG = 0x80; 
+                      BKC9_16_REG = 0x00; //csc
+                  }
+                  else
+                  {
+                      BKC9_15_REG = 0xFE; 
+                      BKC9_16_REG = 0xE0; //csc
+                  }
+                  BKC9_17_REG = 0xFE; //ptn/rxlin_fmt
+                  BKC9_18_REG = 0xFF; 
+                  BKC9_19_REG = 0xFF; //acr
+                  BKC9_1A_REG = 0xC0; //earc
+                  BKC9_1D_REG = 0x0F; 
+                  BKC9_1E_REG = 0xC0; //csc_in_syn/vichk
+              
+                  if((g_stHdmiRx.ucHdmiVer != HDMI21)&&(b1IsPowerDown == TRUE))
+                  {
+                      BKCD_46_REG = 0x78; //hdmi21_rx
+                  }
+                  else
+                  {           
+                      BKCD_46_REG = 0xFF; //hdmi21_rx
+                  }
+                  BKCD_61_REG = 0x03; //pixpcr
+                  BKE1_20_REG = 0x00; //bb/cec
+                  BKE1_21_REG = 0x7F; 
+                  BKE1_22_REG = 0x08; 
+                  BKE1_23_REG = 0xFF; 
+                  BKE1_24_REG = 0xFF; 
+                  BKE1_25_REG = 0x33; //sec pcr disable dhrx
+                  BKE1_26_REG = 0xFF; 
+                  BKE1_27_REG = 0xF8; //dhtx
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 11  
+
+                  BKE1_28_REG = 0x00; //dsc decode
+                  if((g_stDpTx.b1EncodeEn == DISABLED)&&(b1IsPowerDown == TRUE))
+                  {
+                      BKE1_29_REG = 0x00; //dsc encode 
+                  }
+                  else
+                  {
+                      BKE1_29_REG = 0xFE; //dsc encode
+                  }
+                  BKE1_2A_REG = 0x00; 
+                  BKE1_2B_REG = 0x00; //lmtx
+                  BKE1_2C_REG = 0xC0; //csc/isp
+                  BKE1_2D_REG = 0xFF; //i2c/dma/ocm/mcu
+                  BKE1_2E_REG = 0xF8; //spi/ana_reg/ctrl/int/top/typec
+                  BKE1_2F_REG = 0xFF; //top
+                  BKE1_30_REG = 0x0c; //dhrx/tx/ucc1/ucc2_rterm_clk
+                  BKE1_31_REG = 0x77; //audpll
+                  BKE1_32_REG = 0x77; //pcrpll
+                  BKE1_33_REG = 0x00; //secpll
+                  BKE1_34_REG = 0xFF; //dhrxpll
+                  BKE1_35_REG = 0xFF; //dhtxpll
+                  BKE1_36_REG = 0x80; //earcpll
+                  BKE1_37_REG = 0xff; //lmtxpll
+                  BKE1_38_REG = 0xFF; //syspll
+              
+                  BKE9_89_REG = 0xFF; //hdcp_tx
+                  BKED_08_REG = 0x00; 
+                  BKED_09_REG = 0x00; 
+                  BKED_0A_REG = 0x00; //hdmitx20/21
+              
+                  //decode
+                  BKEE_F1_REG = 0x00; //clk_group0
+                  BKEE_F2_REG = 0x00; //clk_group1
+                  BKEE_F3_REG = 0x00; //clk_group2
+                  BKEE_F4_REG = 0x00; //clk_group3
+                  BKEE_F5_REG = 0x00; //clk_group4
+                  BKEE_F6_REG = 0x00; //clk_group5
+                  BKEE_F7_REG = 0x00; //clk_group6
+              
+                  //encode
+                  if((g_stDpTx.b1EncodeEn == DISABLED)&&(b1IsPowerDown == TRUE))
+                  {
+                      BKEF_F1_REG = 0x00; //clk_group0
+                      BKEF_F2_REG = 0x00; //clk_group1
+                      BKEF_F3_REG = 0x00; //clk_group2
+                      BKEF_F4_REG = 0x00; //clk_group3
+                      BKEF_F5_REG = 0x00; //clk_group4
+                      BKEF_F6_REG = 0x00; //clk_group5
+                      BKEF_F7_REG = 0x00; //clk_group6
+                  }
+                  else
+                  {
+                      BKEF_F1_REG = 0xff; //clk_group0
+                      BKEF_F2_REG = 0xff; //clk_group1
+                      BKEF_F3_REG = 0xff; //clk_group2
+                      BKEF_F4_REG = 0xff; //clk_group3
+                      BKEF_F5_REG = 0xff; //clk_group4
+                      BKEF_F6_REG = 0xff; //clk_group5
+                      BKEF_F7_REG = 0xff; //clk_group6
+                  }
+                  BKF5_84_REG = 0xFF; 
+                  BKF5_85_REG = 0xFF; 
+C51 COMPILER V9.53.0.0   MODTMDSRX                                                         02/13/2025 10:14:10 PAGE 12  
+
+                  BKF5_86_REG = 0xFF; //dptx
+                  if(b1IsPowerDown == TRUE)
+                  {
+                      printLT(PRINT_PRIO_HIG, "\nPower down enable");
+                  }
+              }
+              
+              #endif
+              
+              
+              #endif
+ 675          #endif
+ 676          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

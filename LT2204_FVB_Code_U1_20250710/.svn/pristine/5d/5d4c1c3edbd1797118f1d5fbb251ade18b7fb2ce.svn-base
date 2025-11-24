@@ -1,0 +1,1430 @@
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODHDMIRX
+OBJECT MODULE PLACED IN .\Objects\ModHdmiRx.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModHdmiRx.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE)
+                    - REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRI
+                    -NT(.\Listings\ModHdmiRx.lst) OBJECT(.\Objects\ModHdmiRx.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: ChipHdmiRx.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.06.07
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          
+  11          
+  12          #if RX_PORT_SIGN == HDMI_PORT
+  13          
+  14          StructHdmiRx g_stHdmiRx;
+  15          
+  16          void Mod_HdmiRx_PowerOnInit(void)
+  17          {
+  18   1          memset(&g_stHdmiRx, 0, sizeof(StructHdmiRx));
+  19   1          g_stHdmiRx.ucRxState = STATE_HDMIRX_POWER_ON_1;
+  20   1      }
+  21          
+  22          void Mod_HdmiRx_VarInit()
+  23          {
+  24   1          #if CHIP_SEL == LT6711GXE
+  25   1          LT6711GXE_HdmiRxVarInit();
+  26   1          #endif
+  27   1          #if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD))
+                  LT6911GXE_HdmiRxVarInit();
+                  #endif
+  30   1          #if CHIP_SEL == LT86121GXE
+                  LT86121GXE_HdmiRxVarInit();
+                  #endif
+  33   1      }
+  34          
+  35          void Mod_HdmiRx_MsgNotify(u8 ucEvent)
+  36          {
+  37   1          #if CHIP_SEL == LT6711GXE
+  38   1          LT6711GXE_HdmiRxMsgNotify(ucEvent);
+  39   1          #endif
+  40   1          #if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD))
+                  LT6911GXE_HdmiRxMsgNotify(ucEvent);
+                  #endif
+  43   1          #if CHIP_SEL == LT86121GXE
+                  LT86121GXE_HdmiRxMsgNotify(ucEvent);
+                  #endif
+  46   1      }
+  47          
+  48          u8 Mod_HdmiRx_TimeOutCheck(u8 ucOpt)
+  49          {
+  50   1          u8 ucRtn = FALSE;
+  51   1          static u32 ulCurrentTime = 0;
+  52   1      
+  53   1          if (DISABLED == ucOpt)
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 2   
+
+  54   1          {
+  55   2              Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+  56   2          }
+  57   1      
+  58   1          if (g_stHdmiRx.ucRxState < STATE_HDMIRX_PLAY_BACK_18)
+  59   1          {
+  60   2              if(Ocm_Timer_IsOverFlow(&ulCurrentTime, SECOND_12) == TRUE)
+  61   2              {
+  62   3                  ucRtn = TRUE;
+  63   3                  Drv_HdmiRx_HpdSet(LOW);
+  64   3                  Ocm_Delay1ms(500);
+  65   3                  Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+  66   3              }
+  67   2          }
+  68   1          return ucRtn;
+  69   1      }
+  70          
+  71          
+  72          void Mod_HdmiRx_SetState(u8 ucState)
+  73          {
+  74   1          u8 ucLastState;
+  75   1          
+  76   1          if(ucState != g_stHdmiRx.ucRxState)
+  77   1          {    
+  78   2              ucLastState = g_stHdmiRx.ucRxState;
+  79   2              g_stHdmiRx.ucRxState = ucState;
+  80   2              g_stHdmiRx.b1RxStateChanged = TRUE;
+  81   2              printLT(PRINT_PRIO_TEST, "\nRxState = %bd",ucState);
+  82   2      
+  83   2              // other state-->STATE_DPRX_PLAY_BACK,need notify video on
+  84   2              if(g_stHdmiRx.ucRxState == STATE_HDMIRX_PLAY_BACK_18)
+  85   2              {
+  86   3      
+  87   3                  Mod_HdmiRx_MsgNotify(HDMIRX_INTERLACE_EVENT);
+  88   3                  Mod_HdmiRx_MsgNotify(HDMIRX_VIDEO_ON_EVENT);
+  89   3                  #ifdef NVIDIA_FW_EN
+                          #if (CUSTOMER_DEFINED == ENABLED)
+                          Drv_IOSoftLevel_Set(GPIO17_SCLKA, HIGH); //for nvidia case 1: hdmi rx stable 0: hdmi rx unstab
+             -le      
+                          #endif
+                          #endif
+  94   3              }
+  95   2      
+  96   2              //STATE_DPRX_PLAY_BACK_16-->other state,need notify video off
+  97   2              if(ucLastState == STATE_HDMIRX_PLAY_BACK_18)
+  98   2              {
+  99   3                  Mod_HdmiRx_MsgNotify(HDMIRX_VIDEO_OFF_EVENT);
+ 100   3                  #ifdef NVIDIA_FW_EN
+                          #if (CUSTOMER_DEFINED == ENABLED)
+                          Drv_IOSoftLevel_Set(GPIO17_SCLKA, LOW); //for nvidia case 1: hdmi rx stable 0: hdmi rx unstabl
+             -e      
+                          #endif
+                          #endif
+ 105   3                  Mod_HdmiRx_TimeOutCheck(DISABLED);
+ 106   3              }
+ 107   2          }
+ 108   1      }
+ 109          
+ 110          void Mod_HdmiRx_SourceDetProc(void)
+ 111          {
+ 112   1          if(g_stHdmiRx.ucRxState >= STATE_HDMIRX_WAITE_SOURCE_2)
+ 113   1          {
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 3   
+
+ 114   2              //the last source detect is high.
+ 115   2              if(g_stHdmiRx.b1SourceDet == HIGH)
+ 116   2              {
+ 117   3                  //the current source detect is low.
+ 118   3                  if(Drv_GetIO_State(GPIO2_DHRX_DCAUXN_5VDET) == FALSE)   
+ 119   3                  {
+ 120   4                      Drv_HdmiRx_ErrValidClr(ENABLED);
+ 121   4                      Mod_HdmiRx_SetState(STATE_HDMIRX_WAITE_SOURCE_2);          
+ 122   4                      Mod_HdmiRx_HpdLowAction();
+ 123   4                      g_stHdmiRx.b1SourceDet = LOW;
+ 124   4                      Mod_HdmiRx_MsgNotify(HDMIRX_SOURECE_UNPLUG_EVENT);
+ 125   4                      printLT(PRINT_PRIO_HIG, "\nHdmi rx unplug");
+ 126   4                  }
+ 127   3              }
+ 128   2              //the last source detect is low.
+ 129   2              else
+ 130   2              {
+ 131   3                  //the current source detect is high.
+ 132   3                  if (Drv_GetIO_State(GPIO2_DHRX_DCAUXN_5VDET) == TRUE)
+ 133   3                  {
+ 134   4                      g_stHdmiRx.b1SourceDet = HIGH;
+ 135   4                      Mod_HdmiRx_MsgNotify(HDMIRX_SOURECE_PLUG_EVENT);
+ 136   4                      printLT(PRINT_PRIO_HIG, "\nHdmi rx plug");
+ 137   4                  }
+ 138   3              }
+ 139   2          }
+ 140   1      }
+ 141          
+ 142          u8 Mod_HdmiRx_PcrStableCheck(void)
+ 143          {
+ 144   1          if (g_stHdmiRx.ucHdmiVer == HDMI21)
+ 145   1          {
+ 146   2              if (BKC8_B4_REG & BIT2_1)
+ 147   2              {
+ 148   3                  return STABLE;
+ 149   3              }
+ 150   2          }
+ 151   1          return UNSTABLE;
+ 152   1      }
+ 153          
+ 154          u8 Mod_HdmiRx_SecPcrStableCheck(void)
+ 155          {
+ 156   1          #if ((CHIP_SEL == LT86121GXE))//121 case
+                  #if DSC_USER_DEFINE_PKT_EN == ENABLED
+                  return STABLE;
+                  #endif
+                  #endif
+ 161   1      
+ 162   1          if (g_stHdmiRx.ucHdmiVer == HDMI21)
+ 163   1          {
+ 164   2              if (BKC8_B4_REG & BIT1_1)
+ 165   2              {
+ 166   3                  return STABLE;
+ 167   3              }
+ 168   2          }
+ 169   1          return UNSTABLE;
+ 170   1      }
+ 171          
+ 172          void Mod_HdmiRx_AudioSampleFlagChk(void)
+ 173          {
+ 174   1          #if TX_AUDIO_SEL == RX_AUDIO_DATA
+ 175   1          u8 ucAudioFS;
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 4   
+
+ 176   1          u8 ucAspSampleFlat;
+ 177   1          u8 ucAspSamplePresent;
+ 178   1          u8 uGcpPacketSetMute = 0;
+ 179   1          u8 ucAudioOut = ON;
+ 180   1          static u8 ucAudioState = ON;
+ 181   1      
+ 182   1          ucAudioFS = BKC6_7C_REG;//audio fs val
+ 183   1          if((47 <= ucAudioFS) && (49 >= ucAudioFS))
+ 184   1          {
+ 185   2              ucAspSampleFlat    = BKCC_9B_REG & BIT0_1;
+ 186   2              ucAspSamplePresent = BKCC_9A_REG & BIT0_1;
+ 187   2              if((0 == ucAspSamplePresent) || ((1 == ucAspSamplePresent) && (1 == ucAspSampleFlat)))
+ 188   2              {
+ 189   3                  ucAudioOut = OFF;
+ 190   3              }
+ 191   2              else
+ 192   2              {
+ 193   3                  ucAudioOut = ON;
+ 194   3              }
+ 195   2          }
+ 196   1      
+ 197   1          //gcp set_avmute should mute else mute clear
+ 198   1          if (BKCC_F3_REG & BIT2_1)//not find gcp, return
+ 199   1          {
+ 200   2              BKCC_58_REG |= BIT6_1;//gcp pkt clr en
+ 201   2              BKCC_58_REG &= BIT6_0;//gcp pkt clr dis
+ 202   2              uGcpPacketSetMute = BKCC_9C_REG & BIT0_1;
+ 203   2              if(1 == uGcpPacketSetMute)
+ 204   2              {
+ 205   3                   ucAudioOut = OFF;
+ 206   3              }
+ 207   2              else
+ 208   2              {
+ 209   3                   ucAudioOut = ON;
+ 210   3              }
+ 211   2          }
+ 212   1      
+ 213   1          if (ucAudioState != ucAudioOut)
+ 214   1          {
+ 215   2              ucAudioState = ucAudioOut;
+ 216   2              if (ucAudioOut == OFF)
+ 217   2              {
+ 218   3                  Mod_HdmiRx_MsgNotify(HDMIRX_AUDIO_MUTE_EN);
+ 219   3              }
+ 220   2              else
+ 221   2              {
+ 222   3                  Mod_HdmiRx_MsgNotify(HDMIRX_AUDIO_MUTE_DIS);
+ 223   3              }
+ 224   2              if (1 == uGcpPacketSetMute)
+ 225   2              {
+ 226   3                  Mod_HdmiRx_MsgNotify(HDMIRX_VIDEO_MUTE_EN);
+ 227   3              }
+ 228   2              else
+ 229   2              {
+ 230   3                  Mod_HdmiRx_MsgNotify(HDMIRX_VIDEO_MUTE_DIS);
+ 231   3              }
+ 232   2          }
+ 233   1          #endif
+ 234   1      }
+ 235          
+ 236          bool Mod_HdmiRx_PcrColorSpaceUpdata(void)
+ 237          {
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 5   
+
+ 238   1          ColorInfo_S stColorInfo;
+ 239   1      
+ 240   1          //no need updata.
+ 241   1          Drv_HdmiRx_ColorInfoGet(&stColorInfo);
+ 242   1          if ((g_stHdmiRx.ucPixelEncoding == stColorInfo.ucPixelEncoding) &&
+ 243   1              (g_stHdmiRx.ucColorimetryFormat == stColorInfo.ucColorimetryFormat) &&
+ 244   1              (g_stHdmiRx.ucBitDepth == stColorInfo.ucBitDepth))
+ 245   1          {
+ 246   2              return FALSE;
+ 247   2          }
+ 248   1          g_stHdmiRx.ucPixelEncoding     = stColorInfo.ucPixelEncoding;
+ 249   1          g_stHdmiRx.ucColorimetryFormat = stColorInfo.ucColorimetryFormat;
+ 250   1          g_stHdmiRx.ucBitDepth          = stColorInfo.ucBitDepth;
+ 251   1      
+ 252   1          return TRUE;
+ 253   1      }
+ 254          
+ 255          //bool Mod_HdmiRx_AudioChannelUpdata(void)
+ 256          //{
+ 257          //    #if TX_AUDIO_SEL == RX_AUDIO_DATA
+ 258          //    AudioChlInfo_S stAudioInfo;
+ 259          
+ 260          //    Drv_HdmiRx_AudioInfoGet(&stAudioInfo);
+ 261          //    if (stAudioInfo.ucFsValue == 0)//no audio
+ 262          //    {
+ 263          //        return FALSE;
+ 264          //    }
+ 265          
+ 266          //    if((g_stHdmiRx.ucLayout == stAudioInfo.ucLayout) &&
+ 267          //       (g_stHdmiRx.ucChannel == stAudioInfo.ucChannel) &&
+ 268          //       (abs(g_stHdmiRx.ucFsValue - stAudioInfo.ucFsValue) <= 1))
+ 269          //    {
+ 270          //        return FALSE;
+ 271          //    }
+ 272          
+ 273          //    g_stHdmiRx.ucLayout = stAudioInfo.ucLayout;
+ 274          //    g_stHdmiRx.ucChannel = stAudioInfo.ucChannel;
+ 275          //    g_stHdmiRx.ucFsValue = stAudioInfo.ucFsValue;
+ 276          //    printLT(PRINT_PRIO_TEST, "\nRx audio channel = 0x%02bx",stAudioInfo.ucChannel);
+ 277          //    return TRUE;
+ 278          //    #else
+ 279          //    return FALSE;
+ 280          //    #endif
+ 281          //}
+ 282          
+ 283          void Mod_HdmiRx_TenbitPcrSet(void)
+ 284          {
+ 285   1          u32 ulRxpll_In_Clk;
+ 286   1          if((g_stHdmiRx.ucHdmiVer == HDMI20)&&(g_stHdmiRx.ucBitDepth == 0x05)&&((BKA1_37_REG&0x03)==0x02))
+ 287   1          {
+ 288   2              ulRxpll_In_Clk = (((u32)(BKE3_21_REG & 0x0f) << 16) + ((u32)BKE3_22_REG << 8) + BKE3_23_REG) << 2;
+ 289   2              
+ 290   2              Drv_HdmiRx_TmdsPcrPllCal(ulRxpll_In_Clk);
+ 291   2              //pcrpll_pixel clk
+ 292   2              BKA3_3C_REG &= 0x8f;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_p
+             -ix_clk
+ 293   2              
+ 294   2              BKA3_3E_REG &= 0x8f;//sel pcrpll_half_pixel clk
+ 295   2              BKA3_3E_REG |= 0x10;//[6:4]rg_clkgen_dscout_muxsel       : 101-aa_dhrxpll_pix_clk
+ 296   2              
+ 297   2              BKA3_3F_REG &= 0x8f;//ad_dscrx_dsc_clk    2f/2
+ 298   2              BKA3_40_REG &= 0x8f;//ad_dscrx_dsc_rd_clk 2f/2
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 6   
+
+ 299   2              BKA3_40_REG |= 0x10;
+ 300   2              
+ 301   2              BKA3_41_REG &= 0x8f;//[6:4]rg_clkgen_dsctx_dsc_muxsel    : 101-aa_dhrxpll_pix_clk
+ 302   2              BKA3_42_REG &= 0x8f;//[6:4]rg_clkgen_dsctx_dscrd_muxsel  : 101-aa_dhrxpll_pix_clk
+ 303   2              BKA3_42_REG |= 0x10;
+ 304   2          } 
+ 305   1      }
+ 306          
+ 307          u8 Mod_HdmiRx_InterlaceGet(void)
+ 308          {
+ 309   1          LtTiming_S  stRxTimingInfo;
+ 310   1          u8 b1IsInterlace = FALSE;
+ 311   1      
+ 312   1          Drv_HdmiRx_RxTimingGet(&stRxTimingInfo);//
+ 313   1          if((stRxTimingInfo.usHact == 1920)&&(stRxTimingInfo.usVact == 540))//1080i
+ 314   1          {
+ 315   2              b1IsInterlace = TRUE;
+ 316   2          }
+ 317   1          else if((stRxTimingInfo.usHact == 2880)&&(stRxTimingInfo.usVact == 288))//576i
+ 318   1          {
+ 319   2              b1IsInterlace = TRUE;
+ 320   2          }
+ 321   1          else if((stRxTimingInfo.usHact == 1440)&&(stRxTimingInfo.usVact == 288))//576i
+ 322   1          {
+ 323   2              b1IsInterlace = TRUE;
+ 324   2          }
+ 325   1          else if((stRxTimingInfo.usHact == 2880)&&(stRxTimingInfo.usVact == 240)) //480i
+ 326   1          {
+ 327   2              b1IsInterlace = TRUE;
+ 328   2          }
+ 329   1          else if((stRxTimingInfo.usHact == 1440)&&(stRxTimingInfo.usVact == 240)) //480i
+ 330   1          {
+ 331   2              b1IsInterlace = TRUE;
+ 332   2          }
+ 333   1          return b1IsInterlace;
+ 334   1      }
+ 335          
+ 336          u8 Mod_HdmiRx_VrrVtimingDet(void)
+ 337          {
+ 338   1          u16 usVotal_New,usVactive_New,usHactive_New;
+ 339   1          u16 usVotal_Old,usVactive_Old,usHactive_Old;
+ 340   1          usVotal_Old   = ((u16)BKC8_52_REG <<8 ) + BKC8_53_REG ;
+ 341   1          usVactive_Old = ((u16)BKC8_56_REG <<8 ) + BKC8_57_REG ;
+ 342   1          usHactive_Old = ((u16)BKC8_58_REG <<8 ) + BKC8_59_REG ;
+ 343   1          Ocm_Delay1ms(1);
+ 344   1          usVotal_New   = ((u16)BKC8_52_REG <<8 ) + BKC8_53_REG ;
+ 345   1          usVactive_New = ((u16)BKC8_56_REG <<8 ) + BKC8_57_REG ; 
+ 346   1          usHactive_New = ((u16)BKC8_58_REG <<8 ) + BKC8_59_REG ;    
+ 347   1          if((usVotal_Old != usVotal_New) &&(usVactive_Old == usVactive_New)&&(usHactive_Old == usHactive_New))
+ 348   1          {
+ 349   2              return VRR_ON; 
+ 350   2          }
+ 351   1          else if((usVotal_Old == usVotal_New) &&(usVactive_Old == usVactive_New)&&(usHactive_Old == usHactive_N
+             -ew))
+ 352   1          {
+ 353   2              return VRR_OFF;
+ 354   2          }
+ 355   1          return NO_VRR;
+ 356   1      }
+ 357          
+ 358          u8 Mod_HdmiRx_VrrSwitchGet(void)
+ 359          {
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 7   
+
+ 360   1          return g_stHdmiRx.b1VrrEn;
+ 361   1      }
+ 362          
+ 363          u8 Mod_HdmiRx_HdrStateGet(void)
+ 364          {
+ 365   1          return g_stHdmiRx.b1HdrEn;
+ 366   1      }
+ 367          
+ 368          void Mod_HdmiRx_TmdsClkCal(void)
+ 369          {
+ 370   1          ColorInfo_S stInfo;
+ 371   1      
+ 372   1          Drv_HdmiRx_ColorInfoGet(&stInfo);
+ 373   1          #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+ 374   1          if (Drv_HdmiRxDscDec_SwitchGet() == ENABLED)
+ 375   1          {
+ 376   2              Drv_HdmiRxDscDec_ColorInfoGet(&stInfo);
+ 377   2          }
+ 378   1          #endif
+ 379   1          #if HDMIRX_DSC_BYPASS_SUPPORT == ENABLED
+ 380   1          if (Drv_HdmiRxDscBy_SwitchGet() == ENABLED)
+ 381   1          {
+ 382   2              Drv_HdmiRxDscBy_ColorInfoGet(&stInfo);
+ 383   2          }
+ 384   1          #endif
+ 385   1      
+ 386   1          Drv_System_FmSet(TOP_FM,TOPFM_PCRPLL_PCR_CLK);
+ 387   1          Ocm_Delay1ms(10);
+ 388   1          g_stHdmiRx.ulRxPixelClk = Drv_System_FmGet(TOP_FM,HALF_PIX_CLK);
+ 389   1      
+ 390   1          if((stInfo.ucPixelEncoding != YCbCr422_1)&&(stInfo.ucBitDepth == HDMIRX_10BIT_5))
+ 391   1          {
+ 392   2              g_stHdmiRx.ulRxTmdsClk = (g_stHdmiRx.ulRxPixelClk*5)>>2;
+ 393   2          }
+ 394   1          else if((stInfo.ucPixelEncoding != YCbCr422_1)&&(stInfo.ucBitDepth == HDMIRX_12BIT_6))
+ 395   1          {
+ 396   2              g_stHdmiRx.ulRxTmdsClk = (g_stHdmiRx.ulRxPixelClk*3)>>1;
+ 397   2          }
+ 398   1          else
+ 399   1          {
+ 400   2               g_stHdmiRx.ulRxTmdsClk = g_stHdmiRx.ulRxPixelClk;
+ 401   2          }
+ 402   1          g_stHdmiRx.ulRxPixelClk <<= 1;
+ 403   1          g_stHdmiRx.ulRxTmdsClk  <<= 1;
+ 404   1      }
+ 405          
+ 406          void Mod_HdmiRx_InfoDisplay(void)
+ 407          {
+ 408   1          #if 1
+ 409   1          u32 ulTemp;
+ 410   1          LtTiming_S stTiming;
+ 411   1      
+ 412   1          Drv_HdmiRx_RxTimingGet(&stTiming);
+ 413   1          ulTemp = ceil((double)g_stHdmiRx.ulRxPixelClk / stTiming.usHtol);
+ 414   1          ulTemp *= 1000;
+ 415   1          ulTemp = ceil(ulTemp / stTiming.usVtol);
+ 416   1          printLT(PRINT_PRIO_TEST, "\nHbp    : %-8d  Vbp    : %-8d", stTiming.usHbp,stTiming.usVbp);
+ 417   1          printLT(PRINT_PRIO_TEST, "\nHfp    : %-8d  Vfp    : %-8d", stTiming.usHfp,stTiming.usVfp);
+ 418   1          printLT(PRINT_PRIO_TEST, "\nHsync  : %-8d  Vsync  : %-8d", stTiming.usHsync,stTiming.usVsync);
+ 419   1          printLT(PRINT_PRIO_TEST, "\nHact   : %-8d  Vact   : %-8d", stTiming.usHact,stTiming.usVact);
+ 420   1          printLT(PRINT_PRIO_TEST, "\nHtol   : %-8d  Vtol   : %-8d", stTiming.usHtol,stTiming.usVtol);
+ 421   1          printLT(PRINT_PRIO_TEST, "\nDepth  : %-8bd  Space  : %-8bd", (g_stHdmiRx.ucBitDepth << 1),g_stHdmiRx.u
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 8   
+
+             -cPixelEncoding);
+ 422   1          printLT(PRINT_PRIO_TEST, "\nPixClk : %-8ld  TmdsClk: %-8ld", g_stHdmiRx.ulRxPixelClk, g_stHdmiRx.ulRxT
+             -mdsClk);
+ 423   1          printLT(PRINT_PRIO_TEST, "\nFreq   : %-8ld", ulTemp);
+ 424   1          #endif
+ 425   1      }
+ 426          
+ 427          void Mod_HdmiRx_StateTimeOutChk(u8 ucOpt)
+ 428          {
+ 429   1          static u8 ucNum = 0;
+ 430   1      
+ 431   1          if (DISABLED == ucOpt)
+ 432   1          {
+ 433   2              ucNum = 0;
+ 434   2          }
+ 435   1      
+ 436   1          ucNum++;
+ 437   1          if (ucNum > 20)
+ 438   1          {
+ 439   2              ucNum = 0;//clr
+ 440   2              BKCD_06_REG = 0x65;//[7:4]Ln(0)_LTP_req set, [3:0]Ln(1)_LTP_req set
+ 441   2              Ocm_Delay1ms(1);
+ 442   2              BKCD_06_REG = 0x56;//[7:4]Ln(0)_LTP_req set, [3:0]Ln(1)_LTP_req set
+ 443   2              printLT(PRINT_PRIO_HIG,"\nHdmi rx state time out");
+ 444   2          }
+ 445   1      }
+ 446          
+ 447          void Mod_HdmiRx_PcrFreqSetChk(u8 ucOpt)
+ 448          {
+ 449   1          #if 1//wait eco
+ 450   1          u8 ucSoftFreqSet;
+ 451   1          u32 ulFreqSet = 0;
+ 452   1      
+ 453   1          if(ucOpt == DISABLED)
+ 454   1          {
+ 455   2              BKCD_A2_REG &= 0xf0; //[3]rgd_tmds_pcr_da_freq_set_dp_sel: 0-hw
+ 456   2                                   //[2:0]rgd_tmds_pcr_da_freq_set_dp
+ 457   2              return;
+ 458   2          }
+ 459   1      
+ 460   1          if (BKCD_AD_REG & BIT1_1) //[1]rgod_tmds_pcr_freq_pixel_stable: 1-stable
+ 461   1          {
+ 462   2              ulFreqSet = PACK_24_BIT(BKCD_AA_REG&0x0f,BKCD_AB_REG,BKCD_AC_REG);
+ 463   2          }
+ 464   1          if ((ulFreqSet == 0) || (ulFreqSet >= 1200000))
+ 465   1          {
+ 466   2              return;
+ 467   2          }
+ 468   1      
+ 469   1          if(ulFreqSet < 18750)
+ 470   1          {
+ 471   2              ucSoftFreqSet = 6;
+ 472   2          }
+ 473   1          else if(ulFreqSet < 37500)
+ 474   1          {
+ 475   2              ucSoftFreqSet = 5;
+ 476   2          }
+ 477   1          else if(ulFreqSet < 75000)
+ 478   1          {
+ 479   2              ucSoftFreqSet = 4;
+ 480   2          }
+ 481   1          else if(ulFreqSet < 150000)
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 9   
+
+ 482   1          {
+ 483   2              ucSoftFreqSet = 3;
+ 484   2          }
+ 485   1          else if(ulFreqSet < 300000)
+ 486   1          {
+ 487   2              ucSoftFreqSet = 2;
+ 488   2          }
+ 489   1          else if(ulFreqSet < 600000)
+ 490   1          {
+ 491   2              ucSoftFreqSet = 1;
+ 492   2          }
+ 493   1          else if(ulFreqSet < 1200000)
+ 494   1          {
+ 495   2              ucSoftFreqSet = 0;
+ 496   2          }
+ 497   1      
+ 498   1          if(ucSoftFreqSet != ((BKCD_AA_REG >> 4) & 0x07)) //[6:4]rgod_tmds_pcr_da_freq_set_dp
+ 499   1          {
+ 500   2              ucSoftFreqSet |= BIT3_1;
+ 501   2              BKCD_A2_REG = (BKCD_A2_REG & 0xf0) | ucSoftFreqSet;
+ 502   2          }
+ 503   1          #endif
+ 504   1      }
+ 505          
+ 506          void Mod_HdmiRx_SecPcrFreqSetChk(u8 ucOpt)
+ 507          {
+ 508   1          #if 1//wait eco
+ 509   1          u8 ucSoftFreqSet;
+ 510   1          u32 ulFreqSet = 0;
+ 511   1          if(ucOpt == DISABLED)
+ 512   1          {
+ 513   2              BKCE_2E_REG &= 0xf0; //[3]rgd_dsc_pcr_da_freq_set_dp_sel: 0-hw
+ 514   2                                   //[2:0]rgd_dsc_pcr_da_freq_set_dp
+ 515   2              return;
+ 516   2          }
+ 517   1      
+ 518   1          if (BKCE_66_REG & BIT1_1) //[1]rgod_dsc_pcr_freq_pixel_stable: 1-stable
+ 519   1          {
+ 520   2              ulFreqSet = PACK_24_BIT(BKCE_63_REG&0x0f,BKCE_64_REG,BKCE_65_REG);
+ 521   2          }
+ 522   1          if((ulFreqSet == 0) || (ulFreqSet >= 1200000))
+ 523   1          {
+ 524   2              return;
+ 525   2          }
+ 526   1      
+ 527   1          if(ulFreqSet < 18750)
+ 528   1          {
+ 529   2              ucSoftFreqSet = 6;
+ 530   2          }
+ 531   1          else if(ulFreqSet < 37500)
+ 532   1          {
+ 533   2              ucSoftFreqSet = 5;
+ 534   2          }
+ 535   1          else if(ulFreqSet < 75000)
+ 536   1          {
+ 537   2              ucSoftFreqSet = 4;
+ 538   2          }
+ 539   1          else if(ulFreqSet < 150000)
+ 540   1          {
+ 541   2              ucSoftFreqSet = 3;
+ 542   2          }
+ 543   1          else if(ulFreqSet < 300000)
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 10  
+
+ 544   1          {
+ 545   2              ucSoftFreqSet = 2;
+ 546   2          }
+ 547   1          else if(ulFreqSet < 600000)
+ 548   1          {
+ 549   2              ucSoftFreqSet = 1;
+ 550   2          }
+ 551   1          else if(ulFreqSet < 1200000)
+ 552   1          {
+ 553   2              ucSoftFreqSet = 0;
+ 554   2          }
+ 555   1          if(ucSoftFreqSet != ((BKCE_63_REG >> 4) & 0x07)) //[6:4]rgod_dsc_pcr_da_freq_set_dp
+ 556   1          {
+ 557   2              ucSoftFreqSet |= BIT3_1;
+ 558   2              BKCE_2E_REG = (BKCE_2E_REG & 0xf0) | ucSoftFreqSet;
+ 559   2          }
+ 560   1              #endif
+ 561   1      }
+ 562          
+ 563          
+ 564          void Mod_HdmiRx_HpdLowAction(void)
+ 565          {
+ 566   1          Drv_HdmiRx_HpdSet(HPD_LOW);
+ 567   1          Drv_System_IntSet(IRQ_HDMIRX_FRL_INT, OFF);
+ 568   1          Drv_System_IntSet(IRQ_HDMIRX_PPS_DATA_CHG_INT, OFF);
+ 569   1          #ifdef NVIDIA_FW_EN
+                  #if (SLEEP_MODE == ENABLED)
+                  memset(&g_stSleep, 0, sizeof(StructSleepInfo));
+                  g_stSleep.ucSleepState = SLEEP_INIT_0;
+                  #endif
+                  #endif
+ 575   1          
+ 576   1          #ifdef NVIDIA_FW_EN
+                  #if (CUSTOMER_DEFINED == ENABLED)
+                  Drv_IOSoftLevel_Set(GPIO16_MCLKA, LOW); //for nvidia case 1: hdmi mode, 0:dvi mode
+                  Drv_IOSoftLevel_Set(GPIO17_SCLKA, LOW); //for nvidia case 1: hdmi rx stable 0: hdmi rx unstable      
+                  #endif
+                  #endif
+ 582   1      }
+ 583          
+ 584          void Mod_HdmiRx_StateJudge(void)
+ 585          {
+ 586   1          u8 ucMinState = g_stHdmiRx.ucRxState;
+ 587   1          #if HDMIRX_VRR_SUPPORT == ENABLED
+ 588   1          static u8 ucVrrDet_Cnt = 0;
+ 589   1          #endif
+ 590   1          #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+ 591   1          u8 ucHdpcVer;
+ 592   1          #endif
+ 593   1          //source detect low, no need judge
+ 594   1          if(g_stHdmiRx.b1SourceDet == LOW)
+ 595   1          {
+ 596   2              return;
+ 597   2          }
+ 598   1      
+ 599   1          //monitor down stream is present or not
+ 600   1          if(ucMinState > STATE_HDMIRX_DOWNSTREAM_READY_3) 
+ 601   1          {
+ 602   2              if(g_stHdmiRx.b1DownstreamDeviceReady == FALSE)
+ 603   2              {
+ 604   3                  Mod_HdmiRx_HpdLowAction(); //pull low hpd.
+ 605   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_DOWNSTREAM_READY_3);
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 11  
+
+ 606   3              }
+ 607   2          }
+ 608   1      
+ 609   1          //monitor no video det
+ 610   1          #ifdef NVIDIA_FW_EN
+                  #if (SLEEP_MODE == ENABLED)
+                  if((Drv_GetIO_State(GPIO18_WSA) == LOW) && (ucMinState > STATE_HDMIRX_SET_HPD_4))
+                  {
+                      Mod_Sleep_TmdsNoVideoDet();
+                      Mod_Sleep_FrlPowerOn();//frl power on
+                      Mod_Sleep_TmdsPowerOn(); //tmds power on
+                  }
+                  #endif
+                  #endif
+ 620   1          
+ 621   1          if (ucMinState > STATE_HDMIRX_SET_HPD_4)
+ 622   1          {
+ 623   2              if (Mod_HdmiRx_TimeOutCheck(ENABLED) == TRUE)
+ 624   2              {
+ 625   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_SET_HPD_4);
+ 626   3                  printLT(PRINT_PRIO_HIG,"ERROR: Hdmirx state(%bd) time out!!!",g_stHdmiRx.ucRxState);
+ 627   3              }
+ 628   2          }
+ 629   1          
+ 630   1          #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+ 631   1          //monitor frl rate is change or not while frl mode(hdmi2.1).
+ 632   1          if (ucMinState > STATE_HDMIRX_SET_HPD_4)
+ 633   1          {
+ 634   2              if ((g_stHdmiRx.ucHdmiVer != HDMI21)&&(Mod_FrlRx_RateChangChk() == ENABLED))
+ 635   2              {
+ 636   3                  g_stHdmiRx.ucHdmiVer = HDMI21;
+ 637   3                  Mod_HdmiRx_SetState(STATE_HDMIRX_WAIT_FRL_TRAIN_7); 
+ 638   3                  Drv_System_IntSet(IRQ_HDMIRX_FRL_INT, ON);
+ 639   3                  ucMinState = STATE_HDMIRX_WAIT_FRL_TRAIN_7;//can't use the MIN state ,it will enter tmds mode
+ 640   3              }
+ 641   2              if ((g_stHdmiRx.ucHdmiVer == HDMI21)&&(Mod_FrlRx_TrainFailChk() == TRUE))
+ 642   2              {
+ 643   3                  Drv_System_IntSet(IRQ_HDMIRX_FRL_INT, OFF);
+ 644   3                  g_stHdmiRx.ucHdmiVer = HDMI20;
+ 645   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_TMDSCLK_STB_CHK_5);
+ 646   3                  printLT(PRINT_PRIO_TEST, "\nHdmi21 fail");
+ 647   3              }
+ 648   2          }
+ 649   1          #endif
+ 650   1      
+ 651   1          if (ucMinState > STATE_HDMIRX_TMDSCLK_STB_CHK_5)
+ 652   1          {
+ 653   2              //monitor tmds clk unstable event while tmds mode(hdmi1.4/hdmi2.0).
+ 654   2              if ((g_stHdmiRx.ucHdmiVer <= HDMI20) && (Drv_HdmiRx_Tmds_ClkStbChk() == UNSTABLE))
+ 655   2              {
+ 656   3                  printLT(PRINT_PRIO_TEST, "\nTmds clk unstable");
+ 657   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_TMDSCLK_STB_CHK_5);
+ 658   3                                                      #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+                                                              g_HdmirxVedioChangeFlag++;
+                                                              #endif
+ 661   3              }
+ 662   2      
+ 663   2              //monitor scds 0x20[1]tmds_bit_clock_ratio changes while tmds mode(hdmi1.4/hdmi2.0).
+ 664   2              if((g_stHdmiRx.ucHdmiVer <= HDMI20)&&(Drv_HdmiRx_VersionGet() != g_stHdmiRx.ucHdmiVer))
+ 665   2              {
+ 666   3                  printLT(PRINT_PRIO_TEST, "\nScdc tmds change");
+ 667   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_TMDSCLK_STB_CHK_5);
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 12  
+
+ 668   3                                                      #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+                                                              g_HdmirxVedioChangeFlag++;
+                                                              #endif
+ 671   3              }
+ 672   2          }
+ 673   1      
+ 674   1          //monitor rxpll lost lock event while tmds mode(hdmi1.4/hdmi2.0).
+ 675   1          if (ucMinState > STATE_HDMIRX_TMDSCLK_RXPLL_CONFIG_6)
+ 676   1          {
+ 677   2              if((g_stHdmiRx.ucHdmiVer <= HDMI20)&&(Drv_System_IntFlagGet(IRQ_RXPLL_UNLOCK_INT) == TRUE))
+ 678   2              {
+ 679   3                  printLT(PRINT_PRIO_TEST, "\nRxpll unlock");
+ 680   3                  Drv_System_IntClr(IRQ_RXPLL_UNLOCK_INT);
+ 681   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_TMDSCLK_STB_CHK_5);
+ 682   3                                                      #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+                                                              g_HdmirxVedioChangeFlag++;
+                                                              #endif
+ 685   3              }
+ 686   2          }
+ 687   1      
+ 688   1          #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+ 689   1          if(ucMinState > STATE_HDMIRX_WAIT_FRL_TRAIN_7)
+ 690   1          {
+ 691   2              //monitor frl rate change
+ 692   2              if((g_stHdmiRx.ucHdmiVer == HDMI21)&&(Mod_FrlRx_TrainDoneChk() == FALSE))
+ 693   2              {
+ 694   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_WAIT_FRL_TRAIN_7);
+ 695   3              }
+ 696   2      
+ 697   2              //monitor hdcp reauth
+ 698   2              #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+ 699   2              Drv_HdcpRx_ReauthHdcpStateClr();
+ 700   2              #endif
+ 701   2          }
+ 702   1          //monitor pcr unstable status
+ 703   1          if(ucMinState > STATE_HDMIRX_PCR_CONFIG_10)
+ 704   1          {
+ 705   2              if ((g_stHdmiRx.ucHdmiVer == HDMI21)&&(Mod_HdmiRx_PcrStableCheck() == UNSTABLE))
+ 706   2              {
+ 707   3                  printLT(PRINT_PRIO_TEST, "\nPcr unstable");
+ 708   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_PCR_CONFIG_10);
+ 709   3                                                      #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+                                                              g_HdmirxVedioChangeFlag++;
+                                                              #endif
+ 712   3              }
+ 713   2          }
+ 714   1          #endif
+ 715   1      
+ 716   1          //monitor color space changes event and updata color space info.
+ 717   1          if(ucMinState > STATE_HDMIRX_DEPACKET_CHECK_11)
+ 718   1          {
+ 719   2              if(Mod_HdmiRx_PcrColorSpaceUpdata() == TRUE)
+ 720   2              {
+ 721   3                  printLT(PRINT_PRIO_TEST, "\nColor space change");
+ 722   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_DEPACKET_CHECK_11);
+ 723   3              }
+ 724   2          }
+ 725   1      
+ 726   1          //monitor pps update
+ 727   1          #if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED) || (HDMIRX_DSC_BYPASS_SUPPORT == ENABLED))
+ 728   1          if(ucMinState > STATE_HDMIRX_PPS_CHECK_12)
+ 729   1          {
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 13  
+
+ 730   2              if (g_stHdmiRx.b1PpsInfoDet != Drv_HdmiRx_DscDecState())
+ 731   2              {
+ 732   3                  printLT(PRINT_PRIO_TEST, "\nDsc state chg");
+ 733   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_PPS_CHECK_12);
+ 734   3              }
+ 735   2              if(Drv_System_IntFlagGet(IRQ_HDMIRX_PPS_DATA_CHG_INT) == TRUE)
+ 736   2              {
+ 737   3                  Drv_System_IntClr(IRQ_HDMIRX_PPS_DATA_CHG_INT);
+ 738   3                  printLT(PRINT_PRIO_TEST, "\nDsc pps info chg");
+ 739   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_PPS_CHECK_12);
+ 740   3              }
+ 741   2          }
+ 742   1          #endif
+ 743   1      
+ 744   1          //monitor timing chg
+ 745   1          if(ucMinState > STATE_HDMIRX_VIDEO_CHECK_15)
+ 746   1          {
+ 747   2              if ((g_stHdmiRx.ucHdmiVer == HDMI21)&&(Drv_System_VidChkStateGet(ENABLED) == UNSTABLE))
+ 748   2              {
+ 749   3                  printLT(PRINT_PRIO_TEST, "\nTiming change");
+ 750   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_PCR_CONFIG_10);
+ 751   3                  ucMinState = MIN(ucMinState,STATE_HDMIRX_PCR_CONFIG_10);
+ 752   3                                                      #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+                                                              g_HdmirxVedioChangeFlag++;
+                                                              #endif
+ 755   3              }
+ 756   2              if ((g_stHdmiRx.ucHdmiVer <= HDMI20)&&(Drv_System_VidChkStateGet(ENABLED) == UNSTABLE))
+ 757   2              {
+ 758   3                  printLT(PRINT_PRIO_TEST, "\nVid change");
+ 759   3                  Mod_HdmiRx_MsgNotify(HDMIRX_VID_CHK_CHG_EVENT);
+ 760   3                                                      #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+                                                              g_HdmirxVedioChangeFlag++;
+                                                              #endif
+ 763   3              }
+ 764   2          }
+ 765   1          //monitor VRR
+ 766   1          #if HDMIRX_VRR_SUPPORT == ENABLED
+ 767   1          if(ucMinState > STATE_HDMIRX_VIDEO_CHECK_15)
+ 768   1          {
+ 769   2              if (Drv_System_IntFlagGet(IRQ_HDMIRX_VRRSTART_INT) == TRUE)
+ 770   2              {
+ 771   3                  if(ucVrrDet_Cnt > 1)
+ 772   3                  {
+ 773   4                     printLT(PRINT_PRIO_TEST, "\nVrr On");
+ 774   4                      ucVrrDet_Cnt = 0;
+ 775   4                      g_stHdmiRx.b1VrrEn = ENABLED;
+ 776   4                      Drv_System_IntClr(IRQ_HDMIRX_VRRSTART_INT);
+ 777   4                      Mod_HdmiRx_MsgNotify(HDMIRX_VRR_NOTIFY_EVENT);
+ 778   4                  }
+ 779   3                  else
+ 780   3                  {
+ 781   4                      ucVrrDet_Cnt++;
+ 782   4                  }
+ 783   3              }
+ 784   2              else if(Drv_System_IntFlagGet(IRQ_HDMIRX_VRRSTOP_INT) == TRUE)
+ 785   2              {
+ 786   3                  if(ucVrrDet_Cnt > 1)
+ 787   3                  {
+ 788   4                     printLT(PRINT_PRIO_TEST, "\nVrr Off");
+ 789   4                      ucVrrDet_Cnt = 0;
+ 790   4                      g_stHdmiRx.b1VrrEn = DISABLED;
+ 791   4                      Drv_System_IntClr(IRQ_HDMIRX_VRRSTOP_INT);
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 14  
+
+ 792   4                      Mod_HdmiRx_MsgNotify(HDMIRX_VRR_NOTIFY_EVENT);
+ 793   4                  }
+ 794   3                  else
+ 795   3                  {
+ 796   4                      ucVrrDet_Cnt++;
+ 797   4                  }
+ 798   3              }
+ 799   2          }
+ 800   1          #endif
+ 801   1      
+ 802   1          //monitor hdcp verison change
+ 803   1          #if HDMIRX_HDCP_DEC_MODE != NO_HDCP
+ 804   1          if (ucMinState > STATE_HDMIRX_HDCP_VER_CHK_16)
+ 805   1          {
+ 806   2              ucHdpcVer = Drv_HdcpRx_VerGet();
+ 807   2              if (g_stHdmiRx.ucHdcpVersion != ucHdpcVer)
+ 808   2              {
+ 809   3                  g_stHdmiRx.ucHdcpVersion = ucHdpcVer;
+ 810   3                  printLT(PRINT_PRIO_TEST, "\nHdcpRx Version = 0x%02bx",g_stHdmiRx.ucHdcpVersion);
+ 811   3                  Mod_HdmiRx_MsgNotify(HDMIRX_HDCP_VER_CHG_EVENT);
+ 812   3              }
+ 813   2          }
+ 814   1          #endif
+ 815   1      
+ 816   1          //monitor audio chg
+ 817   1          if(ucMinState > STATE_HDMIRX_AUDIO_INFO_CHK_17)
+ 818   1          {
+ 819   2      //        if ((Drv_Audio_AcrMute() == FALSE) && (Mod_HdmiRx_AudioChannelUpdata() == TRUE))
+ 820   2              if (Drv_Audio_FsValStbCheck() == TRUE)
+ 821   2              {
+ 822   3                  Mod_HdmiRx_MsgNotify(HDMIRX_AUDIO_CHG_EVENT);
+ 823   3                  printLT(PRINT_PRIO_TEST, "\nAudio info chg");
+ 824   3              }
+ 825   2              Mod_HdmiRx_AudioSampleFlagChk();
+ 826   2          }
+ 827   1      
+ 828   1          //monitor hdr
+ 829   1          if(ucMinState == STATE_HDMIRX_PLAY_BACK_18)
+ 830   1          {
+ 831   2              // monitor dobly hdr
+ 832   2              if((Drv_System_IntFlagGet(IRQ_HDMIRX_VSI_INT) == TRUE) &&(Drv_System_PktDataChk(VSI_INFO_FRAME_0X8
+             -1) == TRUE))
+ 833   2              {
+ 834   3                  Drv_System_IntClr(IRQ_HDMIRX_VSI_INT);
+ 835   3                  g_stHdmiRx.b1HdrEn = ENABLED;
+ 836   3                  Mod_HdmiRx_MsgNotify(HDMIRX_DOBLY_HDR_NOTIFY_EVENT);
+ 837   3              }
+ 838   2              //monitor static HDR
+ 839   2              if(Drv_System_IntFlagGet(IRQ_HDMIRX_STATICHDR_INT) == TRUE)
+ 840   2              {
+ 841   3                  Drv_System_IntClr(IRQ_HDMIRX_STATICHDR_INT);
+ 842   3                  if(Drv_System_PktDataChk(HDR_INFO_FRAME_0X87)==TRUE)
+ 843   3                  {
+ 844   4                      g_stHdmiRx.b1HdrEn = ENABLED; 
+ 845   4                      Mod_HdmiRx_MsgNotify(HDMIRX_STATIC_HDR_NOTIFY_EVENT);             
+ 846   4                  }
+ 847   3              }
+ 848   2              #if HDR10PLUS==ENABLED  
+                      //monitor dynamic HDR
+                      if((Drv_System_IntFlagGet(IRQ_HDMIRX_VSI_INT) == TRUE)&&(Drv_System_PktDataChk(VSI_INFO_FRAME_0X81
+             -) == 2) )
+                      {
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 15  
+
+                            
+                          Drv_System_IntClr(IRQ_HDMIRX_VSI_INT);
+                          g_stHdmiRx.b1HdrEn = ENABLED;
+                          Mod_HdmiRx_MsgNotify(HDMIRX_DYNAMIC_HDR_NOTIFY_EVENT);
+                      }
+                      #endif  
+ 858   2          }
+ 859   1      
+ 860   1      #if 0
+                  if(ucMinState == STATE_HDMIRX_PLAY_BACK_18)
+                  {
+                      if (g_stHdmiRx.ucHdmiVer <= HDMI14)
+                      {
+                          if ((g_stHdmiRx.ulRxTmdsClk < 50000) && (Drv_System_VidChkStateGet(ENABLED) == UNSTABLE))
+                          {
+                              Mod_HdmiRx_VsyncErrorCheck(ENABLED);
+                          }
+                      }
+                  }
+              #endif
+ 872   1      
+ 873   1          if (ucMinState != g_stHdmiRx.ucRxState)
+ 874   1          {
+ 875   2              Mod_HdmiRx_SetState(ucMinState); 
+ 876   2          }
+ 877   1      }
+ 878          
+ 879          void Mod_HdmiRx_StateHandler(void)
+ 880          {
+ 881   1          static u32 ulCurrentTime = 0;
+ 882   1      
+ 883   1          switch(g_stHdmiRx.ucRxState)
+ 884   1          {
+ 885   2              case STATE_HDMIRX_POWER_ON_1:
+ 886   2                  Drv_HdmiRx_PowerOnInit();
+ 887   2                  Mod_HdmiRx_HpdLowAction();
+ 888   2                  #if TYPECTX_EN == ENABLED
+                          DRV_CCPHY_DigSet();
+                          #endif
+ 891   2                  //如果6711供电不从UCC来，则需要断开CC
+ 892   2      //            BKA2_A9_REG &= BIT1_0;
+ 893   2      //            Ocm_Delay1ms(100);
+ 894   2      //            BKA2_A9_REG |= BIT1_1;
+ 895   2                  Mod_HdmiRx_SetState(STATE_HDMIRX_WAITE_SOURCE_2);
+ 896   2                  break;
+ 897   2      
+ 898   2              case STATE_HDMIRX_WAITE_SOURCE_2:
+ 899   2                  if(g_stHdmiRx.b1SourceDet == HIGH)
+ 900   2                  {
+ 901   3                      #ifdef NVIDIA_FW_EN
+                              #if (SLEEP_MODE == ENABLED)
+                              Mode_Sleep_HdmiRxPowerdown(DISABLED);
+                              #endif
+                              #endif
+ 906   3                      Mod_HdmiRx_SetState(STATE_HDMIRX_DOWNSTREAM_READY_3);
+ 907   3                      printLT(PRINT_PRIO_HIG,"\nHdmi rx connect");
+ 908   3                  }
+ 909   2                  else
+ 910   2                  {
+ 911   3                      #ifdef NVIDIA_FW_EN
+                              #if (SLEEP_MODE == ENABLED)
+                              Mode_Sleep_HdmiRxPowerdown(ENABLED);
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 16  
+
+                              #endif
+                              #endif
+ 916   3                  }
+ 917   2                  break;
+ 918   2      
+ 919   2              case STATE_HDMIRX_DOWNSTREAM_READY_3:
+ 920   2                  if (g_stHdmiRx.b1DownstreamDeviceReady == TRUE)//edid read OK
+ 921   2                  {
+ 922   3                      #ifdef NVIDIA_FW_EN
+                              #if (CUSTOMER_DEFINED == ENABLED)
+                              if(BKE0_B0_REG&BIT0_1)
+                              #endif
+                              #endif
+ 927   3                      {
+ 928   4                          Mod_HdmiRx_SetState(STATE_HDMIRX_SET_HPD_4);
+ 929   4                      }
+ 930   3                  }
+ 931   2                  break;
+ 932   2      
+ 933   2              case STATE_HDMIRX_SET_HPD_4:
+ 934   2                  if(g_stHdmiRx.b1RxStateChanged == TRUE)
+ 935   2                  {
+ 936   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+ 937   3                      Drv_Sys_ChipRxSrcSel(CHIPRX_SRC_SEL_HDMIRX);
+ 938   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+ 939   3                  }
+ 940   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_10) == TRUE)
+ 941   2                  {
+ 942   3                      Drv_HdmiRx_EdidLoad(szEdidData);
+ 943   3                      Drv_HdmiRx_SettingInit();//put it in STATE_HDMIRX_POWER_ON_1? hpd low action
+ 944   3                      Mod_HdmiRx_VarInit();
+ 945   3                      #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+ 946   3                      Mod_FrlRx_VarInit();
+ 947   3                      #endif
+ 948   3                      Drv_HdmiRx_HpdSet(HIGH);
+ 949   3                      Mod_HdmiRx_TimeOutCheck(DISABLED);
+ 950   3                      Mod_HdmiRx_SetState(STATE_HDMIRX_TMDSCLK_STB_CHK_5);
+ 951   3                  }
+ 952   2                  break;
+ 953   2      
+ 954   2              case STATE_HDMIRX_TMDSCLK_STB_CHK_5://
+ 955   2                  if(g_stHdmiRx.b1RxStateChanged == TRUE)
+ 956   2                  {
+ 957   3                      //close hdmi frl interrupt
+ 958   3                      Drv_System_IntSet(IRQ_HDMIRX_FRL_INT, OFF);//important
+ 959   3                      Drv_System_IntClr(IRQ_TMDS_UNSTB_INT);
+ 960   3                      Drv_HdmiRx_PllModeSet(HDMI20);
+ 961   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+ 962   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+ 963   3                  }
+ 964   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_10) == TRUE)
+ 965   2                  {
+ 966   3                      if (Drv_HdmiRx_Tmds_ClkStbChk() == STABLE)
+ 967   3                      {
+ 968   4                          g_stHdmiRx.ucHdmiVer = Drv_HdmiRx_VersionGet();
+ 969   4                          Drv_HdmiRx_Tmds_PhyCtleSet(g_stHdmiRx.ucHdmiVer);
+ 970   4                          Drv_HdmiRx_ClkMux(g_stHdmiRx.ucHdmiVer);
+ 971   4                          Mod_HdmiRx_SetState(STATE_HDMIRX_TMDSCLK_RXPLL_CONFIG_6);
+ 972   4                      }
+ 973   3                  }
+ 974   2                  break;
+ 975   2      
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 17  
+
+ 976   2              case STATE_HDMIRX_TMDSCLK_RXPLL_CONFIG_6://
+ 977   2                  if (g_stHdmiRx.b1RxStateChanged == TRUE)
+ 978   2                  {
+ 979   3                      Drv_HdmiRx_RxpllDivSet(g_stHdmiRx.ucHdmiVer);
+ 980   3                      Drv_HdmiRx_ScrambeTimerSet(g_stHdmiRx.ucHdmiVer);
+ 981   3                      Drv_HdmiRx_Tmds_PllCali();
+ 982   3                      Drv_HdmiRx_Tmds_PllVcoReset();
+ 983   3                      g_stHdmiRx.ucEqScanCnt = 0;
+ 984   3                      g_stHdmiRx.b1EqScanEn = ENABLED;
+ 985   3                      Drv_HdmiRx_NewErrorStatistic(ENABLED);
+ 986   3                      #ifdef NVIDIA_FW_EN
+                              #if (CUSTOMER_DEFINED == ENABLED) 
+                              Drv_IOSoftLevel_Set(GPIO17_SCLKA, HIGH); //for nvidia case 1: hdmi rx stable 0: hdmi rx un
+             -stable      
+                              if(Drv_HdmiRx_HdmiModeGet()== TRUE)
+                              {
+                                  Drv_IOSoftLevel_Set(GPIO16_MCLKA, HIGH); //for nvidia case 1: hdmi mode, 0:dvi mode
+                              }
+                              else
+                              {
+                                  Drv_IOSoftLevel_Set(GPIO16_MCLKA, LOW); //for nvidia case 1: hdmi mode, 0:dvi mode
+                              }
+                              #endif
+                              #endif
+ 999   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1000   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1001   3                  }
+1002   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_5) == TRUE)
+1003   2                  {
+1004   3                      if (Drv_HdmiRx_Tmds_RxPllCaliCheck() == SUCCESS)
+1005   3                      {
+1006   4                          if (g_stHdmiRx.b1EqScanEn == ENABLED)
+1007   4                          {
+1008   5                              Drv_HdmiRx_ErrValidClr(DISABLED);
+1009   5      //                        Drv_HdmiRx_Tmds_PllVcoReset();
+1010   5                              Drv_HdmiRx_PhyRst();
+1011   5                              Mod_HdmiRxEq_Tmds_Set();
+1012   5                              Drv_System_IntClr(IRQ_RXPLL_UNLOCK_INT);
+1013   5                              g_stHdmiRx.b1EqScanEn = DISABLED;
+1014   5                          }
+1015   4                          if (Mod_HdmiRxEq_Tmds_StateGet(LANE_ALL) == SUCCESS)
+1016   4                          {
+1017   5                              printLT(PRINT_PRIO_HIG, "\nHdmi rx eq done");
+1018   5                              Drv_HdcpRx_StateClear();
+1019   5                              Drv_HdmiRx_Tmds_ErrClr();
+1020   5                              Drv_HdmiRx_LogicalReset();//hdmi2.0
+1021   5                              Drv_HdmiRx_NewErrorStatistic(DISABLED);
+1022   5                              Mod_HdmiRx_SetState(STATE_HDMIRX_DEPACKET_CHECK_11);
+1023   5                          }
+1024   4                          else if(Mod_HdmiRxEq_Tmds_StateGet(LANE_ALL) == FAIL)
+1025   4                          {
+1026   5                              g_stHdmiRx.ucEqScanCnt++;
+1027   5                              g_stHdmiRx.b1EqScanEn = ENABLED;
+1028   5                          }
+1029   4                      }
+1030   3                  }
+1031   2                  break;
+1032   2      
+1033   2              #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT
+1034   2              case STATE_HDMIRX_WAIT_FRL_TRAIN_7:
+1035   2                  if(g_stHdmiRx.b1RxStateChanged == TRUE)
+1036   2                  {
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 18  
+
+1037   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1038   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1039   3                  }
+1040   2                  Mod_FrlRx_FrlStartCheck();
+1041   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_200) == TRUE)
+1042   2                  {
+1043   3                      if(Mod_FrlRx_TrainDoneChk() == TRUE)//rx trainig done
+1044   3                      {
+1045   4                          Drv_HdcpRx_StateClear();
+1046   4                          printLT(PRINT_PRIO_TEST, "\nFrl done rate = 0x%02bx ", BKCD_B5_REG & 0x0f);
+1047   4                          Mod_HdmiRx_SetState(STATE_HDMIRX_DESKEW_CHECK_8);
+1048   4                      }
+1049   3                  }
+1050   2                  break;
+1051   2      
+1052   2              case STATE_HDMIRX_DESKEW_CHECK_8:
+1053   2                  if(g_stHdmiRx.b1RxStateChanged == TRUE)
+1054   2                  {
+1055   3                      Drv_HdmiRx_Reset(HDMI_RX_FIFO_RST);//SOLVE astro skew over design issue
+1056   3                      Drv_HdmiRx_Reset(HDMI_FRL_DEC_RST);
+1057   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1058   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1059   3                  }
+1060   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_300) == TRUE)
+1061   2                  {
+1062   3                      Drv_HdmiRx_Reset(HDMI_RX_FIFO_RST);//SOLVE astro skew over design issue
+1063   3                      Drv_HdmiRx_Reset(HDMI_FRL_DEC_RST);
+1064   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1065   3                  }
+1066   2                  if (Drv_HdmiRx_DeSkewCheck() == SUCCESS)//keep in end for time may > 300ms
+1067   2                  {
+1068   3                      Drv_HdmiRx_Frl_ErrClr();//FRL decode rst will cause error
+1069   3                      printLT(PRINT_PRIO_HIG, "\nHdmi rx de-skew succ");
+1070   3                      Mod_HdmiRx_SetState(STATE_HDMIRX_LINK_VIDTIMING_CHK_9);
+1071   3                  }
+1072   2                  break;
+1073   2      
+1074   2              case STATE_HDMIRX_LINK_VIDTIMING_CHK_9:
+1075   2                  if(g_stHdmiRx.b1RxStateChanged == TRUE)
+1076   2                  {
+1077   3                      Drv_HdmiRx_Reset(HDMI_FEC_DEC_RST);
+1078   3                      Drv_HdmiRx_Reset(HDMI_FRL_DEPKT_RST);
+1079   3                      Mod_HdmiRx_StateTimeOutChk(DISABLED);
+1080   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1081   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1082   3                  }
+1083   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_300) == TRUE)//keep in end for time may > 300ms
+1084   2                  {
+1085   3                      Drv_HdmiRx_Reset(HDMI_FEC_DEC_RST);
+1086   3                      Drv_HdmiRx_Reset(HDMI_FRL_DEPKT_RST);
+1087   3                      Mod_HdmiRx_StateTimeOutChk(ENABLED);
+1088   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1089   3                  }
+1090   2                  if (Drv_HdmiRx_LinkVidTimingChk() == SUCCESS)
+1091   2                  {
+1092   3                      Drv_HdmiRx_Frl_FecErrClr();
+1093   3                      printLT(PRINT_PRIO_HIG, "\nHdmi rx link timing check succ");
+1094   3                      Mod_HdmiRx_SetState(STATE_HDMIRX_PCR_CONFIG_10);
+1095   3                  }
+1096   2                  break;
+1097   2      
+1098   2              case STATE_HDMIRX_PCR_CONFIG_10:
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 19  
+
+1099   2                  if (g_stHdmiRx.b1RxStateChanged == TRUE)
+1100   2                  {
+1101   3                      Drv_HdmiRx_PcrClkMux();
+1102   3                      #if HDMIRX_DSC_BYPASS_SUPPORT == ENABLED
+1103   3                      Drv_HdmiRxDscBy_ParaInit();
+1104   3                      Drv_HdmiRxDscBy_Init();
+1105   3                      #endif
+1106   3                      #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+1107   3                      Drv_HdmiRxDscDec_ParaInit();
+1108   3                      Drv_HdmiRxDscDec_Init();
+1109   3                      #endif
+1110   3      //                Drv_HdmiRx_Reset(HDMI_PCR_RST);//slove that 4K120 RGB 10bit print "hdmi rx de-pkt err."
+1111   3                      Mod_HdmiRx_PcrFreqSetChk(DISABLED);
+1112   3                      Mod_HdmiRx_StateTimeOutChk(DISABLED);
+1113   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1114   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1115   3                  }
+1116   2                  Mod_HdmiRx_PcrFreqSetChk(ENABLED);
+1117   2                  if (Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_300) == TRUE) //keep in end for time may 200ms
+1118   2                  {
+1119   3                      printLT(PRINT_PRIO_HIG, "\nHdmirx pcr not stable");
+1120   3                      Mod_HdmiRx_StateTimeOutChk(ENABLED);
+1121   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1122   3                  }
+1123   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_100) == TRUE)
+1124   2                  {
+1125   3                      if (Mod_HdmiRx_PcrStableCheck() == STABLE)
+1126   3                      {
+1127   4                          #ifdef NVIDIA_FW_EN
+                                  #if (CUSTOMER_DEFINED == ENABLED)
+                                  Drv_IOSoftLevel_Set(GPIO17_SCLKA, HIGH); //for nvidia case 1: hdmi rx stable 0: hdmi r
+             -x unstable
+                                  #endif
+                                  #endif
+1132   4                          Mod_HdmiRx_SetState(STATE_HDMIRX_DEPACKET_CHECK_11);
+1133   4                      }
+1134   3                  }
+1135   2                  break;
+1136   2              #endif
+1137   2      
+1138   2              case STATE_HDMIRX_DEPACKET_CHECK_11:
+1139   2                  if(g_stHdmiRx.b1RxStateChanged == TRUE)
+1140   2                  {
+1141   3                      Drv_HdmiRx_Reset(HDMI_RX_DEPKT_RST);
+1142   3                      Drv_HdmiRx_PktClr(HDMIRX_EMP_CLR);
+1143   3                      Drv_System_IntClr(IRQ_HDMIRX_VRRSTOP_INT);
+1144   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1145   3                      g_stHdmiRx.ucBitDepth          = 0xff;
+1146   3                      g_stHdmiRx.ucPixelEncoding     = 0xff;
+1147   3                      g_stHdmiRx.ucColorimetryFormat = 0xff;
+1148   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1149   3                  }
+1150   2                  Mod_HdmiRx_PcrColorSpaceUpdata();
+1151   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_200) == TRUE)
+1152   2                  {
+1153   3                      if(Drv_HdmiRx_PacketInfoCheck() == FAIL)
+1154   3                      {
+1155   4                          Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1156   4                          printLT(PRINT_PRIO_TEST, "\nHdmi rx de-pkt err.");
+1157   4                      }
+1158   3                      else
+1159   3                      {
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 20  
+
+1160   4                          if (g_stHdmiRx.ucHdmiVer != HDMI21)
+1161   4                          {
+1162   5                              Drv_HdmiRx_TenBitSet();
+1163   5                              Mod_HdmiRx_TenbitPcrSet();
+1164   5                          }
+1165   4                          Mod_HdmiRx_SetState(STATE_HDMIRX_PPS_CHECK_12);
+1166   4                      }
+1167   3                  }
+1168   2                  break;
+1169   2      
+1170   2              case STATE_HDMIRX_PPS_CHECK_12:
+1171   2                  if (g_stHdmiRx.b1RxStateChanged == TRUE)
+1172   2                  {
+1173   3                      Drv_System_IntSet(IRQ_HDMIRX_PPS_DATA_CHG_INT, ON);
+1174   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1175   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1176   3                  }
+1177   2                  #if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED) || (HDMIRX_DSC_BYPASS_SUPPORT == ENABLED))
+1178   2                  if (Drv_HdmiRx_DscDecState() == ENABLED)
+1179   2                  {
+1180   3                       Drv_Sys_DecPowerDomain(FALSE);
+1181   3                       Drv_System_SramPathSet(HDMIRX_INIT_SET_PATH);
+1182   3                                                                       //Ocm_Delay1ms(200);
+1183   3                       //BKE5_6B_REG = 0xd0;
+1184   3                       //printLT(PRINT_PRIO_TEST, "\nBKE5_6B_REG = 0x%02bx,0x%02bx", BKE5_6B_REG,BKE1_40_REG);
+1185   3                       Drv_HdmiRxDscBy_DscInfoGet();
+1186   3                                                                      //Drv_HdmiRxDscBy_InfoDisplay(); 
+1187   3                                                                      //printLT(PRINT_PRIO_TEST, "\nCompressRatio : %-4bd  Bpp          : %-4d", g_stHdmiRxDscByInfo.ucC
+             -ompressRatio, g_stHdmiRxDscByInfo.usBpp);         
+1188   3                      #if HDMIRX_DSC_BYPASS_SUPPORT == ENABLED
+1189   3                      if(( Drv_HdmiRxDscBy_BppGet() == DISABLED)||(g_stHdmiRxDscByInfo.ucSliceNum ==8))
+1190   3                      {                          
+1191   4                          Drv_HdmiRxDscBy_RxInit();
+1192   4                          Drv_HdmiRxDscBy_DscInfoGet();
+1193   4                          printLT(PRINT_PRIO_HIG, "\nDrv_HdmiRxDscBy_BppGet");                        
+1194   4                      }
+1195   3                      else                
+1196   3                      #endif 
+1197   3                                                                      {         
+1198   4                                                                                #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+1199   4                                                                                      Drv_HdmiRxDscDec_RxInit();
+1200   4                                                                                      Drv_HdmiRxDscDec_DscInfoGet(); 
+1201   4                                                                                      printLT(PRINT_PRIO_HIG, "\nDrv_HdmiRxDscDec_BPPGet"); 
+1202   4                                                                                #endif
+1203   4                                                                      }
+1204   3      //                #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+1205   3      //                Drv_HdmiRxDscDec_RxInit();
+1206   3      //                Drv_HdmiRxDscDec_DscInfoGet();
+1207   3      //                #endif
+1208   3      //                #if HDMIRX_DSC_BYPASS_SUPPORT == ENABLED
+1209   3      //                Drv_HdmiRxDscBy_RxInit();
+1210   3      //                Drv_HdmiRxDscBy_DscInfoGet();
+1211   3      //                #endif
+1212   3                      g_stHdmiRx.b1PpsInfoDet = TRUE;
+1213   3                      Drv_System_IntClr(IRQ_HDMIRX_PPS_DATA_CHG_INT);
+1214   3                      printLT(PRINT_PRIO_HIG, "\nHdmi rx have pps info");
+1215   3                      Mod_HdmiRx_SetState(STATE_HDMIRX_SECPCR_CONFIG_13);
+1216   3                  }
+1217   2                  else
+1218   2                  #endif
+1219   2                  {
+1220   3                      if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_10) == TRUE)
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 21  
+
+1221   3                      {
+1222   4                          g_stHdmiRx.b1PpsInfoDet = FALSE;
+1223   4                          Drv_Sys_DecPowerDomain(TRUE);
+1224   4                          Mod_HdmiRx_SetState(STATE_HDMIRX_VIDEO_CHECK_15);
+1225   4                      }
+1226   3                  }
+1227   2                  break;
+1228   2      
+1229   2              #if ((HDMIRX_DSC_DEC_SUPPORT == ENABLED) || (HDMIRX_DSC_BYPASS_SUPPORT == ENABLED))
+1230   2              case STATE_HDMIRX_SECPCR_CONFIG_13:
+1231   2                  if (g_stHdmiRx.b1RxStateChanged == TRUE)
+1232   2                  {
+1233   3                      Drv_HdmiRx_SecPcrClkMux();
+1234   3                      #if CHIP_SEL == LT86121GXE
+                              Drv_HdmiRxDscDec_DscPcrPllCal();
+                              #else
+1237   3                      Mod_HdmiRx_SecPcrFreqSetChk(DISABLED);
+1238   3                      #endif
+1239   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1240   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1241   3                  }
+1242   2                  #if CHIP_SEL != LT86121GXE
+1243   2                  Mod_HdmiRx_SecPcrFreqSetChk(ENABLED);
+1244   2                  #endif
+1245   2                  if (Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_150) == TRUE) //keep in end for time may > 150ms
+1246   2                  {
+1247   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1248   3                      printLT(PRINT_PRIO_HIG, "\nSecpcr not stable");
+1249   3                  }
+1250   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_10) == TRUE)
+1251   2                  {
+1252   3                      if(Mod_HdmiRx_SecPcrStableCheck() == STABLE)
+1253   3                      {
+1254   4                          Mod_HdmiRx_SetState(STATE_HDMIRX_DSC_CONFIG_14);
+1255   4                      }
+1256   3                  }
+1257   2                  break;
+1258   2      
+1259   2              case STATE_HDMIRX_DSC_CONFIG_14://0a
+1260   2                  if (g_stHdmiRx.b1RxStateChanged == TRUE)
+1261   2                  {
+1262   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1263   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1264   3                  }
+1265   2                  if (Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_20) == TRUE)
+1266   2                  {
+1267   3                         #if HDMIRX_DSC_BYPASS_SUPPORT == ENABLED
+1268   3                           if(( Drv_HdmiRxDscBy_BppGet() == DISABLED)||(g_stHdmiRxDscByInfo.ucSliceNum ==8) )   
+             -           
+1269   3                          {                           
+1270   4                                  Drv_HdmiRxDscBy_TimingGet();
+1271   4                                  Drv_HdmiRx_SyncPolSet(ENABLED);
+1272   4                                  Drv_HdmiRxDscBy_ModuleEnable();                                               
+1273   4                          }
+1274   3                          else 
+1275   3                          #endif  
+1276   3                          {
+1277   4                          #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+1278   4                              Drv_HdmiRxDscDec_TimingGet();
+1279   4                              Drv_HdmiRx_SyncPolSet(ENABLED);
+1280   4                              Drv_HdmiRxDscDec_ModuleEnable();
+1281   4                              
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 22  
+
+1282   4                          #endif
+1283   4                          }
+1284   3                          
+1285   3                      Mod_HdmiRx_SetState(STATE_HDMIRX_VIDEO_CHECK_15);
+1286   3                  }
+1287   2                  break;
+1288   2              #endif
+1289   2      
+1290   2              case STATE_HDMIRX_VIDEO_CHECK_15:
+1291   2                  if (g_stHdmiRx.b1RxStateChanged == TRUE)
+1292   2                  {
+1293   3                      Drv_System_VidChkSet(CSC_OUT_VIDEO);
+1294   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1295   3                      g_stHdmiRx.b1VrrEn = DISABLED;
+1296   3                      g_stHdmiRx.b1HdrEn = DISABLED;
+1297   3                      Drv_System_VidChkStateGet(DISABLED);
+1298   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1299   3                  }
+1300   2                  if (Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_400) == TRUE)
+1301   2                  {
+1302   3                      if(Drv_System_VidChkStateGet(ENABLED) == STABLE)
+1303   3                      {
+1304   4                          Drv_Audio_AcrLogicRst();
+1305   4                          Mod_HdmiRx_SetState(STATE_HDMIRX_HDCP_VER_CHK_16);
+1306   4                      }
+1307   3                  }
+1308   2                  break;
+1309   2      
+1310   2              case STATE_HDMIRX_HDCP_VER_CHK_16://hdcp version check
+1311   2                  if (g_stHdmiRx.b1RxStateChanged == TRUE)
+1312   2                  {
+1313   3                      g_stHdmiRx.ucHdcpVersion    = NO_HDCP;
+1314   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1315   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1316   3                  }
+1317   2                  Mod_HdmiRx_SetState(STATE_HDMIRX_AUDIO_INFO_CHK_17);
+1318   2                  break;
+1319   2      
+1320   2              case STATE_HDMIRX_AUDIO_INFO_CHK_17://audio info check
+1321   2                  if (g_stHdmiRx.b1RxStateChanged == TRUE)
+1322   2                  {
+1323   3                      g_stHdmiRx.ucLayout  = 0xff;
+1324   3                      g_stHdmiRx.ucChannel = 0xff;
+1325   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+1326   3                      g_stHdmiRx.b1RxStateChanged = FALSE;
+1327   3                  }
+1328   2                  Mod_HdmiRx_SetState(STATE_HDMIRX_PLAY_BACK_18);
+1329   2                  break;
+1330   2      
+1331   2              case STATE_HDMIRX_PLAY_BACK_18:
+1332   2                  break;
+1333   2      
+1334   2              default:
+1335   2                  break;
+1336   2          }
+1337   1      }
+1338          
+1339          void Mod_HdmiRx_Handler(void)
+1340          {
+1341   1          Mod_HdmiRx_SourceDetProc();
+1342   1          Mod_HdmiRx_StateJudge();
+1343   1          Mod_HdmiRx_StateHandler();
+C51 COMPILER V9.53.0.0   MODHDMIRX                                                         02/13/2025 10:14:07 PAGE 23  
+
+1344   1      }
+1345          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   5721    ----
+   CONSTANT SIZE    =    802    ----
+   XDATA SIZE       =     41     104
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

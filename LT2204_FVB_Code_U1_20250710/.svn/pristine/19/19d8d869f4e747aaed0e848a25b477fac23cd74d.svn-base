@@ -1,0 +1,1132 @@
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODDPTX
+OBJECT MODULE PLACED IN .\Objects\ModDpTx.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModDpTx.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE) R
+                    -EGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRINT
+                    -(.\Listings\ModDpTx.lst) OBJECT(.\Objects\ModDpTx.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: ChipDpTx.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.05.30
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          #if TX_PORT_SIGN == DP_PORT
+  11          
+  12          DpTx_S g_stDpTx;
+  13          LtTiming_S g_stDpTxTiming;
+  14          
+  15          
+  16          void Mod_DpTx_PowerOnInit(void)
+  17          {
+  18   1          memset(&g_stDpTx,0,sizeof(DpTx_S));
+  19   1          g_stDpTx.ucTxState = STATE_DPTX_POWER_ON_1;
+  20   1      }
+  21          
+  22          void Mod_DpTx_VarInit(void)
+  23          {
+  24   1          #if CHIP_SEL == LT6711GXE
+  25   1          LT6711GXE_DpTxVarInit();
+  26   1          #endif
+  27   1      }
+  28          
+  29          void Mod_DpTx_GpioInit(void)
+  30          {
+  31   1          #if CHIP_SEL == LT6711GXE
+  32   1          LT6711GXE_CCGpioInit();
+  33   1          #endif
+  34   1      }
+  35          
+  36          void Mod_DpTx_DpOrTypecDet(void)
+  37          {
+  38   1          #if CHIP_SEL == LT6711GXE
+  39   1          LT6711GXE_DpTxDpOrTypecDet();
+  40   1          #endif
+  41   1      }
+  42          
+  43          void Mod_DpTx_MsgNotify(u8 ucEvent)
+  44          {
+  45   1          #if CHIP_SEL == LT6711GXE
+  46   1          LT6711GXE_DpTxMsgNotify(ucEvent);
+  47   1          #endif
+  48   1      }
+  49          
+  50          void Mod_DpTx_SetState(u8 ucState)
+  51          {
+  52   1          u8 ucLastState;
+  53   1          if(ucState != g_stDpTx.ucTxState)
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 2   
+
+  54   1          {        
+  55   2              ucLastState = g_stDpTx.ucTxState;
+  56   2              g_stDpTx.ucTxState = ucState;
+  57   2              g_stDpTx.b1TxStateChanged = TRUE;
+  58   2              printLT(PRINT_PRIO_TEST, "\nTxState = %bd", ucState);
+  59   2              
+  60   2              // other state-->STATE_DPRX_PLAY_BACK_16,need notify video on
+  61   2              if(g_stDpTx.ucTxState == STATE_DPTX_PLAY_BACK_11)
+  62   2              {
+  63   3                 ; 
+  64   3              }
+  65   2              //STATE_DPRX_PLAY_BACK_16-->other state,need notify video off
+  66   2              if(ucLastState == STATE_DPTX_PLAY_BACK_11)
+  67   2              {
+  68   3                  Drv_DpTx_VidOutEn(FALSE);
+  69   3              }
+  70   2              
+  71   2          }
+  72   1      }
+  73          
+  74          void Mod_DpTx_TotalByteUpdate(u8 IsUpdate)
+  75          {
+  76   1          #if CHIP_VERSION_SEL == U1_VERSION
+                  u16 usHactive;
+                  if(IsUpdate == TRUE)
+                  {
+                      #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+                      if (g_stDpTx.b1SrcDscByEn == ENABLED)
+                      {
+                          return;
+                      }
+                      #endif
+                      #if DPTX_DSC_ENC_SUPPORT == ENABLED
+                      if (Drv_DpTxDscEnc_SwitchGet() == ENABLED)
+                      {
+                          return;
+                      }
+                      #endif
+                      if(Mod_DpTx_LaneGet() <= 2)
+                      {
+                          return;
+                      }
+                      if(BKF7_E4_REG & 0x01)//total_byte
+                      {
+                          usHactive = ((u16)BKF7_FA_REG << 8) + BKF7_FB_REG;
+                          usHactive *= 6;
+                          BKF7_24_REG = usHactive >>8;
+                          BKF7_25_REG = usHactive;
+                          BKF7_2E_REG |= BIT0_1;
+                      }
+                  }
+                  else
+                  {            
+                      BKF7_24_REG = 0x00;
+                      BKF7_25_REG = 0x00;
+                      BKF7_2E_REG &= BIT0_0;
+                  }
+                  #else
+ 112   1          IsUpdate = FALSE;
+ 113   1          #endif
+ 114   1      }
+ 115          
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 3   
+
+ 116          void Mod_DpTx_HbeSet(u8 b1IsHbeEn)
+ 117          {
+ 118   1          u16 usHtiming;
+ 119   1          if(b1IsHbeEn == ENABLED)
+ 120   1          {
+ 121   2              usHtiming = ((u16)BKF7_F6_REG << 8) + BKF7_F7_REG;
+ 122   2              usHtiming <<=1;
+ 123   2              Tx_Buff[0] = usHtiming; 
+ 124   2              Tx_Buff[1] = usHtiming>>8;
+ 125   2              Mod_DpTxLink_DpcdWrite(0x00,0x3054,Tx_Buff,2);//output htotal
+ 126   2              
+ 127   2              usHtiming =  ((u16)BKF7_EA_REG << 8) + BKF7_EB_REG;
+ 128   2              usHtiming += ((u16)BKF7_F0_REG << 8) + BKF7_F1_REG;
+ 129   2              usHtiming <<=1;
+ 130   2              Tx_Buff[0] = usHtiming;
+ 131   2              Tx_Buff[1] = usHtiming>>8;
+ 132   2              Mod_DpTxLink_DpcdWrite(0x00,0x3056,Tx_Buff,2);//output hstart
+ 133   2              
+ 134   2              usHtiming =  ((u16)BKF7_EA_REG << 8) + BKF7_EB_REG;
+ 135   2              usHtiming <<= 1;
+ 136   2              usHtiming = (BKF7_E7_REG&BIT4_1)?(usHtiming&0x7fff):(usHtiming|0x8000); 
+ 137   2              Tx_Buff[0] = usHtiming; 
+ 138   2              Tx_Buff[1] = usHtiming>>8;
+ 139   2              Mod_DpTxLink_DpcdWrite(0x00,0x3058,Tx_Buff,2);//output hsync
+ 140   2         }
+ 141   1         else
+ 142   1         {
+ 143   2              Tx_Buff[0] = Tx_Buff[1] = 0x00;
+ 144   2              Mod_DpTxLink_DpcdWrite(0x00,0x3054,Tx_Buff,2);//output htotal
+ 145   2         }
+ 146   1      
+ 147   1      }
+ 148          
+ 149          u8 Mod_DpTx_HbeEnableJudge(void)
+ 150          {
+ 151   1          if ((g_stDpTxTiming.usHtol == 4400) && (g_stDpTxTiming.usHact == 3840))
+ 152   1          {
+ 153   2              if ((g_stDpTxTiming.usVtol == 2250) && (g_stDpTxTiming.usVact == 2160))
+ 154   2              {
+ 155   3                  return ENABLED;
+ 156   3              }
+ 157   2          }
+ 158   1      
+ 159   1          return DISABLED;
+ 160   1      }
+ 161          
+ 162          u8 Mod_DpTx_DscEncEnableJudge(void)
+ 163          {
+ 164   1          u8 ucRtn = DISABLED;
+ 165   1      
+ 166   1          if (g_stDpTx.ulTxPixelClk > 1200000)
+ 167   1          {
+ 168   2              if (g_stAuxDpTx.ucDscSliceCap > 0x0f)//8slice
+ 169   2              {
+ 170   3                  ucRtn = ENABLED;
+ 171   3              }
+ 172   2          }
+ 173   1          else if (g_stDpTx.ulTxPixelClk > 600000)
+ 174   1          {
+ 175   2              if (g_stAuxDpTx.ucDscSliceCap > 0x03)//4slice
+ 176   2              {
+ 177   3                  ucRtn = ENABLED;
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 4   
+
+ 178   3              }
+ 179   2          }
+ 180   1          else if (g_stDpTx.ulTxPixelClk > 300000)
+ 181   1          {
+ 182   2              if (g_stAuxDpTx.ucDscSliceCap > 0x01)
+ 183   2              {
+ 184   3                  ucRtn = ENABLED;
+ 185   3              }
+ 186   2          }
+ 187   1          else
+ 188   1          {
+ 189   2              ucRtn = ENABLED;
+ 190   2          }
+ 191   1      
+ 192   1          return ucRtn;
+ 193   1      }
+ 194          
+ 195          void Mod_DpTx_DscPktSet(void)
+ 196          {
+ 197   1          #if DPTX_DSC_ENC_SUPPORT == ENABLED
+                  if (Drv_DpTxDscEnc_SwitchGet() == ENABLED)
+                  {
+                      Drv_DpTxDscEnc_TxPktSet();
+                  }
+                  #endif
+ 203   1          #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+ 204   1          if (g_stDpTx.b1SrcDscByEn == ENABLED)
+ 205   1          {
+ 206   2              Drv_DpTxDscBy_PktSet();
+ 207   2          }
+ 208   1          #endif
+ 209   1      }
+ 210          
+ 211          void Mod_DpTx_AdaptiveSyncSet( u8 b1IsAdaptiveSyncEn)
+ 212          {
+ 213   1          #if DPTX_ADAPTIVE_SYNC_SUPPORT == ENABLED
+ 214   1          if(b1IsAdaptiveSyncEn == ENABLED)
+ 215   1          {
+ 216   2              BKF6_CE_REG = 0x22;
+ 217   2              BKF6_CF_REG = 0x01;
+ 218   2              BKF6_0E_REG |= BIT7_1;//adaptive sync enable
+ 219   2          }
+ 220   1          else
+ 221   1          {           
+ 222   2              BKF6_0E_REG &= BIT7_0;  //adaptive sync disable
+ 223   2          }
+ 224   1          #endif
+ 225   1      }
+ 226          
+ 227          void Mod_DpTx_SoftMsaSet(u8 IsSoftMsa)
+ 228          {
+ 229   1          u8 usVstart_Plus;
+ 230   1          LtTiming_S stTimingInfo;
+ 231   1          if(IsSoftMsa == TRUE)
+ 232   1          {
+ 233   2              g_stDpTx.b1SoftMsaEn = TRUE;
+ 234   2              usVstart_Plus = 0;
+ 235   2      
+ 236   2              memcpy(&stTimingInfo,&g_stDpTxTiming,sizeof(LtTiming_S));
+ 237   2              if(g_stDpTx.b1SrcInterlaceEn == ENABLED)
+ 238   2              {
+ 239   3                  BKF7_0F_REG = stTimingInfo.usVtol>>8;
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 5   
+
+ 240   3                  BKF7_10_REG = (stTimingInfo.usVtol)&0xfe;
+ 241   3                  BKF7_28_REG = stTimingInfo.usVtol>>8;
+ 242   3                  BKF7_29_REG = (stTimingInfo.usVtol)&0xfe;
+ 243   3                  BKF7_27_REG |= 0x06;
+ 244   3                  stTimingInfo.usVtol <<= 1;//must 2*votal
+ 245   3                  if(((stTimingInfo.usVsync + stTimingInfo.usVbp)&0x01) == 0x00)
+ 246   3                  {
+ 247   4                      usVstart_Plus = 1;
+ 248   4                  }
+ 249   3              }
+ 250   2              if(g_stDpTx.b1SrcVrrEn == ENABLED)
+ 251   2              {
+ 252   3                  stTimingInfo.usVtol = 2 + stTimingInfo.usVbp + stTimingInfo.usVsync + stTimingInfo.usVact;
+ 253   3              }
+ 254   2              //soft msa H set
+ 255   2              BKF7_05_REG = stTimingInfo.usHtol >> 8;
+ 256   2              BKF7_06_REG = stTimingInfo.usHtol & 0xff;
+ 257   2              BKF7_07_REG = (stTimingInfo.usHsync + stTimingInfo.usHbp) >> 8;
+ 258   2              BKF7_08_REG = (stTimingInfo.usHsync + stTimingInfo.usHbp) & 0xff;
+ 259   2              BKF7_09_REG &= 0x80;//[6:0]hsync width, [7]hsync polarity
+ 260   2              BKF7_09_REG |= ((stTimingInfo.usHsync >> 8) & 0x7f);//[6:0]hsync width
+ 261   2              BKF7_0A_REG = stTimingInfo.usHsync & 0xff;
+ 262   2              BKF7_0B_REG = stTimingInfo.usHact >> 8;
+ 263   2              BKF7_0C_REG = stTimingInfo.usHact & 0xff;
+ 264   2              //soft msa V set
+ 265   2              BKF7_0D_REG = stTimingInfo.usVtol >> 8;
+ 266   2              BKF7_0E_REG = stTimingInfo.usVtol & 0xff;
+ 267   2              BKF7_11_REG = (stTimingInfo.usVsync + stTimingInfo.usVbp + usVstart_Plus) >> 8;
+ 268   2              BKF7_12_REG = (stTimingInfo.usVsync + stTimingInfo.usVbp + usVstart_Plus) & 0xff;
+ 269   2              BKF7_13_REG &= 0x80;//[6:0]vsync width, [7]vsync polarity
+ 270   2              BKF7_13_REG |= ((stTimingInfo.usVsync >> 8) & 0x7f);//[6:0]vsync width
+ 271   2              BKF7_14_REG = stTimingInfo.usVsync & 0xff;
+ 272   2              BKF7_15_REG = stTimingInfo.usVact >> 8;
+ 273   2              BKF7_16_REG = stTimingInfo.usVact & 0xff;
+ 274   2              if(BKF7_E7_REG& BIT4_1)//h pol
+ 275   2              {
+ 276   3                  BKF7_09_REG &= BIT7_0;
+ 277   3                  BKF7_2A_REG &= BIT7_0;
+ 278   3              }
+ 279   2              else
+ 280   2              {
+ 281   3                  BKF7_09_REG |= BIT7_1;
+ 282   3                  BKF7_2A_REG |= BIT7_1;
+ 283   3              }
+ 284   2              if(BKF7_E7_REG& BIT5_1)//v pol
+ 285   2              {
+ 286   3                  BKF7_13_REG &= BIT7_0;
+ 287   3                  BKF7_2A_REG &= BIT6_0;
+ 288   3              }
+ 289   2              else
+ 290   2              {
+ 291   3                  BKF7_13_REG |= BIT7_1;
+ 292   3                  BKF7_2A_REG |= BIT6_1;
+ 293   3              }
+ 294   2              BKF7_2A_REG |= BIT4_1;//[4]msa soft en, Video timing setting soft mode: From registers
+ 295   2              printLT(PRINT_PRIO_TEST, "\nDpTx soft Msa");
+ 296   2          }
+ 297   1          else
+ 298   1          {
+ 299   2              #if DPTX_DSC_ENC_SUPPORT == ENABLED
+                      if (Drv_DpTxDscEnc_SwitchGet() == ENABLED)
+                      {
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 6   
+
+                          return;
+                      }
+                      #endif
+ 305   2              #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+ 306   2              if (g_stDpTx.b1TxDscByEn == ENABLED)
+ 307   2              {
+ 308   3                  return;
+ 309   3              }
+ 310   2              #endif
+ 311   2              g_stDpTx.b1SoftMsaEn = FALSE;
+ 312   2              BKF7_09_REG &= BIT7_0;
+ 313   2              BKF7_13_REG &= BIT7_0;
+ 314   2              BKF7_27_REG &= 0xf9;
+ 315   2              BKF7_2A_REG &= BIT7_0;
+ 316   2              BKF7_2A_REG &= BIT6_0;
+ 317   2              BKF7_2A_REG &= BIT4_0;//[4]msa soft en, Video timing setting soft mode: From registers
+ 318   2          }
+ 319   1      }
+ 320          
+ 321          void Mod_DpTx_AudioInfoSet(void)
+ 322          {
+ 323   1          #if TX_AUDIO_SEL != NO_AUDIO_DATA
+ 324   1          #if DPTX_AUDIO_DATA_BYPASS == ENABLED
+                  u8 ucLaneRate;
+                  u32 ulMaud, ulTemp1;
+                  u16 usFsValue_128;
+                  float Temp0;
+                  #endif
+ 330   1      
+ 331   1          printLT(PRINT_PRIO_TEST, "\nAudio layout is 0x%02bx", g_stDpTx.ucLayout);
+ 332   1          printLT(PRINT_PRIO_TEST, "\nAudio Channel is 0x%02bx", g_stDpTx.ucChannel);
+ 333   1      
+ 334   1          if(g_stDpTx.ucLayout == 1)
+ 335   1          {
+ 336   2              BKF6_14_REG |= BIT0_1;//[0]1-dp audio 8ch mode
+ 337   2          }
+ 338   1          else
+ 339   1          {
+ 340   2              BKF6_14_REG &= BIT0_0;//[0]0-dp audio 2ch mode
+ 341   2          }
+ 342   1      
+ 343   1          BKF6_D1_REG = g_stDpTx.szAudioInfo[0];//hb1
+ 344   1          BKF6_D2_REG = g_stDpTx.szAudioInfo[1];//hb2
+ 345   1          BKF6_D3_REG = g_stDpTx.szAudioInfo[2];//hb3
+ 346   1          BKF6_D4_REG = g_stDpTx.szAudioInfo[3];//pb0
+ 347   1          BKF6_D5_REG = g_stDpTx.szAudioInfo[4];//pb1
+ 348   1          BKF6_D6_REG = g_stDpTx.szAudioInfo[5];//pb2
+ 349   1          BKF6_D7_REG = g_stDpTx.szAudioInfo[6];//pb3
+ 350   1          BKF6_D8_REG = g_stDpTx.szAudioInfo[7];//pb4
+ 351   1          if(g_stDpTx.ucCodingType == ENABLED)
+ 352   1          {
+ 353   2              BKF6_14_REG |= BIT0_1;//[0]1-dp audio 8ch mode
+ 354   2              BKF6_EB_REG = 0x17;//hbr en
+ 355   2          }
+ 356   1          else
+ 357   1          {
+ 358   2              BKF6_EB_REG = g_stDpTx.ucChannel;//8 channel
+ 359   2          }
+ 360   1      
+ 361   1          #if DPTX_AUDIO_DATA_BYPASS == ENABLED// to fixe ACR no 128_fs clk issue.
+                  //Naud = 0x8000;
+                  //(Fhalf_lclk / 2) * 1000 * Maud = 4 * Naud * Fs * 64;
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 7   
+
+                  //Fhalf_lclk * 125 * Maud = Naud * Fs * 64;
+                  //Fhalf_lclk * 125 * Maud = 0x8000 * 64 * Fs
+                  //Maud = 0x200000 * Fs / (Fhalf_lclk * 125);
+              
+                  ucLaneRate = BKF5_5F_REG;
+                  if (ucLaneRate == RBR)
+                  {
+                      ulTemp1 = 162;
+                  }
+                  else if (ucLaneRate == HBR)
+                  {
+                      ulTemp1 = 270;
+                  }
+                  else if (ucLaneRate == HBR2)
+                  {
+                      ulTemp1 = 540;
+                  }
+                  else
+                  {
+                      ulTemp1 = 810;
+                  }
+                  
+                  BKF6_06_REG &= 0x0f;
+                  BKF6_06_REG |= 0x90;
+              
+                  usFsValue_128 = ((u16)BKC6_7D_REG << 8) + BKC6_7E_REG;
+                  ulTemp1 *= 125;
+              //    ulMaud = ceil((double)usFsValue_128 * 16384 / ulTemp1);
+              
+                  Temp0 = (double)usFsValue_128 * 16384 / ulTemp1;
+              
+                  ulMaud = (u32)Temp0;//四舍五入
+                  if(fabs(Temp0 - (float)ulMaud) >= 0.5f)
+                  {
+                      ulMaud++;
+                  }
+                  
+                  printLT(PRINT_PRIO_TEST, "\nMaud is 0x%04lx",ulMaud);
+                  
+                  BKF6_0C_REG = ulMaud & 0xff;
+                  BKF6_0B_REG = (ulMaud >> 8) & 0xff;
+                  BKF6_0A_REG = (ulMaud >> 16) & 0xff;
+                  #else
+ 407   1          BKF6_06_REG &= 0x8f;//[6:4]rg_maud_fact: 010-maud/2
+ 408   1          if(BKF6_EB_REG == 0x17)
+ 409   1          {
+ 410   2           BKF6_06_REG |= 0x10;//[6:4]rg_maud_fact: 010-maud/2
+ 411   2          }
+ 412   1          else
+ 413   1          {
+ 414   2           BKF6_06_REG |= 0x20;//[6:4]rg_maud_fact: 010-maud/2
+ 415   2          }
+ 416   1          #endif
+ 417   1      
+ 418   1          BKF6_14_REG |= BIT7_1;//[7]atp pkt send sdp enable: 1-en
+ 419   1          BKF6_DD_REG |= BIT0_1;//[1]psr data selet: 1-psr data from register
+ 420   1          #endif
+ 421   1      }
+ 422          
+ 423          void Mod_DpTx_AudioIssueFixed(u8 ucOpt)
+ 424          {
+ 425   1          #ifdef NVIDIA_FW_EN
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 8   
+
+                  if ((ucOpt == ENABLED) && (g_stDpTx.ulTxPeakClk < 40000))
+                  {
+                      BKF6_ED_REG |= 0xe0;
+                  }
+                  else
+                  {
+                      BKF6_ED_REG &= 0x1f;
+                  }
+                  #else
+ 435   1          ucOpt = DISABLED;
+ 436   1          #endif
+ 437   1      }
+ 438          
+ 439          void Mod_DpTx_ColorInfoSet(void)
+ 440          {
+ 441   1          if(g_stDpTx.b1SrcInterlaceEn == ENABLED)
+ 442   1          {
+ 443   2              g_stDpTx.ucMsaValue |= BIT0_1;
+ 444   2          }
+ 445   1      
+ 446   1          if(g_stDpTx.ucMisc1&BIT6_1) 
+ 447   1          {
+ 448   2              BKF7_17_REG = g_stDpTx.ucMsaValue;
+ 449   2              BKF7_18_REG = g_stDpTx.ucMisc0;
+ 450   2              #ifdef NVIDIA_FW_EN   //nivida case
+                      BKF7_19_REG = 0x00;//misc1
+                      #else
+ 453   2              BKF7_19_REG = g_stDpTx.ucMisc1;//misc1
+ 454   2              #endif
+ 455   2      
+ 456   2              BKF6_59_REG = 0x07;
+ 457   2              BKF6_5A_REG = 0x05;
+ 458   2              BKF6_5B_REG = 0x13;//head
+ 459   2              BKF6_A0_REG = 0x00;
+ 460   2              BKF6_B0_REG = g_stDpTx.ucVscDb16;//vsc sdp 
+ 461   2              BKF6_B1_REG = g_stDpTx.ucVscDb17;
+ 462   2              BKF6_B2_REG = g_stDpTx.ucVscDb18;
+ 463   2      
+ 464   2              #if HDMIRX_DSC_BYPASS_HALFPIX_EN == ENABLED
+ 465   2              if (g_stDpTx.b1SrcDscByEn == ENABLED)
+ 466   2              {
+ 467   3                  ((g_stDpTx.ucVscDb16&0xf0) == 0x30)?(BKF6_06_REG |= BIT1_1):(BKF6_06_REG |= BIT0_1);
+ 468   3              }
+ 469   2              else
+ 470   2              #endif
+ 471   2              {
+ 472   3                  ((g_stDpTx.ucVscDb16&0xf0) == 0x30)?(BKF6_06_REG |= BIT0_1):(BKF6_06_REG &= BIT0_0);//Mvid sel
+             - 2
+ 473   3              }
+ 474   2      
+ 475   2              ((g_stDpTx.ucVscDb16&0xf0) == 0x30)?(BKF7_27_REG |= BIT0_1):(BKF7_27_REG &= BIT0_0);//[0]rg_420_en
+ 476   2      
+ 477   2              #ifdef NVIDIA_FW_EN//nivida case
+                      #else
+ 479   2              BKF6_0E_REG |= BIT1_1;
+ 480   2              #endif
+ 481   2          }
+ 482   1          else
+ 483   1          {
+ 484   2              BKF7_17_REG = g_stDpTx.ucMsaValue;
+ 485   2              BKF7_18_REG = g_stDpTx.ucMisc0;
+ 486   2              BKF7_19_REG = g_stDpTx.ucMisc1;//misc1
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 9   
+
+ 487   2              
+ 488   2              BKF6_06_REG &= 0xfe;//cal mvid
+ 489   2              BKF7_27_REG &= BIT0_0;//[0]rg_420_disable
+ 490   2              BKF6_0E_REG &= BIT1_0;
+ 491   2          }
+ 492   1      }
+ 493          u8 Mod_DpTx_SinkHpdDet(void)
+ 494          {  
+ 495   1         u8 Result = NO_ACTION;
+ 496   1          if(g_stDpTx.b1IsDpOrTypec == DP_INTF)
+ 497   1          {
+ 498   2      //        return Mod_DpTx_SinkHpdDet();
+ 499   2            
+ 500   2              if (BKE5_45_REG & BIT5_1)//det low must using the irq_flag,
+ 501   2              {
+ 502   3                  Result =  LOW;
+ 503   3              }
+ 504   2              else if ((BKE5_55_REG & BIT4_1)&&((BKE5_53_REG & BIT6_1)))//det high  must using the source flag;
+ 505   2              {
+ 506   3                  Result =  HIGH;
+ 507   3              }
+ 508   2              return Result;
+ 509   2          
+ 510   2          }
+ 511   1      
+ 512   1          #if TYPECRX_EN == ENABLED
+                  if(g_stDpTx.b1IsDpOrTypec == TYPEC_INTF)
+                  {   
+                  return Mod_CC1ComDone_Get();
+                  }
+                  #endif
+ 518   1       
+ 519   1          return FALSE;
+ 520   1      }
+ 521          
+ 522          void Mod_DpTx_HpdDetProc(void)
+ 523          {
+ 524   1          if(g_stDpTx.ucTxState >= STATE_DPTX_UPSTREAM_DEVICE_READY_2)
+ 525   1          {
+ 526   2              //the current hpd detect is low.
+ 527   2              //if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+ 528   2              if(Mod_DpTx_SinkHpdDet() == LOW)
+ 529   2              { 
+ 530   3                  //the last hpd detect is high.
+ 531   3                  Drv_DpTx_HpdClear();
+ 532   3                  if(g_stDpTx.b1IsTxHpdDet == HIGH)
+ 533   3                  {
+ 534   4                      g_stDpTx.b1IsTxHpdDet = LOW;
+ 535   4                
+ 536   4                      Mod_DpTx_HpdLowAction();
+ 537   4                      printLT(PRINT_PRIO_HIG, "\ng_stDpTx.b1IsTxHpdDet = LOW");
+ 538   4                      Mod_DpTx_SetState(STATE_DPTX_UPSTREAM_DEVICE_READY_2);
+ 539   4                      Mod_DpTx_MsgNotify(DPTX_SINK_UNPLUG_EVENT);
+ 540   4                  } 
+ 541   3              }
+ 542   2              //the current hpd detect is high.
+ 543   2              //else if(Mod_DpTx_SinkHpdDet() == HIGH)//dp hpd is low 
+ 544   2              else if(Mod_DpTx_SinkHpdDet() == HIGH)
+ 545   2              {
+ 546   3                  //the last hpd detect is low.
+ 547   3                  if(g_stDpTx.b1IsTxHpdDet == LOW)
+ 548   3                  {
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 10  
+
+ 549   4                      g_stDpTx.b1IsTxHpdDet = HIGH;
+ 550   4                      Mod_DpTx_MsgNotify(DPTX_SINK_PLUG_EVENT);
+ 551   4                  }
+ 552   3              }
+ 553   2          } 
+ 554   1      }
+ 555          
+ 556          #if DPTX_HDCP_STATE_CHECK == ENABLED
+              void Mod_DpTx_Hdcp1xReAuth(u8 HdcpRxVersion)
+              {
+                  if((BKF5_8C_REG & BIT0_1) != 0x00)
+                  {
+                      if((BKF5_C6_REG & 0xf0) >= 0x20)
+                      {
+                          g_stDpTx.ucHdcpTx1xAuthState = 0x01;
+                      }
+                      if(((BKF5_C6_REG & 0xf0) == 0x00)&&(g_stDpTx.ucHdcpTx1xAuthState == 0x01))
+                      {
+                          printLT(PRINT_PRIO_TEST,"\nHdcp1x Reauth");
+                          Drv_HdcpTx_Enable(NO_HDCP);
+                          Ocm_Delay1ms(1);
+                          #if DPTX_HDCP_ENC_MODE == HW_MODE
+                          Drv_HdcpTx_Enable(HdcpRxVersion);
+                          #else
+                          Drv_HdcpTx_Enable(DPTX_HDCP_ENC_MODE);
+                          #endif
+                          g_stDpTx.ucHdcpTx1xAuthState = 0x00;
+                      }
+                  }
+                  else
+                  {
+                      g_stDpTx.ucHdcpTx1xAuthState = 0x00;
+                  }
+              }
+              #endif
+ 584          
+ 585          void Mod_DpTx_StateJudge(void)
+ 586          {
+ 587   1          u8 ucMinState = g_stDpTx.ucTxState;
+ 588   1      
+ 589   1          //monitor upstream device stable.
+ 590   1          if(ucMinState > STATE_DPTX_UPSTREAM_DEVICE_READY_2)
+ 591   1          {
+ 592   2              if(g_stDpTx.b1UpstreamDeviceReady == FALSE)
+ 593   2              {
+ 594   3                  Mod_DpTx_HpdLowAction();
+ 595   3                  ucMinState = MIN(ucMinState,STATE_DPTX_UPSTREAM_DEVICE_READY_2);
+ 596   3              }
+ 597   2          }
+ 598   1          //monitor upstream video stable.
+ 599   1          if(ucMinState > STATE_DPTX_UPSTREAM_VIDEO_READY_5)
+ 600   1          {
+ 601   2              if(g_stDpTx.b1UpstreamVideoReady == FALSE)
+ 602   2              {
+ 603   3                  Mod_DpTx_HpdLowAction();
+ 604   3                  ucMinState = MIN(ucMinState,STATE_DPTX_UPSTREAM_VIDEO_READY_5);
+ 605   3              }
+ 606   2          }
+ 607   1          //monitor interfalce_flag;
+ 608   1          if(ucMinState > STATE_DPTX_LINK_TRAINING_7)
+ 609   1          {
+ 610   2              if((g_stDpTx.b1SrcInterlaceChg == TRUE)&&(g_stDpTx.b1SrcInterlaceEn == ENABLED))
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 11  
+
+ 611   2              {
+ 612   3                  g_stDpTx.b1SrcInterlaceChg = FALSE;
+ 613   3                  Mod_DpTx_SoftMsaSet(TRUE);
+ 614   3              }
+ 615   2          }
+ 616   1          //monitor adaptive sync
+ 617   1          #if DPTX_ADAPTIVE_SYNC_SUPPORT == ENABLED
+ 618   1          if (ucMinState > STATE_DPTX_LINK_TRAINING_7)
+ 619   1          {
+ 620   2              if (g_stDpTx.b1SrcVrrChg == TRUE)
+ 621   2              {
+ 622   3                  g_stDpTx.b1SrcVrrChg = FALSE;
+ 623   3                   Mod_DpTx_AdaptiveSyncSet(g_stAuxDpTx.ucASyncCap);
+ 624   3                  if((g_stDpTx.b1SrcVrrEn == ENABLED) && (g_stDpTx.b1TxDscByEn == DISABLED))
+ 625   3                  {
+ 626   4                      Mod_DpTx_SoftMsaSet(TRUE);
+ 627   4                  }
+ 628   3                  else
+ 629   3                  {
+ 630   4                      Mod_DpTx_SoftMsaSet(FALSE);
+ 631   4                  }
+ 632   3              }
+ 633   2          }
+ 634   1          #endif
+ 635   1          if(ucMinState > STATE_DPTX_LINK_TRAINING_7)
+ 636   1          {
+ 637   2              if(g_stDpTx.b1SoftMsaUpdate == TRUE)
+ 638   2              {
+ 639   3                  g_stDpTx.b1SoftMsaUpdate = FALSE;
+ 640   3                  if(g_stDpTx.b1SoftMsaEn == TRUE)
+ 641   3                  {
+ 642   4                      Mod_DpTx_SoftMsaSet(TRUE);
+ 643   4                  }
+ 644   3              }            
+ 645   2          }
+ 646   1          //monitor hdr
+ 647   1          if (ucMinState > STATE_DPTX_VIDEO_OUT_8)
+ 648   1          {
+ 649   2              //monitor dobly hdr flag
+ 650   2              if((g_stDpTx.b1SrcDoblyHdrChg == TRUE)&&(g_stDpTx.b1SrcDoblyHdrEn  == ENABLED))
+ 651   2              {
+ 652   3                  g_stDpTx.b1SrcDoblyHdrChg = FALSE;
+ 653   3                  Drv_DpTx_DoblyHdrEnable(g_stDpTx.b1DpTxAppleFlag);
+ 654   3              }
+ 655   2              //monitor static hdr flag
+ 656   2              if((g_stDpTx.b1SrcStaticHdrChg == TRUE)&&(g_stDpTx.b1SrcStaticHdrEn  == ENABLED))
+ 657   2              {
+ 658   3                  g_stDpTx.b1SrcStaticHdrChg = FALSE;
+ 659   3                  Drv_DpTx_StaticHdrEnable();
+ 660   3              }
+ 661   2              if((g_stDpTx.b1SrcStaticHdrEn == DISABLED)&&(g_stDpEdidInfo.b1HDREdid==1)&&(g_stDpTx.b1SrcDoblyHdr
+             -En  == DISABLED))
+ 662   2              { 
+ 663   3                  Drv_DpTx_StaticHdrDisable();
+ 664   3              }
+ 665   2              //monitor dynamic hdr flag
+ 666   2              if((g_stDpTx.b1SrcDynamicHdrChg == TRUE)&&(g_stDpTx.b1SrcDynamicHdrEn  == ENABLED))
+ 667   2              {
+ 668   3                  g_stDpTx.b1SrcDynamicHdrChg = FALSE;
+ 669   3                  Drv_DpTx_DynamicHdrEnable();
+ 670   3              }
+ 671   2          }
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 12  
+
+ 672   1          //monitor dp tx audio 8 chl
+ 673   1          if (ucMinState > STATE_DPTX_AUDIO_OUT_9)
+ 674   1          {
+ 675   2              if (g_stDpTx.b1AudioInfoChg == TRUE)
+ 676   2              {
+ 677   3                  g_stDpTx.b1AudioInfoChg = FALSE;
+ 678   3                  Mod_DpTx_AudioInfoSet();
+ 679   3                  Mod_DpTx_AudioIssueFixed(ENABLED);
+ 680   3                  #if DPTX_AUD_PATTERN_SEL != NO_PATTERN
+                          Drv_Audio_OutEn(ON);
+                          #endif
+ 683   3                 
+ 684   3              }
+ 685   2              else
+ 686   2              {
+ 687   3                  #if DPTX_AUD_PATTERN_SEL == NO_PATTERN
+ 688   3                  Drv_Audio_MuteCheck(g_stDpTx.b1AudioMuteEn);
+ 689   3                  #endif
+ 690   3                 
+ 691   3              }
+ 692   2          }
+ 693   1          #if DPTX_HDCP_ENC_MODE != NO_HDCP
+ 694   1          if (ucMinState > STATE_DPTX_HDCP_ENABLE_10)
+ 695   1          {
+ 696   2              #if DPTX_HDCP_ENC_MODE == HW_MODE
+ 697   2              if (g_stDpTx.ucHdcpRxVerChg == TRUE)
+ 698   2              { 
+ 699   3                  g_stDpTx.ucHdcpRxVerChg = FALSE;
+ 700   3                  Drv_HdcpTx_Enable(g_stDpTx.ucHdcpRxVersion);
+ 701   3              }
+ 702   2              #else
+                      if (g_stDpTx.ucHdcpRxVerChg == TRUE)
+                      {
+                          g_stDpTx.ucHdcpRxVerChg = FALSE;
+                          Drv_HdcpTx_Enable(DPTX_HDCP_ENC_MODE);
+                      }
+                      #endif
+ 709   2              #if DPTX_HDCP_STATE_CHECK == ENABLED
+                      Mod_DpTx_Hdcp1xReAuth(g_stDpTx.ucHdcpRxVersion); //Act only on HDCP1X
+                      #endif
+ 712   2          }
+ 713   1          #endif
+ 714   1      
+ 715   1          if (ucMinState != g_stDpTx.ucTxState)
+ 716   1          {
+ 717   2              Mod_DpTx_SetState(ucMinState);
+ 718   2          }
+ 719   1      }
+ 720          
+ 721          void Mod_DpTx_StateHandler(void)
+ 722          {
+ 723   1          static u32 ulCurrentTime = 0;
+ 724   1      
+ 725   1          switch(g_stDpTx.ucTxState)
+ 726   1          {
+ 727   2              case STATE_DPTX_POWER_ON_1:
+ 728   2                  Mod_DpTx_GpioInit();
+ 729   2      //            #if TYPECTX_EN == ENABLED
+ 730   2      //            Drv_CCTx_PHYDigSet();
+ 731   2      //            #endif
+ 732   2                  Drv_DpTx_PowerOnInit();
+ 733   2                  #if TYPECRX_EN == ENABLED
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 13  
+
+                          Mod_CC1CableVari_Init();
+                          #endif
+ 736   2                  Mod_DpTx_SetState(STATE_DPTX_UPSTREAM_DEVICE_READY_2);
+ 737   2                  break;
+ 738   2      
+ 739   2              case STATE_DPTX_UPSTREAM_DEVICE_READY_2://Typec Rx CC is done or dp is ok
+ 740   2                  if(g_stDpTx.b1TxStateChanged == TRUE)
+ 741   2                  {
+ 742   3                      Mod_DpTx_DpOrTypecDet();
+ 743   3                      g_stDpTx.b1TxStateChanged = FALSE;
+ 744   3                      
+ 745   3                  }
+ 746   2                  if(g_stDpTx.b1UpstreamDeviceReady == TRUE)
+ 747   2                  {
+ 748   3                      
+ 749   3                      Mod_DpTx_SetState(STATE_DPTX_WAITE_HPD_3);
+ 750   3                  }
+ 751   2                  break;
+ 752   2      
+ 753   2              case STATE_DPTX_WAITE_HPD_3:
+ 754   2                  if(g_stDpTx.b1IsTxHpdDet == HIGH)//dp hpd is high.
+ 755   2                  {
+ 756   3                      #if TYPECTX_EN == ENABLED
+                              Drv_DpTx_TypeCOutSet();
+                              #endif
+ 759   3                      #ifdef NVIDIA_FW_EN
+                              #if (SLEEP_MODE == ENABLED)
+                              Mode_Sleep_DpTxPowerdown(DISABLED);
+                              #endif
+                              #endif
+ 764   3                      Mod_DpTx_SetState(STATE_DPTX_READ_SINK_INFO_4);
+ 765   3                  }
+ 766   2                  else
+ 767   2                  {   
+ 768   3                      #ifdef NVIDIA_FW_EN
+                              #if (SLEEP_MODE == ENABLED)
+                              Mode_Sleep_DpTxPowerdown(ENABLED);
+                              #endif
+                              #endif
+ 773   3                  }
+ 774   2                  break;
+ 775   2      
+ 776   2              case STATE_DPTX_READ_SINK_INFO_4:
+ 777   2                  Mod_DpTx_VarInit();
+ 778   2                  Mod_DpTxLink_SinkCapRead();
+ 779   2                  Mod_DpTxLink_SinkEdidRead(szEdidData);
+ 780   2                  Mod_DpTx_MsgNotify(DPTX_EDID_VALID_EVENT);
+ 781   2                  Mod_DpTx_SetState(STATE_DPTX_UPSTREAM_VIDEO_READY_5);
+ 782   2                  break;
+ 783   2      
+ 784   2              case STATE_DPTX_UPSTREAM_VIDEO_READY_5:
+ 785   2                  if(g_stDpTx.b1UpstreamVideoReady == TRUE)
+ 786   2                  {
+ 787   3                      Drv_DpTx_SettingInit();
+ 788   3                      //fec dis
+ 789   3                      Drv_DpTx_DivLinkClkSet();
+ 790   3                      #if DPTX_DSC_ENC_SUPPORT == ENABLED
+                              Drv_DpTxDscEnc_Init();
+                              #endif
+ 793   3                      #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+ 794   3                      Drv_DpTxDscBy_Init();
+ 795   3                      #endif
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 14  
+
+ 796   3                      Drv_Sys_EncPowerDomain(TRUE);
+ 797   3                      Mod_DpTx_SoftMsaSet(FALSE);
+ 798   3                      Mod_DpTx_TotalByteUpdate(FALSE);
+ 799   3                      Mod_DpTx_AudioIssueFixed(DISABLED);
+ 800   3                      Drv_Sys_DhTxSrcSel(DHTX_SRC_SEL_DPTX);
+ 801   3                      g_stDpTx.ucTxLinkStartEn = FALSE;
+ 802   3                      Mod_DpTx_SetState(STATE_DPTX_DSCENC_CONFIG_6);
+ 803   3                  }
+ 804   2                  break;
+ 805   2      
+ 806   2              case STATE_DPTX_DSCENC_CONFIG_6:
+ 807   2                  #if DPTX_DSC_ENC_SUPPORT == ENABLED
+                          if (g_stDpTx.b1EncodeEn == ENABLED)
+                          {
+                              Drv_Sys_EncPowerDomain(FALSE);
+                              Drv_DpTxDscEnc_ParaInit();
+                              Drv_DpTxDscEnc_InfoGet();
+                              Drv_DpTxDscEnc_ModuleEnable();
+                              g_stDpTx.ucMsaValue &= 0x83;//[6:4]rgd_pixel_depth: 001-8bit
+                                                          //[3:2]rgd_pixel_format: 000-rgb
+                              g_stDpTx.ucMsaValue |= 0x10;
+                          }
+                          #endif
+ 819   2                  #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+ 820   2                  if (g_stDpTx.b1SrcDscByEn == ENABLED)
+ 821   2                  {
+ 822   3                      Drv_DpTxDscBy_ClkMux();
+ 823   3                      g_stDpTx.ucMsaValue &= 0x83;//[6:4]rgd_pixel_depth: 001-8bit
+ 824   3                                                  //[3:2]rgd_pixel_format: 000-rgb
+ 825   3                      g_stDpTx.ucMsaValue |= 0x10; 
+ 826   3                  }
+ 827   2                  #endif
+ 828   2                  Mod_DpTx_SetState(STATE_DPTX_LINK_TRAINING_7);
+ 829   2                  break;
+ 830   2      
+ 831   2              case STATE_DPTX_LINK_TRAINING_7:
+ 832   2                  if(g_stDpTx.b1TxStateChanged == TRUE)
+ 833   2                  {
+ 834   3                      g_stDpTx.b1TxStateChanged = FALSE;
+ 835   3                      g_stDpTx.ucTxLinkStep = STATE_LINK_INIT_1;
+ 836   3                      g_stDpTx.ucTxLinkStartEn = TRUE;
+ 837   3                      Drv_DpTx_VidOutEn(FALSE);
+ 838   3                      #if DPTX_HDCP_ENC_MODE != NO_HDCP
+ 839   3                      Drv_HdcpTx_Enable(NO_HDCP);
+ 840   3                      #endif
+ 841   3                      Mod_DpTx_HbeSet(g_stDpTx.b1HbeEnable);
+ 842   3                      Mod_DpTx_DscPktSet();
+ 843   3                      g_stDpTx.ucTxLinkTrainingCnt = 0;
+ 844   3                      #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+                              g_stDpTx.ucTxLinkReduceNumber = 0;
+                              g_stDpTx.ucTxLinkTpsState = 0;
+                              g_stDpTx.ucTxLinkStopDrvAdjust = 0;
+                              g_stDpTx.ucTxLinkStopReduction = 0;
+                              memset(g_stDpTx.ucTxLinkTrainSinkState,0x00,3);
+                              #endif
+ 851   3                  }
+ 852   2                  if(g_stDpTx.ucTxLinkStep >= STATE_LINK_FAIL_9)
+ 853   2                  {
+ 854   3                      #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+ 855   3                      if (g_stDpTx.b1SrcDscByEn == ENABLED)
+ 856   3                      {
+ 857   4      //                    Drv_DpTx_MvidCal();
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 15  
+
+ 858   4                      }
+ 859   3                      #endif
+ 860   3                      Mod_DpTx_SetState(STATE_DPTX_VIDEO_OUT_8);
+ 861   3                  }
+ 862   2                  break;
+ 863   2      
+ 864   2              case STATE_DPTX_VIDEO_OUT_8:
+ 865   2                  if(g_stDpTx.b1TxStateChanged == TRUE)
+ 866   2                  {
+ 867   3                      Mod_DpTx_ColorInfoSet();
+ 868   3                      g_stDpTx.b1TxStateChanged = FALSE;
+ 869   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+ 870   3                  }
+ 871   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_200) == TRUE)
+ 872   2                  {
+ 873   3                      if(STABLE == Drv_DpTx_VdChkStableJudge())
+ 874   3                      {
+ 875   4                          if(g_stAuxDpTx.ucSinkCnt > 0)//4.2.2.8 dp link cts
+ 876   4                          {
+ 877   5                              Mod_DpTx_TotalByteUpdate(TRUE);
+ 878   5                              Drv_DpTx_VidOutEn(TRUE);
+ 879   5                          }
+ 880   4                          Mod_DpTx_SetState(STATE_DPTX_AUDIO_OUT_9);
+ 881   4                      }
+ 882   3                  }
+ 883   2                  break;
+ 884   2      
+ 885   2              case STATE_DPTX_AUDIO_OUT_9:
+ 886   2                  if(g_stDpTx.b1TxStateChanged == TRUE)
+ 887   2                  {
+ 888   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+ 889   3                      g_stDpTx.b1TxStateChanged = FALSE;
+ 890   3                  }
+ 891   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_500) == TRUE)
+ 892   2                  {
+ 893   3                      Drv_Audio_OutEn(OFF);
+ 894   3                      Mod_DpTx_SetState(STATE_DPTX_HDCP_ENABLE_10);
+ 895   3                  }
+ 896   2                  break;
+ 897   2      
+ 898   2              case STATE_DPTX_HDCP_ENABLE_10:
+ 899   2                  if(g_stDpTx.b1TxStateChanged == TRUE)
+ 900   2                  {
+ 901   3                      Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+ 902   3                      g_stDpTx.b1TxStateChanged = FALSE;
+ 903   3                  }
+ 904   2                  if(Ocm_Timer_IsOverFlow(&ulCurrentTime, SECOND_2) == TRUE)
+ 905   2                  {       
+ 906   3                      #ifdef NVIDIA_FW_EN
+                              #if (SOFT_POWER_DOWN == ENABLED)
+                              Mod_Sleep_PowerDownSet(TRUE);
+                              #endif
+                              #endif
+ 911   3                      #if DPTX_HDCP_STATE_CHECK == ENABLED
+                              g_stDpTx.ucHdcpTx1xAuthState = 0x00;
+                              #endif
+ 914   3                      #if DPTX_HDCP_ENC_MODE != HW_MODE
+                              g_stDpTx.ucHdcpRxVerChg = TRUE;
+                              #endif
+ 917   3                      Mod_DpTx_SetState(STATE_DPTX_PLAY_BACK_11);
+ 918   3                  }
+ 919   2                  break;
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 16  
+
+ 920   2      
+ 921   2              case STATE_DPTX_PLAY_BACK_11:
+ 922   2                  break;
+ 923   2      
+ 924   2              default:
+ 925   2                  break;
+ 926   2          }
+ 927   1      }
+ 928          
+ 929          void Mod_DpTx_HpdLowAction(void)
+ 930          {
+ 931   1          Drv_Audio_OutEn(OFF);
+ 932   1          Drv_DpTx_PhyDis(ENABLED);
+ 933   1          Drv_DpTx_VidOutEn(FALSE);
+ 934   1          Mod_DpTx_TotalByteUpdate(FALSE);
+ 935   1          #if DPTX_HDCP_ENC_MODE != NO_HDCP
+ 936   1          Drv_HdcpTx_Enable(NO_HDCP);
+ 937   1          #endif
+ 938   1          #if DPTX_DSC_ENC_SUPPORT == ENABLED
+                  Drv_DpTxDscEnc_DoduleDisable();
+                  #endif
+ 941   1          #if DPTX_ADAPTIVE_SYNC_SUPPORT == ENABLED
+ 942   1      //    Mod_DpTx_AdaptiveSyncSet(DISABLED);
+ 943   1          #endif
+ 944   1          #if DPTX_AUTOMATED_CTS_SUPPORT == ENABLED
+                  Mod_DpTx_Automated_Test_Init();
+                  #endif
+ 947   1          if(Mod_DpTx_SinkHpdDet() == HIGH)//dp hpd is low
+ 948   1          {
+ 949   2              Tx_Buff[0] = 0x02;
+ 950   2              Mod_DpTxLink_DpcdWrite(0x00,0x0600,Tx_Buff,1);//[2:0]1-normal work, 2-power down state
+ 951   2          }
+ 952   1      
+ 953   1       
+ 954   1          #ifdef NVIDIA_FW_EN
+                  #if (SLEEP_MODE == ENABLED)
+                  memset(&g_stSleep, 0, sizeof(StructSleepInfo));
+                  g_stSleep.ucSleepState = SLEEP_INIT_0;
+                  #endif
+                  #endif
+ 960   1          printLT(PRINT_PRIO_HIG, "\nDpTx Disabled");
+ 961   1      }
+ 962          
+ 963          void Mod_DpTx_Handler(void)
+ 964          {
+ 965   1          Mod_DpTx_HpdDetProc();
+ 966   1          Mod_DpTx_StateJudge();
+ 967   1          Mod_DpTx_StateHandler();
+ 968   1          Mod_DpTx_LinkTraining();
+ 969   1          Mod_DpTx_HpdIrqHdl();
+ 970   1      }
+ 971          
+ 972          #if (DPTX_VID_PATTERN_SEL != NO_PATTERN)
+              void Mod_DpTx_Pattern(void)
+              {
+                  printLT(PRINT_PRIO_HIG, "\nDp Tx Pattern Eanble"); 
+                  Drv_System_VidPatternSet();
+                  #if DPTX_AUD_PATTERN_SEL != NO_PATTERN
+                  Drv_System_AudioPatternSet();
+                  #endif
+                  //============dp tx stub function set==============
+                  memset(&g_stDpTx, 0, sizeof(DpTx_S));
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 17  
+
+                  g_stDpTx.ucTxState = STATE_DPTX_POWER_ON_1;
+                  g_stDpTx.b1UpstreamDeviceReady = TRUE;
+                  g_stDpTx.b1UpstreamVideoReady  = TRUE;
+                  g_stDpTx.b1SrcDscByEn    = DISABLED;
+                  g_stDpTx.b1EncodeEn      = DISABLED;
+                  g_stDpTx.ucHdcpRxVerChg  = TRUE;
+                  g_stDpTx.ucHdcpRxVersion = NO_HDCP;
+                  g_stDpTx.b1AudioInfoChg  = FALSE;//-wangtt- wait confirm
+                  #if DPTX_AUD_PATTERN_SEL != NO_PATTERN
+                  g_stDpTx.b1AudioInfoChg  = TRUE;//-wangtt- wait confirm
+                  g_stDpTx.ucChannel = 0x01;
+                  g_stDpTx.szAudioInfo[0] = 0x84;//hb1
+                  g_stDpTx.szAudioInfo[1] = 0x1b;//hb2
+                  g_stDpTx.szAudioInfo[2] = 0x48;//hb3
+                  g_stDpTx.szAudioInfo[3] = 0x01;//pb0
+                  g_stDpTx.szAudioInfo[4] = 0x00;//pb1
+                  g_stDpTx.szAudioInfo[5] = 0x00;//pb2
+                  g_stDpTx.szAudioInfo[6] = 0x00;//pb3
+                  g_stDpTx.szAudioInfo[7] = 0x00;//pb4
+                  #endif
+                  g_stDpTx.b1EncodeEn      = DISABLED;
+                  g_stDpTx.b1FecEnable     = DISABLED;  
+                  g_stDpTx.ucMsaValue  = 0x10;
+                  g_stDpTx.ucMisc0     = 0x20;
+                  g_stDpTx.ucMisc1     = 0x40;
+                  g_stDpTx.ucVscDb16   = 0x00;
+                  g_stDpTx.ucVscDb17   = 0x01;
+                  g_stDpTx.ucVscDb18   = 0x03;
+                  //============dp tx stub function set==============
+                      #if TYPECTX_EN == ENABLED
+                  DRV_CCPHY_DigSet();
+                  #endif
+              
+                  BKA2_A9_REG &= BIT1_0;
+                  Ocm_Delay1ms(100);
+                  BKA2_A9_REG |= BIT1_1;
+                  while(1)
+                  {
+                      #if DPTX_DSC_ENC_SUPPORT == ENABLED
+                      if(g_stDpTx.ucTxState == STATE_DPTX_UPSTREAM_VIDEO_READY_5)
+                      {
+                          if((g_stAuxDpTx.ucDscCap == TRUE)&&(g_stAuxDpTx.ucFecCap == TRUE))
+                          {
+                              g_stHdmiRx.ucPixelEncoding = RGB_0;//Input Color space
+                              g_stHdmiRx.ucBitDepth      = BPC8; //8 bit = 0x04
+                              #if DPTX_VID_PATTERN_SEL == PTN480P
+                              g_stDpTx.ulTxPixelClk = 25000;
+                              #elif DPTX_VID_PATTERN_SEL == PTN720P
+                              g_stDpTx.ulTxPixelClk = 74250;
+                              #elif DPTX_VID_PATTERN_SEL == PTN1080P
+                              g_stDpTx.ulTxPixelClk = 148500;
+                              #elif DPTX_VID_PATTERN_SEL == PTN4K30
+                              g_stDpTx.ulTxPixelClk = 297000;
+                              #elif DPTX_VID_PATTERN_SEL == PTN4K60
+                              g_stDpTx.ulTxPixelClk = 594000;
+                              #elif DPTX_VID_PATTERN_SEL == PTN4K120
+                              g_stDpTx.ulTxPixelClk = 1180000;
+                              #elif DPTX_VID_PATTERN_SEL == PTN8K30
+                              g_stDpTx.ulTxPixelClk = 1180000;
+                              #endif
+                              printLT(PRINT_PRIO_HIG, "\nTxPixelClk is %ld", g_stDpTx.ulTxPixelClk);
+                              if(g_stDpTx.ulTxPixelClk > Mod_DpTx_LinkBandWidthGet())
+C51 COMPILER V9.53.0.0   MODDPTX                                                           02/13/2025 10:14:30 PAGE 18  
+
+                              {
+                                  g_stDpTx.b1EncodeEn  = ENABLED;
+                                  g_stDpTx.b1FecEnable = ENABLED;  
+                              }
+                          }
+                      }
+                      #endif
+                      Mod_DpTx_Handler();
+                      #if TYPECRX_EN == ENABLED
+                      Mod_CC1Rx_Loop();
+                      #endif
+                      #if DPTX_AUD_PATTERN_SEL != NO_PATTERN
+                      BKC6_2E_REG = 0xb0;// BIT7 DP ptn en, sel dp audio ptn
+                      
+                      BKC6_37_REG |= BIT0_1;  //rgd-aud-ptn-sel
+                      BKC9_20_REG |= BIT4_1;  //PTN_SEL CLOCK SEL
+                      BKED_10_REG = 0x11;     //DPTX fs64 clock source select
+                      BKED_11_REG = 0x10;     //DPTX audio mux clock source select
+                      BKF6_06_REG = 0x20;//maud/2
+                      #endif
+                  }
+              }
+              #endif 
+1067          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2792    ----
+   CONSTANT SIZE    =    125    ----
+   XDATA SIZE       =    103      32
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

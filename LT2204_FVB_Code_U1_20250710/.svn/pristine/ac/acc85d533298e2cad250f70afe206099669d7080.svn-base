@@ -1,0 +1,15 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  I2CMast.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+#if TYPECTX_EN == ENABLED
+void Mod_CCTx_Loop(void)
+{
+    
+}
+
+#endif

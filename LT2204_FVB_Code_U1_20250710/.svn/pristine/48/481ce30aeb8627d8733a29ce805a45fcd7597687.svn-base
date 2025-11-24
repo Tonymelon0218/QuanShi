@@ -1,0 +1,261 @@
+C51 COMPILER V9.53.0.0   MODCCSHAREDTYPEC                                                  02/13/2025 10:14:01 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODCCSHAREDTYPEC
+OBJECT MODULE PLACED IN .\Objects\ModCCSharedTypec.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModCCSharedTypec.c LARGE OBJECTADVANCED OPTIMIZE(1
+                    -1,SIZE) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DE
+                    -BUG PRINT(.\Listings\ModCCSharedTypec.lst) OBJECT(.\Objects\ModCCSharedTypec.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  I2CMast.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          #include "Include.h"
+   8          
+   9          #if ((TYPECRX_EN == ENABLED)||(TYPECTX_EN == ENABLED))
+              //u8 code szCC_SourceCapFix[30]= 
+              //{0x61,0x31,0x2c,0x91,0x01,0x80,0x2c,0xd1,0x02,0x00,0xc8,0xB0,0x04,0x00};
+              //================================
+              //the function is used to calculate the cc message ID
+              //ucsum:current cc message ID
+              //
+              //================================
+              u8 Mod_CCPortMsgId_Cal(u8 ucsum)
+              {
+                      ucsum = ucsum + 2;
+                      if(ucsum>0x0e)
+                      {
+                              ucsum = 0;
+                      }
+                      else
+                      {
+                      ;
+                  }
+                      return ucsum;
+              }
+              
+              //================================
+              //pucMessage:input ponitor,message got from cc fifo
+              //ucMismatch_Chunked_EN:input,bit0 stands for Mismatch,bit1 stands for chunked suppport
+              //pucRequestMsg:out,requesr message to be sent
+              //ucCC_Ver:Input,current CC version
+              //================================
+              void Mod_CCPortRequestMsg_Cal(StructCcMsg *pCCPortMSG ,u8 ucMismatch_EN,u8 CCportPDO)
+              {
+                      u16 usMax_Cur_5V = 0;
+                      usMax_Cur_5V = ((u16)(pCCPortMSG->szAdapterTmp[CCportPDO+1]&0x03)<<8) + pCCPortMSG->szAdapterTmp[CCportPD
+             -O];
+                  pCCPortMSG->szRequest_Buffer[0]= 0x42;
+                  pCCPortMSG->szRequest_Buffer[1]= 0x10;
+                  pCCPortMSG->szRequest_Buffer[2]=  pCCPortMSG->szAdapterTmp[CCportPDO];
+                  pCCPortMSG->szRequest_Buffer[3]= (pCCPortMSG->szAdapterTmp[CCportPDO+1]&0x03)|((pCCPortMSG->szAdapterT
+             -mp[CCportPDO]&0x3f)<<2);
+                  pCCPortMSG->szRequest_Buffer[4]= (((pCCPortMSG->szAdapterTmp[CCportPDO]&0xc0)>>6)|((pCCPortMSG->szAdap
+             -terTmp[CCportPDO+1]&0x03)<<2));
+                      #if PDVERSION == PD31
+                      pCCPortMSG->szRequest_Buffer[4] |= BIT6_1;
+                      #endif
+                  if(pCCPortMSG->ucCcVersion >= PD30)
+                  {
+C51 COMPILER V9.53.0.0   MODCCSHAREDTYPEC                                                  02/13/2025 10:14:01 PAGE 2   
+
+                              #if PD_CHUNK_EN == ENABLED
+              
+                      pCCPortMSG->szRequest_Buffer[4] |= (pCCPortMSG->szAdapterTmp[CCportPDO+3]&0x01)<<7;//chunked bit f
+             -rom source cap
+              
+                              #else
+                              pCCPortMSG->szRequest_Buffer[4] &= BIT7_0;//Unchunked Extended Messages Not Supported
+                              #endif
+                      pCCPortMSG->szRequest_Buffer[4] &= BIT5_0;
+                  }
+                      else
+                  {
+                      pCCPortMSG->szRequest_Buffer[4] &= 0x0f;
+                  }
+                  pCCPortMSG->szRequest_Buffer[5] = 0x03 |(((CCportPDO/4)+1)<<4);
+                      if(ucMismatch_EN & BIT0_1)//Mismatch support 
+                      {
+                              if(usMax_Cur_5V < 300)//mismatch
+                              {
+                                      pCCPortMSG->szRequest_Buffer[5] |= BIT2_1;              
+                              }
+                      }
+                      else
+                      {
+                              ;
+                      }
+                      #if PDVERSION == PD31
+                      pCCPortMSG->szRequest_Buffer[6] = 0x2c;
+                      pCCPortMSG->szRequest_Buffer[7] = 0x91;
+                      pCCPortMSG->szRequest_Buffer[8] = 0x81;
+                      pCCPortMSG->szRequest_Buffer[9] = 0x08;
+                      #endif
+                      
+              //      for(Count = 0;Count<6;Count++)
+              //      {
+              //              printLT(PRINT_PRIO_TEST, "\nszRequest_Buffer[0x%02bx] = 0x%02bx",Count,pCCPortMSG->szRequest_Buffer[Co
+             -unt]);
+              //      }
+              }
+              void Mod_CCPortSaveDataToTmp(StructCcMsg *pCCPortMSG,ucDataLength)
+              {
+                      u8 Adtmp;
+                      if(ucDataLength >=0xfe)
+                      {
+                              return;
+                      }
+                  for(Adtmp = 0; Adtmp < ucDataLength +2; Adtmp++)
+                  {
+                      if(Adtmp == 0)
+                      {
+                              pCCPortMSG->szAdapterTmp[0] = pCCPortMSG->szHeader[0];
+                      }
+                      else if(Adtmp == 1)
+                      {
+                              pCCPortMSG->szAdapterTmp[1] = pCCPortMSG->szHeader[1];
+                      }
+                      else
+                      {
+                              pCCPortMSG->szAdapterTmp[Adtmp]= pCCPortMSG->szRcvDate[Adtmp-2];
+                      }
+                  }
+              }
+C51 COMPILER V9.53.0.0   MODCCSHAREDTYPEC                                                  02/13/2025 10:14:01 PAGE 3   
+
+              #if ((UCCRequest_PointedVol == ENABLED)||(DCCRequest_PointedVol == ENABLED))
+              //================================
+              //
+              //the function is recalculate DCC's power information
+              //ucDataLength:adapter's sourcecap datalength
+              //
+              //================================
+              void Mod_CCPortToPointedPdo(StructCcMsg *pCCPortMSG,u8 ucDataLength, StructCcStatus *pCCPortState) //SOURC
+             -E CAP FOR THE SOURCE
+              {
+                  u8 Adtmp;
+                  u8 loop_Adatper;
+                      u8 AdapterTmpLenth= 0;
+                  u16 Adapter_Vol_Cap;
+                  pCCPortState->ucRequestPdo = 2;
+                      AdapterTmpLenth = ucDataLength + 2;
+                      for(Adtmp = 2; Adtmp < AdapterTmpLenth ; Adtmp += 4)
+                  {
+                      if((pCCPortMSG->szAdapterTmp[Adtmp+3]&0xc0) == 0xc0) //PPS Package
+                      {        
+                              for(loop_Adatper = Adtmp; (loop_Adatper+4) < AdapterTmpLenth; loop_Adatper++)
+                          {
+                              pCCPortMSG->szAdapterTmp[loop_Adatper] = pCCPortMSG->szAdapterTmp[loop_Adatper+4];
+                          }
+                              pCCPortMSG->szAdapterTmp[1] -= 0x10;    
+                              AdapterTmpLenth -=4;
+                          (Adtmp == 2)?(Adtmp = 0xfe):(Adtmp -= 4);
+                      }
+                      else   //FIXED SUPPLY
+                      {            
+                          pCCPortState->ucRequestPdo = Adtmp;
+                          Adapter_Vol_Cap = ((u16)(pCCPortMSG->szAdapterTmp[Adtmp+2]&0x0f)<<6) + ((pCCPortMSG->szAdapter
+             -Tmp[Adtmp+1]&0xfc)>>2);    
+              //如果要控制不大于多少V电压输出，就在这里设置            
+              //              if(Adapter_Vol_Cap > 300)      //12v
+              //            {              
+              //              pCCPortState->ucRequestPdo = Adtmp - 4;
+              //                break;
+              //            }         
+                      }
+                  }
+              //    Adapter_Vol_Cap = ((u16)(UCCMSG.szAdapterTmp[UCCStatus.ucRequestPdo+2]&0x0f)<<6) + ((UCCMSG.szAdapte
+             -rTmp[UCCStatus.ucRequestPdo+1]&0xfc)>>2);    
+              //    if(Adapter_Vol_Cap == 100)
+              //    {        
+              //        PlatForm_Power_Ctrl(LOW);
+              //    }
+              }
+              #endif
+              //================================
+              //the function is used to initial nretry and variable
+              //ucCC_Port:UCC or DCC
+              //
+              //================================
+              void Mod_CCPortMsg_Retry(IN u8 ucCC_Port)
+              {
+                      if(ucCC_Port == UCC)
+                      {
+                              UCCStatus.b1CCDataMsg_Sent = FALSE;
+                              UCCMSG.b1RcvGoodCRC = FALSE;
+                              if(UCCStatus.b1Msg_ID_Change == TRUE)
+                              {
+C51 COMPILER V9.53.0.0   MODCCSHAREDTYPEC                                                  02/13/2025 10:14:01 PAGE 4   
+
+                                      ;
+                              }
+                              else
+                              {
+                                      UCCStatus.ucRetryCounter++;
+                              }
+                              if(UCCMSG.ucCcVersion >= PD30)
+                              {
+                                      UCCStatus.ucnRetryCount = nRetryCount_PD30;
+                              }
+                              else
+                              {
+                                      UCCStatus.ucnRetryCount = nRetryCount_PD20;
+                              }
+                              UCCStatus.b1Msg_ID_Change = TRUE;       
+                              Ocm_TR2_ValueSet();
+                              if(UCCStatus.ucContract_Succeed)
+                              {
+                                      UCCStatus.b1CCDataMsg_Sent = TRUE;
+                              }
+                      }
+                      else if(ucCC_Port == DCC)       
+                      {
+                      DCCStatus.b1CCDataMsg_Sent = FALSE;
+                              DCCMSG.b1RcvGoodCRC = FALSE;
+                              if(DCCStatus.b1Msg_ID_Change == TRUE)
+                              {
+                                      ;
+                              }
+                              else
+                              {
+                                      DCCStatus.ucRetryCounter++;
+                              }
+                      if(DCCMSG.ucCcVersion >= PD30)
+                              {
+                                      DCCStatus.ucnRetryCount = nRetryCount_PD30;
+                              }
+                              else
+                              {
+                                      DCCStatus.ucnRetryCount = nRetryCount_PD20;
+                              }
+                              DCCStatus.b1Msg_ID_Change = TRUE;
+                              Ocm_TR2_ValueSet();
+                      DCCStatus.b1CCDataMsg_Sent = TRUE;
+                      }
+              }
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+C51 COMPILER V9.53.0.0   MODCCSHAREDTYPEC                                                  02/13/2025 10:14:01 PAGE 5   
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

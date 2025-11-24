@@ -1,0 +1,683 @@
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVGPIO
+OBJECT MODULE PLACED IN .\Objects\DrvGpio.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvGpio.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE) RE
+                    -GFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRINT(
+                    -.\Listings\DrvGpio.lst) OBJECT(.\Objects\DrvGpio.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  Gpio.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          #include "Include.h"
+   8          
+   9          void Drv_Gpio_OutSignalSet(IN u8 GpioN, IN u8 Function)
+  10          {
+  11   1          switch(GpioN)
+  12   1          {
+  13   2              case CEC:
+  14   2                  BKE6_A0_REG |= Function;
+  15   2                  break;
+  16   2              case INT:
+  17   2                  BKE6_E3_REG |= Function;
+  18   2                  break;
+  19   2              case GPIO32_SCLKB:
+  20   2                  BKE6_E3_REG |= (Function<<4);
+  21   2                  break;
+  22   2              case GPIO31_MCLKB:
+  23   2                  BKE6_E2_REG |= Function;
+  24   2                  break;
+  25   2              case GPIO30_WSB:
+  26   2                  BKE6_E2_REG |= (Function<<4);
+  27   2                  break;  
+  28   2              case GPIO29_SD0B:
+  29   2                  BKE6_E1_REG |= Function;
+  30   2                  break;
+  31   2              case GPIO28_SD1B:
+  32   2                  BKE6_E1_REG |= (Function<<4);
+  33   2                  break;
+  34   2              case GPIO27_SD2B:
+  35   2                  BKE6_E0_REG |= Function;
+  36   2                  break;
+  37   2              case GPIO26_SD3B:
+  38   2                  BKE6_E0_REG |= (Function<<4);
+  39   2                  break;
+  40   2              case GPIO25_PWM3:
+  41   2                  BKE6_DF_REG |= Function;
+  42   2                  break;
+  43   2              case GPIO24_PWM2:
+  44   2                  BKE6_DF_REG |= (Function<<4);
+  45   2                  break;
+  46   2              case GPIO23_SBU1:
+  47   2                  BKE6_DE_REG |= Function;
+  48   2                  break;
+  49   2              case GPIO22_PWM1:
+  50   2                  BKE6_DE_REG |= (Function<<4);
+  51   2                  break;
+  52   2              case GPIO21_UART_TX:
+  53   2                  BKE6_DD_REG |= Function;
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 2   
+
+  54   2                  break;
+  55   2              case GPIO20_PWM0:
+  56   2                  BKE6_DD_REG |= (Function<<4);
+  57   2                  break;
+  58   2              case GPIO19_SD0A_VSYNC:
+  59   2                  BKE6_DC_REG |= Function;
+  60   2                  break;
+  61   2              case GPIO18_WSA:
+  62   2                  BKE6_DC_REG |= (Function<<4);
+  63   2                  break;        
+  64   2              case GPIO17_SCLKA:
+  65   2                  BKE6_DB_REG |= Function;
+  66   2                  break;
+  67   2              case GPIO16_MCLKA:
+  68   2                  BKE6_DB_REG |= (Function<<4);
+  69   2                  break;       
+  70   2              case GPIO11_KPA3:
+  71   2                  BKE6_DA_REG |= Function;
+  72   2                  break;
+  73   2              case GPIO10_KPA2://GPIO23
+  74   2                  BKE6_DA_REG |= (Function<<4);
+  75   2                  break;     
+  76   2              case GPIO9_KPA1:
+  77   2                  BKE6_D9_REG |= Function;
+  78   2                  break;   
+  79   2              case GPIO8_KPA0:
+  80   2                  BKE6_D9_REG |= (Function<<4);
+  81   2                  break;
+  82   2              case GPIO7_SD3A:
+  83   2                  BKE6_D8_REG |= Function;
+  84   2                  break;        
+  85   2              case GPIO6_SD2A:
+  86   2                  BKE6_D8_REG |= (Function<<4);
+  87   2                  break;
+  88   2              case GPIO5_SD1A:
+  89   2                  BKE6_D7_REG |= Function;
+  90   2                  break;
+  91   2              case GPIO4_SPDIFA:
+  92   2                  BKE6_D7_REG |= (Function<<4);
+  93   2                  break;
+  94   2              case GPI_HS_TSTP:
+  95   2                  break;   
+  96   2              case GPI_HS_TSTN:
+  97   2                  break;  
+  98   2              case GPIO3_DHRX_DCAUXP:
+  99   2                  BKE6_D6_REG |= Function;
+ 100   2                  break;  
+ 101   2              case GPIO2_DHRX_DCAUXN_5VDET:
+ 102   2                  BKE6_D6_REG |= (Function<<4);
+ 103   2                  break;  
+ 104   2              case GPIO1_EARCP:
+ 105   2                  BKE6_D5_REG |= Function;
+ 106   2                  break;  
+ 107   2              case GPIO0_EARCN:
+ 108   2                  BKE6_D5_REG |= (Function<<4);
+ 109   2                  break;  
+ 110   2              case GPIO15_D2_VDET:
+ 111   2                  BKE6_D4_REG |= Function;
+ 112   2                  break; 
+ 113   2              case GPIO12_D1_VDET:
+ 114   2                  BKE6_D4_REG |= (Function<<4);
+ 115   2                  break; 
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 3   
+
+ 116   2              case GPIO14_BB_DM:
+ 117   2                  BKE6_D3_REG |= Function;
+ 118   2                  break; 
+ 119   2              case GPIO13_BB_DP:
+ 120   2                  BKE6_D3_REG |= (Function<<4);
+ 121   2                  break; 
+ 122   2              default :
+ 123   2                  break;
+ 124   2          }
+ 125   1      }
+ 126          
+ 127          //===========================================
+ 128          //  func: gpio mode set
+ 129          // input: @GpioN, gpio num
+ 130          //        @Mode, can refre to: EnumIOMode
+ 131          //        @Vth, gpi thresold select: 0 is 3.3v, 1 is 1.8v
+ 132          //output: N/A
+ 133          //return: void
+ 134          //  Info: N/A
+ 135          //===========================================
+ 136          void Drv_Gpio_ModeSet(IN u8 GpioN, IN u8 Rs_Os, IN u8 Vth)
+ 137          {
+ 138   1          switch(GpioN)
+ 139   1          {
+ 140   2              case CEC:
+ 141   2                  BKA3_74_REG &= 0xF0;
+ 142   2                  BKA3_74_REG |= Rs_Os;
+ 143   2                  BKA3_74_REG |= (Vth<<5);
+ 144   2                  break;
+ 145   2              case INT:
+ 146   2                  BKA3_5C_REG &= 0x0f;
+ 147   2                  BKA3_5C_REG |= (Rs_Os<<4);
+ 148   2                  BKA3_64_REG |= (Vth<<4);
+ 149   2                  break;        
+ 150   2              case GPIO32_SCLKB:
+ 151   2                  BKA3_72_REG &= 0xf0;
+ 152   2                  BKA3_72_REG |= Rs_Os;
+ 153   2                  BKA3_74_REG |= (Vth<<6);
+ 154   2                  break;
+ 155   2              case GPIO31_MCLKB:
+ 156   2                  BKA3_72_REG &= 0x0f;
+ 157   2                  BKA3_72_REG |= (Rs_Os<<4);
+ 158   2                  BKA3_74_REG |= (Vth<<7);
+ 159   2                  break;
+ 160   2              case GPIO30_WSB:
+ 161   2                  BKA3_71_REG &= 0xf0;
+ 162   2                  BKA3_71_REG |= Rs_Os;
+ 163   2                  BKA3_73_REG |= (Vth<<0);
+ 164   2                  break;  
+ 165   2              case GPIO29_SD0B:
+ 166   2                  BKA3_71_REG &= 0x0f;
+ 167   2                  BKA3_71_REG |= (Rs_Os<<4);
+ 168   2                  BKA3_73_REG |= (Vth<<1);
+ 169   2                  break;
+ 170   2              case GPIO28_SD1B:
+ 171   2                  BKA3_70_REG &= 0xf0;
+ 172   2                  BKA3_70_REG |= Rs_Os;
+ 173   2                  BKA3_73_REG |= (Vth<<2);
+ 174   2                  break;
+ 175   2              case GPIO27_SD2B:
+ 176   2                  BKA3_70_REG &= 0x0f;
+ 177   2                  BKA3_70_REG |= (Rs_Os<<4);
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 4   
+
+ 178   2                  BKA3_73_REG |= (Vth<<3);
+ 179   2                  break;
+ 180   2              case GPIO26_SD3B:
+ 181   2                  BKA3_6F_REG &= 0xf0;
+ 182   2                  BKA3_6F_REG |= Rs_Os;
+ 183   2                  BKA3_73_REG |= (Vth<<4);
+ 184   2                  break;
+ 185   2              case GPIO25_PWM3:
+ 186   2                  BKA3_6F_REG &= 0x0f;
+ 187   2                  BKA3_6F_REG |= (Rs_Os<<4);
+ 188   2                  BKA3_73_REG |= (Vth<<5);
+ 189   2                  break;
+ 190   2              case GPIO24_PWM2:
+ 191   2                  BKA3_6E_REG &= 0xf0;
+ 192   2                  BKA3_6E_REG |= Rs_Os;
+ 193   2                  BKA3_73_REG |= (Vth<<6);
+ 194   2                  break;
+ 195   2              case GPIO23_SBU1:
+ 196   2                  BKA3_6E_REG &= 0x0f;
+ 197   2                  BKA3_6E_REG |= (Rs_Os<<4);
+ 198   2                  BKA3_73_REG |= (Vth<<7);
+ 199   2                  break;        
+ 200   2              case GPIO22_PWM1:
+ 201   2                  BKA3_69_REG &= 0xf0;
+ 202   2                  BKA3_69_REG |= Rs_Os;
+ 203   2                  BKA3_6A_REG |= (Vth<<0);
+ 204   2                  break;
+ 205   2              case GPIO21_UART_TX:
+ 206   2                  BKA3_69_REG &= 0x0f;
+ 207   2                  BKA3_69_REG |= (Rs_Os<<4);
+ 208   2                  BKA3_6A_REG |= (Vth<<1);
+ 209   2                  break;
+ 210   2              case GPIO20_PWM0:
+ 211   2                  BKA3_68_REG &= 0xf0;
+ 212   2                  BKA3_68_REG |= Rs_Os;
+ 213   2                  BKA3_6A_REG |= (Vth<<2);
+ 214   2                  break;
+ 215   2              case GPIO19_SD0A_VSYNC:
+ 216   2                  BKA3_62_REG &= 0x0f;
+ 217   2                  BKA3_62_REG |= (Rs_Os<<4);
+ 218   2                  BKA3_64_REG |= (Vth<<0);
+ 219   2                  break;
+ 220   2              case GPIO18_WSA:
+ 221   2                  BKA3_61_REG &= 0xf0;
+ 222   2                  BKA3_61_REG |= Rs_Os;
+ 223   2                  BKA3_64_REG |= (Vth<<1);
+ 224   2                  break;        
+ 225   2              case GPIO17_SCLKA:
+ 226   2                  BKA3_61_REG &= 0x0f;
+ 227   2                  BKA3_61_REG |= (Rs_Os<<4);
+ 228   2                  BKA3_64_REG |= (Vth<<2);
+ 229   2                  break;
+ 230   2              case GPIO16_MCLKA:
+ 231   2                  BKA3_60_REG &= 0xf0;
+ 232   2                  BKA3_60_REG |= Rs_Os;
+ 233   2                  BKA3_64_REG |= (Vth<<3);
+ 234   2                  break;         
+ 235   2              case GPIO11_KPA3:
+ 236   2                  BKA3_60_REG &= 0x0f;
+ 237   2                  BKA3_60_REG |= (Rs_Os<<4);
+ 238   2                  BKA3_63_REG |= (Vth<<0);
+ 239   2                  break;
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 5   
+
+ 240   2              case GPIO10_KPA2://GPIO23
+ 241   2                  BKA3_5F_REG &= 0xf0;
+ 242   2                  BKA3_5F_REG |= Rs_Os;
+ 243   2                  BKA3_63_REG |= (Vth<<1);
+ 244   2                  break;     
+ 245   2              case GPIO9_KPA1:
+ 246   2                  BKA3_5F_REG &= 0x0f;
+ 247   2                  BKA3_5F_REG |= (Rs_Os<<4);
+ 248   2                  BKA3_63_REG |= (Vth<<2);
+ 249   2                  break;   
+ 250   2              case GPIO8_KPA0:
+ 251   2                  BKA3_5E_REG &= 0xf0;
+ 252   2                  BKA3_5E_REG |= Rs_Os;
+ 253   2                  BKA3_63_REG |= (Vth<<3);
+ 254   2                  break;
+ 255   2              case GPIO7_SD3A:
+ 256   2                  BKA3_5E_REG &= 0x0f;
+ 257   2                  BKA3_5E_REG |= (Rs_Os<<4);
+ 258   2                  BKA3_63_REG |= (Vth<<4);
+ 259   2                  break;        
+ 260   2              case GPIO6_SD2A:
+ 261   2                  BKA3_5D_REG &= 0xf0;
+ 262   2                  BKA3_5D_REG |= Rs_Os;
+ 263   2                  BKA3_63_REG |= (Vth<<5);
+ 264   2                  break;
+ 265   2              case GPIO5_SD1A:
+ 266   2                  BKA3_5D_REG &= 0x0f;
+ 267   2                  BKA3_5D_REG |= (Rs_Os<<4);
+ 268   2                  BKA3_63_REG |= (Vth<<6);
+ 269   2                  break;
+ 270   2              case GPIO4_SPDIFA:
+ 271   2                  BKA3_5C_REG &= 0xf0;
+ 272   2                  BKA3_5C_REG |= Rs_Os;
+ 273   2                  BKA3_63_REG |= (Vth<<7);
+ 274   2                  break;
+ 275   2              case GPI_HS_TSTP:
+ 276   2                  break;   
+ 277   2              case GPI_HS_TSTN:
+ 278   2                  break;  
+ 279   2              case GPIO3_DHRX_DCAUXP:
+ 280   2                  BKA3_5A_REG &= 0xf0;
+ 281   2                  BKA3_5A_REG |= Rs_Os;
+ 282   2                  BKA3_5B_REG |= (Vth<<0);
+ 283   2                  break;  
+ 284   2              case GPIO2_DHRX_DCAUXN_5VDET:
+ 285   2                  BKA3_59_REG &= 0xf0;
+ 286   2                  BKA3_59_REG |= Rs_Os;
+ 287   2                  BKA3_5B_REG |= (Vth<<2);
+ 288   2                  break;  
+ 289   2              case GPIO1_EARCP:
+ 290   2                  BKA2_A2_REG &= 0xf0;
+ 291   2                  BKA2_A2_REG |= Rs_Os;
+ 292   2                  BKA2_A2_REG |= (Vth<<4);
+ 293   2                  break;  
+ 294   2              case GPIO0_EARCN:
+ 295   2                  BKA2_A3_REG &= 0xf0;
+ 296   2                  BKA2_A3_REG |= Rs_Os;
+ 297   2                  BKA2_A3_REG |= (Vth<<4);
+ 298   2                  break;  
+ 299   2              case GPIO15_D2_VDET:
+ 300   2                  BKA2_C0_REG &= 0xf0;
+ 301   2                  BKA2_C0_REG |= Rs_Os;
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 6   
+
+ 302   2                  BKA3_64_REG |= (Vth<<3);
+ 303   2                  break; 
+ 304   2              case GPIO12_D1_VDET:
+ 305   2                  BKA2_BF_REG &= 0xf0;
+ 306   2                  BKA2_BF_REG |= Rs_Os;
+ 307   2                  BKA2_BF_REG |= (Vth<<7);
+ 308   2                  break; 
+ 309   2              case GPIO14_BB_DM:
+ 310   2                  BKA2_BE_REG &= 0xf0;
+ 311   2                  BKA2_BE_REG |= Rs_Os;
+ 312   2                  BKA2_BE_REG |= (Vth<<7);
+ 313   2                  break; 
+ 314   2              case GPIO13_BB_DP:
+ 315   2                  BKA2_BD_REG &= 0xf0;
+ 316   2                  BKA2_BD_REG |= Rs_Os;
+ 317   2                  BKA2_BD_REG |= (Vth<<7);
+ 318   2                  break; 
+ 319   2              default :
+ 320   2                  break;
+ 321   2          }
+ 322   1      }
+ 323          
+ 324          void Drv_IOSoftLevel_Set(IN u8 GpioN,IN u8 Softlevel)
+ 325          {
+ 326   1          switch(GpioN)
+ 327   1          {
+ 328   2              case CEC:
+ 329   2                  BKA3_85_REG |= BIT7_1;
+ 330   2                  (Softlevel)?(BKA3_85_REG |= BIT6_1):(BKA3_85_REG &= BIT6_0);
+ 331   2                  break;
+ 332   2              case INT:
+ 333   2                  BKA3_7F_REG |= BIT1_1;
+ 334   2                  (Softlevel)?(BKA3_7F_REG |= BIT0_1):(BKA3_7F_REG &= BIT0_0);
+ 335   2                  break;        
+ 336   2              case GPIO32_SCLKB:
+ 337   2                  BKA3_89_REG |= BIT1_1;
+ 338   2                  (Softlevel)?(BKA3_89_REG |= BIT0_1):(BKA3_89_REG &= BIT0_0);
+ 339   2                  break;
+ 340   2              case GPIO31_MCLKB:
+ 341   2                  BKA3_88_REG |= BIT1_1;
+ 342   2                  (Softlevel)?(BKA3_88_REG |= BIT0_1):(BKA3_88_REG &= BIT0_0);
+ 343   2                  break;
+ 344   2              case GPIO30_WSB:
+ 345   2                  BKA3_88_REG |= BIT3_1;
+ 346   2                  (Softlevel)?(BKA3_88_REG |= BIT2_1):(BKA3_88_REG &= BIT2_0);
+ 347   2                  break;  
+ 348   2              case GPIO29_SD0B:
+ 349   2                  BKA3_88_REG |= BIT5_1;
+ 350   2                  (Softlevel)?(BKA3_88_REG |= BIT4_1):(BKA3_88_REG &= BIT4_0);
+ 351   2                  break;
+ 352   2              case GPIO28_SD1B:
+ 353   2                  BKA3_88_REG |= BIT7_1;
+ 354   2                  (Softlevel)?(BKA3_88_REG |= BIT6_1):(BKA3_88_REG &= BIT6_0);
+ 355   2                  break;
+ 356   2              case GPIO27_SD2B:
+ 357   2                  BKA3_87_REG |= BIT1_1;
+ 358   2                  (Softlevel)?(BKA3_87_REG |= BIT0_1):(BKA3_87_REG &= BIT0_0);
+ 359   2                  break;
+ 360   2              case GPIO26_SD3B:
+ 361   2                  BKA3_87_REG |= BIT3_1;
+ 362   2                  (Softlevel)?(BKA3_87_REG |= BIT2_1):(BKA3_87_REG &= BIT2_0);
+ 363   2                  break;
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 7   
+
+ 364   2              case GPIO25_PWM3:
+ 365   2                  BKA3_87_REG |= BIT5_1;
+ 366   2                  (Softlevel)?(BKA3_87_REG |= BIT4_1):(BKA3_87_REG &= BIT4_0);
+ 367   2                  break;
+ 368   2              case GPIO24_PWM2:
+ 369   2                  BKA3_87_REG |= BIT7_1;
+ 370   2                  (Softlevel)?(BKA3_87_REG |= BIT6_1):(BKA3_87_REG &= BIT6_0);
+ 371   2                  break;
+ 372   2              case GPIO23_SBU1:
+ 373   2                  BKA3_86_REG |= BIT1_1;
+ 374   2                  (Softlevel)?(BKA3_86_REG |= BIT0_1):(BKA3_86_REG &= BIT0_0);
+ 375   2                  break;        
+ 376   2              case GPIO22_PWM1:
+ 377   2                  BKA3_84_REG |= BIT1_1;
+ 378   2                  (Softlevel)?(BKA3_84_REG |= BIT0_1):(BKA3_84_REG &= BIT0_0);
+ 379   2                  break;
+ 380   2              case GPIO21_UART_TX:
+ 381   2                  BKA3_84_REG |= BIT3_1;
+ 382   2                  (Softlevel)?(BKA3_84_REG |= BIT2_1):(BKA3_84_REG &= BIT2_0);
+ 383   2                  break;
+ 384   2              case GPIO20_PWM0:
+ 385   2                  BKA3_84_REG |= BIT5_1;
+ 386   2                  (Softlevel)?(BKA3_84_REG |= BIT4_1):(BKA3_84_REG &= BIT4_0);
+ 387   2                  break;
+ 388   2              case GPIO19_SD0A_VSYNC:
+ 389   2                  BKA3_82_REG |= BIT1_1;
+ 390   2                  (Softlevel)?(BKA3_82_REG |= BIT0_1):(BKA3_82_REG &= BIT0_0);
+ 391   2                  break;
+ 392   2              case GPIO18_WSA:
+ 393   2                  BKA3_82_REG |= BIT3_1;
+ 394   2                  (Softlevel)?(BKA3_82_REG |= BIT2_1):(BKA3_82_REG &= BIT2_0);
+ 395   2                  break;        
+ 396   2              case GPIO17_SCLKA:
+ 397   2                  BKA3_82_REG |= BIT5_1;
+ 398   2                  (Softlevel)?(BKA3_82_REG |= BIT4_1):(BKA3_82_REG &= BIT4_0);
+ 399   2                  break;
+ 400   2              case GPIO16_MCLKA:
+ 401   2                  BKA3_82_REG |= BIT7_1;
+ 402   2                  (Softlevel)?(BKA3_82_REG |= BIT6_1):(BKA3_82_REG &= BIT6_0);
+ 403   2                  break;       
+ 404   2              case GPIO11_KPA3:
+ 405   2                  BKA3_81_REG |= BIT1_1;
+ 406   2                  (Softlevel)?(BKA3_81_REG |= BIT0_1):(BKA3_81_REG &= BIT0_0);
+ 407   2                  break;
+ 408   2              case GPIO10_KPA2://GPIO23
+ 409   2                  BKA3_81_REG |= BIT3_1;
+ 410   2                  (Softlevel)?(BKA3_81_REG |= BIT2_1):(BKA3_81_REG &= BIT2_0);
+ 411   2                  break;     
+ 412   2              case GPIO9_KPA1:
+ 413   2                  BKA3_81_REG |= BIT5_1;
+ 414   2                  (Softlevel)?(BKA3_81_REG |= BIT4_1):(BKA3_81_REG &= BIT4_0);
+ 415   2                  break;   
+ 416   2              case GPIO8_KPA0:
+ 417   2                  BKA3_81_REG |= BIT7_1;
+ 418   2                  (Softlevel)?(BKA3_81_REG |= BIT6_1):(BKA3_81_REG &= BIT6_0);
+ 419   2                  break;
+ 420   2              case GPIO7_SD3A:
+ 421   2                  BKA3_80_REG |= BIT1_1;
+ 422   2                  (Softlevel)?(BKA3_80_REG |= BIT0_1):(BKA3_80_REG &= BIT0_0);
+ 423   2                  break;        
+ 424   2              case GPIO6_SD2A:
+ 425   2                  BKA3_80_REG |= BIT3_1;
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 8   
+
+ 426   2                  (Softlevel)?(BKA3_80_REG |= BIT2_1):(BKA3_80_REG &= BIT2_0);
+ 427   2                  break;
+ 428   2              case GPIO5_SD1A:
+ 429   2                  BKA3_80_REG |= BIT5_1;
+ 430   2                  (Softlevel)?(BKA3_80_REG |= BIT4_1):(BKA3_80_REG &= BIT4_0);
+ 431   2                  break;
+ 432   2              case GPIO4_SPDIFA:
+ 433   2                  BKA3_80_REG |= BIT7_1;
+ 434   2                  (Softlevel)?(BKA3_80_REG |= BIT6_1):(BKA3_80_REG &= BIT6_0);
+ 435   2                  break;
+ 436   2              case GPI_HS_TSTP:
+ 437   2                  break;   
+ 438   2              case GPI_HS_TSTN:
+ 439   2                  break;  
+ 440   2              case GPIO3_DHRX_DCAUXP:
+ 441   2                  BKA3_7E_REG |= BIT1_1;
+ 442   2                  (Softlevel)?(BKA3_7E_REG |= BIT0_1):(BKA3_7E_REG &= BIT0_0);
+ 443   2                  break;  
+ 444   2              case GPIO2_DHRX_DCAUXN_5VDET:
+ 445   2                  BKA3_7E_REG |= BIT3_1;
+ 446   2                  (Softlevel)?(BKA3_7E_REG |= BIT2_1):(BKA3_7E_REG &= BIT2_0);
+ 447   2                  break;  
+ 448   2              case GPIO1_EARCP:
+ 449   2                  BKA2_A5_REG |= BIT1_1;
+ 450   2                  (Softlevel)?(BKA2_A5_REG |= BIT0_1):(BKA2_A5_REG &= BIT0_0);
+ 451   2                  break;  
+ 452   2              case GPIO0_EARCN:
+ 453   2                  BKA2_A6_REG |= BIT1_1;
+ 454   2                  (Softlevel)?(BKA2_A6_REG |= BIT0_1):(BKA2_A6_REG &= BIT0_0);
+ 455   2                  break;  
+ 456   2              case GPIO15_D2_VDET:
+ 457   2                  BKA2_C9_REG |= BIT1_1;
+ 458   2                  (Softlevel)?(BKA2_C9_REG |= BIT0_1):(BKA2_C9_REG &= BIT0_0);
+ 459   2                  break; 
+ 460   2              case GPIO12_D1_VDET:
+ 461   2                  BKA2_C9_REG |= BIT3_1;
+ 462   2                  (Softlevel)?(BKA2_C9_REG |= BIT2_1):(BKA2_C9_REG &= BIT2_0);
+ 463   2                  break; 
+ 464   2              case GPIO14_BB_DM:
+ 465   2                  BKA2_C9_REG |= BIT5_1;
+ 466   2                  (Softlevel)?(BKA2_C9_REG |= BIT4_1):(BKA2_C9_REG &= BIT4_0);
+ 467   2                  break; 
+ 468   2              case GPIO13_BB_DP:
+ 469   2                  BKA2_C9_REG |= BIT7_1;
+ 470   2                  (Softlevel)?(BKA2_C9_REG |= BIT6_1):(BKA2_C9_REG &= BIT6_0);
+ 471   2                  break; 
+ 472   2              default :
+ 473   2                  break;
+ 474   2          }    
+ 475   1      }
+ 476          
+ 477          u8 Drv_GetIO_State(IN u8 ucGpioN)
+ 478          {
+ 479   1          u8 ucIOValue;
+ 480   1          switch(ucGpioN)
+ 481   1          {
+ 482   2              case CEC:
+ 483   2                  ucIOValue = BKE5_D6_REG&BIT7_1;
+ 484   2                  break;
+ 485   2              case INT:
+ 486   2                  ucIOValue = BKE5_A3_REG&BIT0_1;
+ 487   2                  break;        
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 9   
+
+ 488   2              case GPIO32_SCLKB:
+ 489   2                  ucIOValue = BKE5_A9_REG&BIT1_1;
+ 490   2                  break;
+ 491   2              case GPIO31_MCLKB:
+ 492   2                  ucIOValue = BKE5_A9_REG&BIT2_1;
+ 493   2                  break;
+ 494   2              case GPIO30_WSB:
+ 495   2                  ucIOValue = BKE5_A9_REG&BIT3_1;
+ 496   2                  break;  
+ 497   2              case GPIO29_SD0B:
+ 498   2                  ucIOValue = BKE5_A9_REG&BIT4_1;
+ 499   2                  break;
+ 500   2              case GPIO28_SD1B:
+ 501   2                  ucIOValue = BKE5_A9_REG&BIT5_1;
+ 502   2                  break;
+ 503   2              case GPIO27_SD2B:
+ 504   2                  ucIOValue = BKE5_A9_REG&BIT6_1;
+ 505   2                  break;
+ 506   2              case GPIO26_SD3B:
+ 507   2                  ucIOValue = BKE5_A9_REG&BIT7_1;
+ 508   2                  break;
+ 509   2              case GPIO25_PWM3:
+ 510   2                  ucIOValue = BKE5_A8_REG&BIT0_1;
+ 511   2                  break;
+ 512   2              case GPIO24_PWM2:
+ 513   2                  ucIOValue = BKE5_A8_REG&BIT1_1;
+ 514   2                  break;
+ 515   2              case GPIO23_SBU1:
+ 516   2                  ucIOValue = BKE5_A8_REG&BIT2_1;
+ 517   2                  break;        
+ 518   2              case GPIO22_PWM1:
+ 519   2                  ucIOValue = BKE5_A7_REG&BIT4_1;
+ 520   2                  break;
+ 521   2              case GPIO21_UART_TX:
+ 522   2                  ucIOValue = BKE5_A7_REG&BIT5_1;
+ 523   2                  break;
+ 524   2              case GPIO20_PWM0:
+ 525   2                  ucIOValue = BKE5_A7_REG&BIT6_1;
+ 526   2                  break;
+ 527   2              case GPIO19_SD0A_VSYNC:
+ 528   2                  ucIOValue = BKE5_A5_REG&BIT4_1;
+ 529   2                  break;
+ 530   2              case GPIO18_WSA:
+ 531   2                  ucIOValue = BKE5_A5_REG&BIT5_1;
+ 532   2                  break;        
+ 533   2              case GPIO17_SCLKA:
+ 534   2                  ucIOValue = BKE5_A5_REG&BIT6_1;
+ 535   2                  break;
+ 536   2              case GPIO16_MCLKA:
+ 537   2                  ucIOValue = BKE5_A5_REG&BIT7_1;
+ 538   2                  break;       
+ 539   2              case GPIO11_KPA3:
+ 540   2                  ucIOValue = BKE5_A4_REG&BIT0_1;
+ 541   2                  break;
+ 542   2              case GPIO10_KPA2://GPIO23
+ 543   2                  ucIOValue = BKE5_A4_REG&BIT1_1;
+ 544   2                  break;     
+ 545   2              case GPIO9_KPA1:
+ 546   2                  ucIOValue = BKE5_A4_REG&BIT2_1;
+ 547   2                  break;   
+ 548   2              case GPIO8_KPA0:
+ 549   2                  ucIOValue = BKE5_A4_REG&BIT3_1;
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 10  
+
+ 550   2                  break;
+ 551   2              case GPIO7_SD3A:
+ 552   2                  ucIOValue = BKE5_A4_REG&BIT4_1;
+ 553   2                  break;        
+ 554   2              case GPIO6_SD2A:
+ 555   2                  ucIOValue = BKE5_A4_REG&BIT5_1;
+ 556   2                  break;
+ 557   2              case GPIO5_SD1A:
+ 558   2                  ucIOValue = BKE5_A4_REG&BIT6_1;
+ 559   2                  break;
+ 560   2              case GPIO4_SPDIFA:
+ 561   2                  ucIOValue = BKE5_A4_REG&BIT7_1;
+ 562   2                  break;
+ 563   2              case GPI_HS_TSTP:
+ 564   2                  ucIOValue = BKE5_A3_REG&BIT1_1;
+ 565   2                  break;   
+ 566   2              case GPI_HS_TSTN:
+ 567   2                  ucIOValue = BKE5_A3_REG&BIT2_1;
+ 568   2                  break;  
+ 569   2              case GPIO3_DHRX_DCAUXP:
+ 570   2                  ucIOValue = BKE5_A3_REG&BIT6_1;
+ 571   2                  break;  
+ 572   2              case GPIO2_DHRX_DCAUXN_5VDET:
+ 573   2                  ucIOValue = BKE5_A3_REG&BIT7_1;
+ 574   2                  break;  
+ 575   2              case GPIO1_EARCP:
+ 576   2                  ucIOValue = BKE5_9E_REG&BIT0_1;
+ 577   2                  break;  
+ 578   2              case GPIO0_EARCN:
+ 579   2                  ucIOValue = BKE5_9F_REG&BIT7_1;
+ 580   2                  break;  
+ 581   2              case GPIO15_D2_VDET:
+ 582   2                  ucIOValue = BKE5_A1_REG&BIT5_1;
+ 583   2                  break; 
+ 584   2              case GPIO12_D1_VDET:
+ 585   2                  ucIOValue = BKE5_9F_REG&BIT1_1;
+ 586   2                  break; 
+ 587   2              case GPIO14_BB_DM:
+ 588   2                  ucIOValue = BKE5_9F_REG&BIT2_1;
+ 589   2                  break; 
+ 590   2              case GPIO13_BB_DP:
+ 591   2                  ucIOValue = BKE5_9F_REG&BIT3_1;
+ 592   2                  break; 
+ 593   2              default :
+ 594   2                  break;
+ 595   2          }
+ 596   1          if(ucIOValue != 0x00)
+ 597   1          {
+ 598   2              return HIGH; 
+ 599   2          }
+ 600   1          else
+ 601   1          {
+ 602   2              return LOW; 
+ 603   2          }   
+ 604   1      }   
+ 605          
+ 606          void Drv_IO_UartSet(void)
+ 607          {
+ 608   1          //uart tx set
+ 609   1          Drv_Gpio_ModeSet(UART_TX_PIN, OUT_PP_2x | NO_PU_PD, VOL_3_3);
+ 610   1          Drv_Gpio_OutSignalSet(UART_TX_PIN, Io_Function0);
+ 611   1      
+C51 COMPILER V9.53.0.0   DRVGPIO                                                           02/13/2025 10:14:16 PAGE 11  
+
+ 612   1          //uart rx set
+ 613   1          //wait add
+ 614   1      }
+ 615          
+ 616          #if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+              void Drv_GPIO19Vsync_Set(u8 IsEn)
+              {
+                  if(IsEn == ENABLED)
+                  {
+                                              Drv_Gpio_ModeSet(GPIO19_SD0A_VSYNC, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+                      BKF3_1C_REG = 0x00;
+                      BKF1_A5_REG |= 0xC0; //DPRX test out select: Video test out
+                      BKE6_E4_REG = 0x02 ; //Digital output test bus source select : dprx_test[7:0]
+                      BKE6_E6_REG |= 0x03 ;//Test output bit3 select block test bit3
+                      BKE6_E6_REG &= 0xF3 ;//Test output bit3 select block test bit3
+                                              Drv_Gpio_OutSignalSet(GPIO19_SD0A_VSYNC, Blk_test_out_b3);//SD0A_GPIO19 select Blk_test_out_b3;                                 
+                  }
+                  else
+                  {
+                      Drv_Gpio_ModeSet(GPIO19_SD0A_VSYNC, OUT_DISABLE|NO_PU_PD, VOL_3_3);
+                  }
+              }
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2385    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

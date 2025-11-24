@@ -1,0 +1,39 @@
+C51 COMPILER V9.53.0.0   MODDSCDEC                                                         02/13/2025 10:14:05 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODDSCDEC
+OBJECT MODULE PLACED IN .\Objects\ModDscDec.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModDscDec.c LARGE OBJECTADVANCED OPTIMIZE(11,SIZE)
+                    - REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG PRI
+                    -NT(.\Listings\ModDscDec.lst) OBJECT(.\Objects\ModDscDec.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: ChipDscDec.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.05.31
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          //-wangtt- wait delete
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,448 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  Csc.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+#if CSC_SUPPORT == ENABLED
+
+void Drv_CscRx_Init(void)
+{
+    #if RX_PORT_SIGN == DP_PORT
+    //sel pixel clk
+    BKA3_3C_REG = (BKA3_3C_REG&0xf0) | 0x01;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                                            //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+    BKA3_3E_REG = (BKA3_3E_REG&0xf0) | 0x01;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                                            //[3:0]rg_clkgen_dscout_divse         : div 2
+    #endif
+
+    #if RX_PORT_SIGN == HDMI_PORT
+    //sel pixel clk
+    BKA3_3C_REG = (BKA3_3C_REG&0xf0) | 0x01;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                                            //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+    BKA3_3E_REG = (BKA3_3E_REG&0xf0) | 0x01;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                                            //[3:0]rg_clkgen_dscout_divse         : div 2
+    #endif
+    BKC7_65_REG = 0x00;//RGB to YCBCR
+    BKC7_66_REG = 0x04;//bit6:444to422;bit2:422to420
+    BKC7_67_REG = 0x10;//Y422_TO_444
+    BKC7_68_REG = 0x00;//bit4:444 to RGB
+}
+
+void Drv_CscRx_TimingSet(void)
+{
+    LtTiming_S  stCscRxTiming;
+    
+    #if ((RX_PORT_SIGN == DP_PORT)&&(MIPITX_VID_PATTERN_MODE == NO_PATTERN ))
+    Drv_DpRx_RxTimingGet(&stCscRxTiming);//-wangtt- wait update
+    #endif
+    #if ((RX_PORT_SIGN == HDMI_PORT)&&(MIPITX_VID_PATTERN_MODE == NO_PATTERN ))
+    Drv_HdmiRx_RxTimingGet(&stCscRxTiming);//-wangtt- wait update
+    #endif
+	
+    #if MIPITX_VID_PATTERN_MODE != NO_PATTERN 
+	
+		stCscRxTiming.usHfp = l_CustomTimingStr.Hfp;
+		stCscRxTiming.usHsync = l_CustomTimingStr.Hsw;
+		stCscRxTiming.usHbp = l_CustomTimingStr.Hbp;
+
+
+		stCscRxTiming.usHact = l_CustomTimingStr.Hactive;;
+		stCscRxTiming.usVact = l_CustomTimingStr.Vactive;
+		stCscRxTiming.usHtol = l_CustomTimingStr.Htotal;
+		stCscRxTiming.usVtol = l_CustomTimingStr.Vtotal;
+		
+		stCscRxTiming.usVfp = l_CustomTimingStr.Vfp;
+		stCscRxTiming.usVsync = l_CustomTimingStr.Vsw;
+		stCscRxTiming.usVbp = l_CustomTimingStr.Vbp;
+
+    #endif		
+	
+    BKC7_74_REG = stCscRxTiming.usVact>>8;  //vactive
+    BKC7_75_REG = stCscRxTiming.usVact;  //vactive
+    BKC7_7C_REG = (stCscRxTiming.usHtol - stCscRxTiming.usHact) >> 8;  //hblank,0x01
+    BKC7_7D_REG = (stCscRxTiming.usHtol - stCscRxTiming.usHact) & 0xff;//hblank,0x18
+    BKC7_7E_REG = stCscRxTiming.usHtol >> 8;//htotal,  0x08
+    BKC7_7F_REG = stCscRxTiming.usHtol& 0xff;//htotal,0x98    
+}
+
+void Drv_CscRx_420ToNot420ClkSet(void)
+{
+    #if RX_PORT_SIGN == DP_PORT
+    BKA3_3C_REG &= 0xf0;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                        //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+    BKA3_3E_REG &= 0xf0;//[6:4]rg_clkgen_dscout_muxsel        : 001-aa_pcrpl
+    #endif
+    #if RX_PORT_SIGN == HDMI_PORT
+    BKA3_3C_REG &= 0xf0;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                        //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+    BKA3_3E_REG &= 0xf0;//[6:4]rg_clkgen_dscout_muxsel        : 001-aa_pcrpll_pix_clk
+                            //[3:0]rg_clkgen_dscout_divse        : div 2
+    #endif
+}
+
+void Drv_CscRx_Not420To420ClkSet(void)
+{
+    #if ((RX_PORT_SIGN == DP_PORT)&&(MIPITX_VID_PATTERN_MODE == NO_PATTERN ))
+    BKA3_3C_REG = (BKA3_3C_REG&0xf0) | 0x03;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                                            //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+    BKA3_3E_REG = (BKA3_3E_REG&0xf0) | 0x03;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                                            //[3:0]rg_clkgen_dscout_divse        : div 2
+    #endif
+    #if ((RX_PORT_SIGN == HDMI_PORT)&&(MIPITX_VID_PATTERN_MODE == NO_PATTERN ))
+    BKA3_3C_REG = (BKA3_3C_REG&0xf0) | 0x03;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                                            //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+    BKA3_3E_REG = (BKA3_3E_REG&0xf0) | 0x03;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                                            //[3:0]rg_clkgen_dscout_divse        : div 2
+    #endif
+	
+    #if MIPITX_VID_PATTERN_MODE != NO_PATTERN 
+    BKA3_3C_REG = (BKA3_3C_REG&0xf0) | 0x01;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                                            //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+    BKA3_3E_REG = (BKA3_3E_REG&0xf0) | 0x01;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                                            //[3:0]rg_clkgen_dscout_divse        : div 2
+    #endif	
+}
+
+void Drv_CscRx_Set(u8 CscType)
+{
+    BKC7_65_REG = 0x00; //[4]rgb to ycbcr
+    BKC7_66_REG = 0x04; //[6]444to422, [1]422to420
+    BKC7_67_REG = 0x10; //[6]420to422, [2]Y422to444
+    BKC7_68_REG = 0x00; //[4]ycbcr to rgb
+    switch(CscType)
+    {
+        case RGB_TO_Y444_1:
+            BKC7_65_REG |= BIT4_1; //[4]rgb to ycbcr
+            break;
+        case RGB_TO_Y422_2:
+            BKC7_65_REG |= BIT4_1; //[4]rgb to ycbcr
+            BKC7_66_REG |= BIT6_1; //[6]444to422
+            break;
+        case RGB_TO_Y420_3:
+            BKC7_65_REG |= BIT4_1; //[4]rgb to ycbcr
+            BKC7_66_REG |= 0x42;   //[6]444to422, [1]422to420
+            break;   
+
+        case Y444_TO_RGB_4:
+            BKC7_68_REG |= BIT4_1; //[4]ycbcr to rgb
+            break;
+        case Y444_TO_Y422_5:
+            BKC7_66_REG |= BIT6_1; //[6]444to422
+            break;
+        case Y444_TO_Y420_6:
+            BKC7_66_REG |= 0x42;   //[6]444to422, [1]422to420
+            break;
+
+        case Y422_TO_RGB_7:
+            BKC7_67_REG |= BIT2_1; //[2]422to444
+            BKC7_68_REG |= BIT4_1; //[4]ycbcr to rgb
+            break;
+        case Y422_TO_Y444_8:
+            BKC7_67_REG |= BIT2_1; //[2]422to444
+            break;
+        case Y422_TO_Y420_9:
+            BKC7_66_REG |= BIT1_1; //[1]422to420
+            break;
+
+        case Y420_TO_RGB_10:
+            BKC7_67_REG |= 0x44;   //[6]420to422, [2]422to444
+            BKC7_68_REG |= BIT4_1; //[4]ycbcr to rgb  
+            break;
+        case Y420_TO_Y444_11:
+            BKC7_67_REG |= 0x44;   //[6]420to422, [2]422to444 
+            break;
+        case Y420_TO_Y422_12:
+            BKC7_67_REG |= BIT6_1; //[6]420to422
+            break;
+        default:
+            break;
+    }
+    BKC9_03_REG &= BIT1_0;
+    BKC9_03_REG |= BIT1_1;
+    Ocm_Delay1ms(200);
+    printLT(PRINT_PRIO_HIG, "\nCscRx = 0x%02bx", CscType);
+}
+#if CSC_RANGE_EN ==  ENABLED
+void Drv_CscRx_LimitToFull(IN u8 b1IsLimitToFull,IN u8 ucColorSpace)
+{
+    if (b1IsLimitToFull == TRUE)
+    {
+        BKC7_68_REG |= BIT7_1;//TX [7]data range expand enable
+        if(ucColorSpace == RGB_0)
+        {
+            BKC7_68_REG &= BIT6_0 ; //bit 7:Data range reduce enable
+        }
+        else
+        {
+            BKC7_68_REG |= BIT6_1; //bit 7:Data range expand enable
+        }
+    }
+    else
+    {
+        BKC7_65_REG |= BIT7_1 ; //bit 7:Data range reduce enable
+        if(ucColorSpace == RGB_0)
+        {
+            BKC7_65_REG &= BIT6_0 ; //bit 7:Data range reduce enable
+        }
+        else
+        {
+            BKC7_65_REG |= BIT6_1; //bit 7:Data range reduce enable
+        }
+    }
+}
+#endif
+
+#if ((RX_PORT_SIGN == HDMI_PORT) &&(TX_PORT_SIGN == DP_PORT))
+void Drv_CscRx_RxtoTx(IN StructHdmiRx *pstRxInfo,OUT DpTx_S *pstDpTx)
+#endif
+#if ((RX_PORT_SIGN == DP_PORT) &&(TX_PORT_SIGN == DP_PORT))
+void Drv_CscRx_RxtoTx(IN StructDpRx *pstRxInfo,OUT StructDpTx *pstDpTx)
+#endif
+#if ((RX_PORT_SIGN == HDMI_PORT) &&(TX_PORT_SIGN == HDMI_PORT))
+void Drv_CscRx_RxtoTx(IN StructHdmiRx *pstRxInfo,OUT HdmiTx_S *pstHdmiTx)
+#endif
+#if ((RX_PORT_SIGN == DP_PORT) &&(TX_PORT_SIGN == HDMI_PORT))
+void Drv_CscRx_RxtoTx(IN StructDpRx *pstRxInfo,OUT HdmiTx_S *pstHdmiTx)
+#endif
+#if ((RX_PORT_SIGN == DP_PORT) &&(TX_PORT_SIGN == MIPI_PORT))
+void Drv_CscRx_RxtoTx(StructDpRx *pstRxInfo)
+#endif
+#if ((RX_PORT_SIGN == DP_PORT) &&(TX_PORT_SIGN == LVDS_PORT))
+void Drv_CscRx_RxtoTx(StructDpRx *pstRxInfo)
+#endif
+#if ((RX_PORT_SIGN == HDMI_PORT) &&(TX_PORT_SIGN == MIPI_PORT))
+void Drv_CscRx_RxtoTx(StructHdmiRx *pstRxInfo)
+#endif
+#if ((RX_PORT_SIGN == HDMI_PORT) &&(TX_PORT_SIGN == LVDS_PORT))
+void Drv_CscRx_RxtoTx(StructHdmiRx *pstRxInfo)
+#endif
+{
+    u8 ucCscType = NO_CSC_FUNC_0;
+    if(pstRxInfo->b1CscRxOutFormat == YCbCr420_3)//output color  = 420
+    {
+        Drv_CscRx_TimingSet();
+        Drv_CscRx_Not420To420ClkSet();
+    }
+    else if(pstRxInfo->ucPixelEncoding == YCbCr420_3)//input color = 420 
+    {
+        Drv_CscRx_TimingSet();
+        Drv_CscRx_420ToNot420ClkSet();
+    }
+    switch(pstRxInfo->b1CscRxOutFormat)
+    {
+        case RGB_0:
+            if(pstRxInfo->ucPixelEncoding == YCbCr444_2)
+            {
+                ucCscType = Y444_TO_RGB_4;
+            }
+            else if(pstRxInfo->ucPixelEncoding == YCbCr422_1)
+            {
+                ucCscType = Y422_TO_RGB_7;
+            }
+            if(pstRxInfo->ucPixelEncoding == YCbCr420_3)
+            {
+                ucCscType = Y420_TO_RGB_10;
+            }
+            break;
+        case YCbCr444_2:
+            if((pstRxInfo->ucPixelEncoding == RGB_0)||(pstRxInfo->ucPixelEncoding == RGB_WIDE_4))
+            {
+                ucCscType = RGB_TO_Y444_1;
+            }
+            else if(pstRxInfo->ucPixelEncoding == YCbCr422_1)
+            {
+                ucCscType = Y422_TO_Y444_8;
+            }
+            if(pstRxInfo->ucPixelEncoding == YCbCr420_3)
+            {
+                ucCscType = Y420_TO_Y444_11;
+            }
+            break;
+        case YCbCr422_1:
+            if((pstRxInfo->ucPixelEncoding == RGB_0)||(pstRxInfo->ucPixelEncoding == RGB_WIDE_4))
+            {
+                ucCscType = RGB_TO_Y422_2;
+            }
+            else if(pstRxInfo->ucPixelEncoding == YCbCr444_2)
+            {
+                ucCscType = Y444_TO_Y422_5;
+            }
+            if(pstRxInfo->ucPixelEncoding == YCbCr420_3)
+            {
+                ucCscType = Y420_TO_Y422_12;
+            }
+            break;
+        case YCbCr420_3:
+            if((pstRxInfo->ucPixelEncoding == RGB_0)||(pstRxInfo->ucPixelEncoding == RGB_WIDE_4))
+            {
+                ucCscType = RGB_TO_Y420_3;
+            }
+            else if(pstRxInfo->ucPixelEncoding == YCbCr444_2)
+            {
+                ucCscType = Y444_TO_Y420_6;
+            }
+            else if(pstRxInfo->ucPixelEncoding == YCbCr422_1)
+            {
+                ucCscType = Y422_TO_Y420_9;
+            }
+            break;   
+        default:
+            break;            
+    }
+    Drv_CscRx_Set(ucCscType);
+    #if CSC_RANGE_EN ==  ENABLED
+    switch(pstRxInfo->b1CscRxOutFormat)//color fromat cal
+    {
+			#if RX_PORT_SIGN == HDMI_PORT
+        case RGB_0: 
+        case RGB_WIDE_4:     
+            if ((pstRxInfo->ucRgbRange == LIMIT_RANGE) && (pstRxInfo->b1CscRxOutRange == FULL_RANGE))
+            {
+                Drv_CscRx_LimitToFull(TRUE, pstRxInfo->b1CscRxOutFormat);
+            }
+            else if ((pstRxInfo->ucRgbRange == FULL_RANGE)&&(pstRxInfo->b1CscRxOutRange == LIMIT_RANGE))
+            {    
+                Drv_CscRx_LimitToFull(FALSE, pstRxInfo->ucPixelEncoding);
+            }
+            break;
+        default:
+            if ((pstRxInfo->ucYccRange == LIMIT_RANGE) && (pstRxInfo->b1CscRxOutRange == FULL_RANGE))
+            {
+                Drv_CscRx_LimitToFull(TRUE, pstRxInfo->b1CscRxOutFormat);
+            }
+            else if ((pstRxInfo->ucYccRange == FULL_RANGE)&&(pstRxInfo->b1CscRxOutRange == LIMIT_RANGE))
+            {    
+                Drv_CscRx_LimitToFull(FALSE, pstRxInfo->ucPixelEncoding);
+            }
+            break;
+			#endif	
+
+			#if RX_PORT_SIGN == DP_PORT
+        case RGB_0: 
+        case RGB_WIDE_4:     
+            if ((pstRxInfo->b1DynamicRange == LIMIT_RANGE) && (pstRxInfo->b1CscRxOutRange == FULL_RANGE))
+            {
+                Drv_CscRx_LimitToFull(TRUE, pstRxInfo->b1CscRxOutFormat);
+            }
+            else if ((pstRxInfo->b1DynamicRange == FULL_RANGE)&&(pstRxInfo->b1CscRxOutRange == LIMIT_RANGE))
+            {    
+                Drv_CscRx_LimitToFull(FALSE, pstRxInfo->ucPixelEncoding);
+            }
+            break;
+        default:
+            if ((pstRxInfo->b1DynamicRange == LIMIT_RANGE) && (pstRxInfo->b1CscRxOutRange == FULL_RANGE))
+            {
+                Drv_CscRx_LimitToFull(TRUE, pstRxInfo->b1CscRxOutFormat);
+            }
+            else if ((pstRxInfo->b1DynamicRange == FULL_RANGE)&&(pstRxInfo->b1CscRxOutRange == LIMIT_RANGE))
+            {    
+                Drv_CscRx_LimitToFull(FALSE, pstRxInfo->ucPixelEncoding);
+            }
+            break;
+			#endif								
+    }
+    #endif
+    #if (TX_PORT_SIGN == DP_PORT)
+    pstDpTx->ucMsaValue &= 0xf3;//[3:2]color space: 0-Rgb/YCbCr444/YCbCr420;
+    pstDpTx->ucMisc0    &= 0xf9;//[2:1]color space: 0-Rgb, 1-Ycbcr422, 2-Ycbcr444
+    pstDpTx->ucVscDb16  &= 0x0f;
+    switch(pstRxInfo->b1CscRxOutFormat)//color fromat cal
+    {
+        case RGB_0:
+            pstDpTx->ucMsaValue &= 0xf3;//[3:2]color space: 0-Rgb/YCbCr444/YCbCr420;
+            pstDpTx->ucMisc0    &= 0xf9;//[2:1]color space: 0-Rgb, 1-Ycbcr422, 2-Ycbcr444
+            pstDpTx->ucVscDb16  &= 0x0f;//[7:4]color space: 0-Rgb, 1-Ycbcr444, 2-Ycbcr422, 3-Ycbcr420
+            break;
+        case YCbCr444_2:
+            pstDpTx->ucMsaValue &= 0xf3;
+            pstDpTx->ucMisc0    |= 0x04;
+            pstDpTx->ucVscDb16  |= 0x10;
+            break;
+        case YCbCr422_1:
+            pstDpTx->ucMsaValue |= 0x04;
+            pstDpTx->ucMisc0    |= 0x02;
+            pstDpTx->ucVscDb16  |= 0x20;
+            break;
+        case YCbCr420_3:
+            pstDpTx->ucMsaValue &= 0xf3;
+            pstDpTx->ucMisc0    &= 0xf9;
+            pstDpTx->ucVscDb16  |= 0x30;
+            break;
+        default:
+            break;
+    }
+    switch(pstRxInfo->b1CscRxOutFormat)//range cal
+    {
+        case RGB_0: 
+        case RGB_WIDE_4:
+            if(pstRxInfo->b1CscRxOutRange == LIMIT_RANGE)//1-limit, 2-full
+            {
+                pstDpTx->ucMisc0   |= BIT3_1;
+                pstDpTx->ucVscDb17 |= BIT7_1;//[7]1-CTA Range Limit, 0-VESA Range Full
+            }
+            break;
+        default://Ycbcr422 ycbcr420 ycbcr444
+            if(pstRxInfo->b1CscRxOutRange  == LIMIT_RANGE)//0-limit, 1-full
+            {
+                pstDpTx->ucVscDb17 |= BIT7_1;//[7]1-CTA Range Limit, 0-VESA Range Full
+            }
+            break;
+    }
+    #endif
+    
+    #if (TX_PORT_SIGN == HDMI_PORT)
+    pstHdmiTx->ucszAviPkt[0] &= 0x1f;//bit7:5 :Y2Y1Y0
+    pstHdmiTx->ucszAviPkt[2] &= 0xf3;
+    pstHdmiTx->ucszAviPkt[4] &= 0x3f;
+    switch(pstRxInfo->b1CscRxOutFormat)
+    {
+        case RGB_0:
+        case RGB_WIDE_4: //00
+            pstHdmiTx->ucszAviPkt[0] |= 0x00;//bit7:5 :Y2Y1Y0
+            pstHdmiTx->ucTxPixelEncoding  = RGB_0;
+            break;
+        case YCbCr422_1: //01
+            pstHdmiTx->ucszAviPkt[0] |= 0x20;//bit7:5 :Y2Y1Y0
+            pstHdmiTx->ucTxPixelEncoding  = YCbCr422_1;
+            break;
+        case YCbCr444_2://02
+            pstHdmiTx->ucszAviPkt[0] |= 0x40;//bit7:5 :Y2Y1Y0
+            pstHdmiTx->ucTxPixelEncoding  = YCbCr444_2;
+            break;
+        case YCbCr420_3://02
+            pstHdmiTx->ucszAviPkt[0] |= 0x60;//bit7:5 :Y2Y1Y0
+            pstHdmiTx->ucTxPixelEncoding  = YCbCr420_3;
+            break;
+        default:
+            break;
+    }
+    switch(pstRxInfo->b1CscRxOutFormat)//range cal
+    {
+        case RGB_0:
+        case RGB_WIDE_4:
+            if(pstRxInfo->b1CscRxOutRange == LIMIT_RANGE)//limit
+            {
+                pstHdmiTx->ucszAviPkt[2] |= 0x04;// bit3:2 Q1_Q0 = 01
+            }
+            else
+            {
+                pstHdmiTx->ucszAviPkt[2] |= 0x08;// bit3:2 Q1_Q0 = 01
+            }
+             break;
+        default:
+            if(pstRxInfo->b1CscRxOutRange == LIMIT_RANGE)//limit
+            {
+                ;
+            }
+            else
+            {
+                pstHdmiTx->ucszAviPkt[4] |= 0x40;// bit7:6 QQ1_QQ0 = 01
+            } 
+            break;
+    }
+    #endif
+}
+#endif

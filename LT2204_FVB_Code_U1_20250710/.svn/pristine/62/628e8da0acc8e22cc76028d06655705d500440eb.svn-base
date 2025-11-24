@@ -1,0 +1,136 @@
+C51 COMPILER V9.53.0.0   DRVDPTXDSCBYPASS                                                  02/13/2025 10:14:16 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE DRVDPTXDSCBYPASS
+OBJECT MODULE PLACED IN .\Objects\DrvDpTxDscByPass.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L2_Drive\DrvDpTxDscByPass.c LARGE OBJECTADVANCED OPTIMIZE(11
+                    -,SIZE) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEB
+                    -UG PRINT(.\Listings\DrvDpTxDscByPass.lst) OBJECT(.\Objects\DrvDpTxDscByPass.obj)
+
+line level    source
+
+   1          /******************************************************************************
+   2            * @project: LT2204
+   3            * @file: DrvDscEnc.c
+   4            * @author: wtt
+   5            * @company: LONTIUM
+   6            * @date: 2022.06.01
+   7          /******************************************************************************/
+   8          #include "include.h"
+   9          
+  10          #if TX_PORT_SIGN == DP_PORT
+  11          
+  12          #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+  13          void Drv_DpTxDscBy_Init(void)
+  14          {
+  15   1          Drv_System_SramPathSet(DPTX_INIT_SET_PATH);
+  16   1          
+  17   1          BKF6_0E_REG &= BIT4_0;//pps pkt dis
+  18   1          BKF6_ED_REG = 0x08;//timer to gate BS period, default
+  19   1          BKF7_1A_REG &= BIT4_0;//The mode of total_byte_line value select: 0-hw
+  20   1          BKF7_26_REG = 0x00;
+  21   1          BKF7_2A_REG &= BIT4_0;//[4]rgd_msa_soft_en: 0-from video check
+  22   1          BKF7_2A_REG &= BIT5_0;//[5]rgd_rgd_swap: 0-dis;
+  23   1      
+  24   1          BKF7_24_REG = 0x00;
+  25   1          BKF7_25_REG = 0x00;
+  26   1          BKF7_2E_REG &= BIT0_0;
+  27   1          g_stDpTx.b1TxDscByEn = DISABLED;
+  28   1      }
+  29          
+  30          void Drv_DpTxDscBy_ClkMux(void)
+  31          {
+  32   1          BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-link_clk
+  33   1          BKE1_41_REG |= BIT0_1;//[0]rgd_dptx_rx_pix_clk_src_sel: 1-ad_secpcrpll_pcr_clk
+  34   1      }
+  35          
+  36          void Drv_DpTxDscBy_PktSet(void)
+  37          {
+  38   1          LtTiming_S stTiming;
+  39   1          u8 ucSliceNum;
+  40   1          u16 usTemp;
+  41   1      
+  42   1          memcpy(&stTiming,&g_stDpTxTiming,sizeof(LtTiming_S));
+  43   1          #if RX_PORT_SIGN == HDMI_PORT
+  44   1          //get H timing by EMP pkt
+  45   1          stTiming.usHbp   = PACK_16_BIT(BKCB_3F_REG, BKCB_40_REG);
+  46   1          stTiming.usHsync = PACK_16_BIT(BKCB_3D_REG, BKCB_3E_REG);
+  47   1          stTiming.usHfp   = PACK_16_BIT(BKCB_3B_REG, BKCB_3C_REG);
+  48   1          stTiming.usHact  = PACK_16_BIT(BKCB_42_REG, BKCB_43_REG);
+  49   1          stTiming.usHtol  = PACK_16_BIT(BKCB_44_REG, BKCB_45_REG);
+  50   1          #endif
+  51   1          ucSliceNum = g_stHdmiRxDscByInfo.ucSliceNum;
+  52   1      
+  53   1          Drv_System_SramPathSet(DPTX_DSCBYPASS_PPS_PATH);
+C51 COMPILER V9.53.0.0   DRVDPTXDSCBYPASS                                                  02/13/2025 10:14:16 PAGE 2   
+
+  54   1      
+  55   1          BKE6_EE_REG &= BIT7_0;//[7]pps_upd_sel: 1 = dsc_encode, 0 = dhrx
+  56   1          BKF6_ED_REG = 0x10;//Timer to gate BS period
+  57   1          BKF6_EF_REG &= BIT5_0;//[5]dp tx pps update: 0-hdmi rx
+  58   1          BKF6_EF_REG &= BIT6_0;//[6]rg_pps_upd_dis: 0-pps update en
+  59   1      
+  60   1      //    BKF7_03_REG = 0x04;//important, must be 0x04, must msa first, msa start the number of line in vblank
+             -ing 
+  61   1          BKF7_26_REG = (BIT5_1 | (ucSliceNum - 1));//[5]rgd_dsc_en, [4:0]number of chunks per line = slice numb
+             -er
+  62   1      
+  63   1          //soft msa H set
+  64   1          BKF7_05_REG = stTiming.usHtol >> 8;
+  65   1          BKF7_06_REG = stTiming.usHtol & 0xff;
+  66   1          BKF7_07_REG = (stTiming.usHsync + stTiming.usHbp) >> 8;
+  67   1          BKF7_08_REG = (stTiming.usHsync + stTiming.usHbp) & 0xff;
+  68   1          BKF7_09_REG &= 0x80;//[6:0]hsync width, [7]hsync polarity
+  69   1          BKF7_09_REG |= ((stTiming.usHsync >> 8) & 0x7f);//[6:0]hsync width
+  70   1          BKF7_0A_REG = stTiming.usHsync & 0xff;
+  71   1          BKF7_0B_REG = stTiming.usHact >> 8;
+  72   1          BKF7_0C_REG = stTiming.usHact & 0xff;
+  73   1          //soft msa V set
+  74   1          BKF7_0D_REG = stTiming.usVtol >> 8;
+  75   1          BKF7_0E_REG = stTiming.usVtol & 0xff;
+  76   1          BKF7_11_REG = (stTiming.usVsync + stTiming.usVbp) >> 8;
+  77   1          BKF7_12_REG = (stTiming.usVsync + stTiming.usVbp) & 0xff;
+  78   1          BKF7_13_REG &= 0x80;//[6:0]vsync width, [7]vsync polarity
+  79   1          BKF7_13_REG |= ((stTiming.usVsync >> 8) & 0x7f);//[6:0]vsync width
+  80   1          BKF7_14_REG = stTiming.usVsync & 0xff;
+  81   1          BKF7_15_REG = stTiming.usVact >> 8;
+  82   1          BKF7_16_REG = stTiming.usVact & 0xff;
+  83   1          BKF7_2A_REG |= BIT4_1;//[4]msa soft en, video timing setting soft mode: from registers
+  84   1          BKF7_2A_REG |= BIT5_1;//[5]rgb swap enable: 1-en, 0-dis
+  85   1          BKF7_2E_REG |= BIT0_1;
+  86   1          usTemp = g_stHdmiRxDscByInfo.usChunkSize;
+  87   1          BKF7_24_REG = usTemp >> 8;//chunk size [15:8]
+  88   1          BKF7_25_REG = usTemp & 0xff;//chunk size [7:0]
+  89   1      
+  90   1          BKF6_10_REG = 0x00;//pps hb0
+  91   1          BKF6_11_REG = 0x10;//pps hb1
+  92   1          BKF6_12_REG = 0x7f;//pps hb2, length
+  93   1          BKF6_13_REG = 0x00;//pps hb3
+  94   1          BKF6_0E_REG |= BIT4_1;//[4]pps en
+  95   1          g_stDpTx.b1SoftMsaEn = TRUE;
+  96   1          g_stDpTx.b1TxDscByEn = ENABLED;
+  97   1      }
+  98          
+  99          #endif
+ 100          
+ 101          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    516    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      29
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+C51 COMPILER V9.53.0.0   DRVDPTXDSCBYPASS                                                  02/13/2025 10:14:16 PAGE 3   
+
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

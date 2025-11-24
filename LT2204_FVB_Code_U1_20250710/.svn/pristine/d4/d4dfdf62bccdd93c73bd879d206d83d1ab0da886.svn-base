@@ -1,0 +1,500 @@
+//////////////////////////////////////
+//Project:   LT2204
+//Filename:  LT6911gxe.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+#if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD))
+
+u8 g_HdmirxVedioChangeFlag = 0;
+
+static u32 ulCurrentTime_audio = 0;
+static u32 ulCurrentTime_video_disappear = 0;
+static u32 ulCurrentTime_video_ready = 0;
+
+static u8 Audio_interrupt_trigger = 0;
+static u8 video_disappear_interrupt_trigger = 0;
+static u8 video_ready_interrupt_trigger = 0;
+static u8 Gpio_Int_Lock = 0;
+
+//========================================================================
+// Func Name   : LT6911GXE_PowerOnInit
+// Description : The initialization at power on
+// Input       : void
+// Output      : None
+// Return      : void
+//========================================================================
+
+void LT6911GXE_GPIO_Init(void)
+{
+		Drv_Gpio_ModeSet(GPIO31_MCLKB, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+		Drv_Gpio_ModeSet(GPIO32_SCLKB, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+		Drv_Gpio_ModeSet(GPIO30_WSB, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+//		Drv_Gpio_ModeSet(GPIO29_SD0B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+//		Drv_Gpio_ModeSet(GPIO28_SD1B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+//		Drv_Gpio_ModeSet(GPIO27_SD2B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+//		Drv_Gpio_ModeSet(GPIO26_SD3B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+		
+//		Drv_Gpio_OutSignalSet(GPIO31_MCLKB, Io_Function0);//SD0 OUT
+//		Drv_Gpio_OutSignalSet(GPIO32_SCLKB, Io_Function0);//MCLK OUT	
+//		Drv_Gpio_OutSignalSet(GPIO30_WSB, Io_Function0);//SCLK OUT
+//		Drv_Gpio_OutSignalSet(GPIO29_SD0B, Io_Function0);//SD1 OUT
+//		Drv_Gpio_OutSignalSet(GPIO28_SD1B, Io_Function0);//WS OUT	
+//		Drv_Gpio_OutSignalSet(GPIO27_SD2B, Io_Function0);//SD3 OUT	
+//		Drv_Gpio_OutSignalSet(GPIO26_SD3B, Io_Function0);//SD2 OUT	
+	
+//		Drv_Gpio_OutSignalSet(GPIO31_MCLKB, Io_Function3);//SD0 OUT
+//		Drv_Gpio_OutSignalSet(GPIO32_SCLKB, Io_Function2);//MCLK OUT	
+//		Drv_Gpio_OutSignalSet(GPIO30_WSB, Io_Function1);//SCLK OUT
+//		Drv_Gpio_OutSignalSet(GPIO29_SD0B, Io_Function6);//SD1 OUT
+//		Drv_Gpio_OutSignalSet(GPIO28_SD1B, Io_Function5);//WS OUT	
+//		Drv_Gpio_OutSignalSet(GPIO27_SD2B, Io_Function5);//SD3 OUT	
+//		Drv_Gpio_OutSignalSet(GPIO26_SD3B, Io_Function1);//SD2 OUT
+
+		#if (CHIP_SEL == LT6911GXD_HD)
+		Drv_Gpio_ModeSet(GPIO25_PWM3, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+		Drv_Gpio_OutSignalSet(GPIO25_PWM3, Io_Function0);
+	  Drv_IOSoftLevel_Set(GPIO25_PWM3, HIGH);
+		#else
+		Drv_Gpio_ModeSet(INT, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+		Drv_Gpio_OutSignalSet(INT, Io_Function0);
+		Drv_IOSoftLevel_Set(INT, HIGH);
+		#endif
+		
+//		Drv_Gpio_ModeSet(GPIO8_KPA0, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+//		Drv_Gpio_OutSignalSet(GPIO8_KPA0, Io_Function0);
+//	  Drv_IOSoftLevel_Set(GPIO8_KPA0, HIGH);
+//		
+//		Drv_Gpio_ModeSet(GPIO9_KPA1, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+//		Drv_Gpio_OutSignalSet(GPIO9_KPA1, Io_Function0);
+//	  Drv_IOSoftLevel_Set(GPIO9_KPA1, HIGH);
+//		
+//		Drv_Gpio_ModeSet(GPIO10_KPA2, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+//		Drv_Gpio_OutSignalSet(GPIO10_KPA2, Io_Function0);
+//	  Drv_IOSoftLevel_Set(GPIO10_KPA2, HIGH);
+//		
+//		Drv_Gpio_ModeSet(GPIO11_KPA3, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+//		Drv_Gpio_OutSignalSet(GPIO11_KPA3, Io_Function0);
+//	  Drv_IOSoftLevel_Set(GPIO11_KPA3, HIGH);
+}
+
+void LT6911GXE_HdmiRxVarInit(void)
+{
+    g_stHdmiRx.ucHdmiVer = HDMI20;
+    #ifdef NVIDIA_FW_EN
+    #if (SLEEP_MODE == ENABLED)
+    g_stSleep.ucSleepState = SLEEP_INIT_0;
+    #endif
+    #endif
+}
+
+void LT6911GXE_PowerOnInit(void)
+{
+    Mod_HdmiRx_PowerOnInit();
+
+    #if TX_PORT_SIGN == MIPI_PORT
+    Mod_MipiTx_PowerOnInit();
+    #endif
+
+    #if TX_PORT_SIGN == LVDS_PORT
+    Mod_LvdsTx_PowerOnInit();
+    #endif
+    Drv_Sys_DecPowerDomain(TRUE);
+    Drv_Sys_EncPowerDomain(TRUE);
+		Drv_Sys_LT6911GXE_PowerDomain();
+    //Drv_Sys_DHTxPowerDomain(TRUE);// dhtx rest  cause rx issue
+	  LT6911GXE_GPIO_Init();
+    #if PWM_OUT == ENABLED
+    {
+        PWM_Init(PWM_GPIO,PWM_FREQ,PWM_DUTY);
+    }
+    #endif		
+}
+
+
+
+void LT6911GXE_HdmiRxColorInfoCvt(void)
+{
+    ColorInfo_S stInfo;
+    LtTiming_S  stRxTimingInfo; 
+
+    Drv_HdmiRx_ColorInfoGet(&stInfo);
+    #if HDMIRX_DSC_DEC_SUPPORT == ENABLED
+    if (Drv_HdmiRxDscDec_SwitchGet() == ENABLED)
+    {
+        Drv_HdmiRxDscDec_ColorInfoGet(&stInfo);
+    }
+    #endif
+    Drv_HdmiRx_RxTimingGet(&stRxTimingInfo);//
+
+    #if TX_PORT_SIGN == MIPI_PORT
+    
+    #endif
+    #if TX_PORT_SIGN == LVDS_PORT
+    
+    #endif 
+}
+
+void LT6911GXE_HdmiRxAudioInfoCvt(void)
+{
+		u8 I2s_LaneNum = 0;
+		
+    AudioChlInfo_S stInfo;
+    Drv_HdmiRx_AudioInfoGet(&stInfo);
+    
+		I2s_LaneNum = ((stInfo.ucChannel + 1) / 2) + ((stInfo.ucChannel + 1) % 2);
+	
+		switch(I2s_LaneNum)
+		{
+				case 2:
+						Drv_Gpio_ModeSet(GPIO29_SD0B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO28_SD1B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO27_SD2B, OUT_DISABLE, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO26_SD3B, OUT_DISABLE, VOL_3_3);
+						printLT(PRINT_PRIO_HIG, "\n******I2S 2lane output******£¡");
+						break;
+				case 3:
+						Drv_Gpio_ModeSet(GPIO29_SD0B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO28_SD1B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO27_SD2B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO26_SD3B, OUT_DISABLE, VOL_3_3);
+						printLT(PRINT_PRIO_HIG, "\n******I2S 3lane output******£¡");
+						break;
+				case 4:
+						Drv_Gpio_ModeSet(GPIO29_SD0B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO28_SD1B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO27_SD2B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO26_SD3B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						printLT(PRINT_PRIO_HIG, "\n******I2S 4lane output******£¡");
+						break;
+				default:
+						Drv_Gpio_ModeSet(GPIO29_SD0B, OUT_PP_2x|NO_PU_PD, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO28_SD1B, OUT_DISABLE, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO27_SD2B, OUT_DISABLE, VOL_3_3);
+						Drv_Gpio_ModeSet(GPIO26_SD3B, OUT_DISABLE, VOL_3_3);
+						printLT(PRINT_PRIO_HIG, "\n******I2S 1lane output******£¡");
+						break;
+		}
+}
+
+
+void LT6911GXE_HdmiRxCscOrEncSel(void)
+{
+    g_stHdmiRx.b1CscRxEnable = DISABLED;
+    printLT(PRINT_PRIO_HIG, "\nRx_Tmsd_clk =  0x%08lx",g_stHdmiRx.ulRxTmdsClk);
+	
+		#if CSC_SUPPORT == ENABLED	
+			#if TX_PORT_SIGN == MIPI_PORT
+				g_stMipiTx.ucTxFormat = MIPITX_VIDEO_FORMAT;
+				switch(g_stMipiTx.ucTxFormat)
+				{
+						case DSI_RGB_565:
+						case DSI_RGB_666:
+						case DSI_RGB_888:
+						case DSI_RGB_30:
+						case CSI_RGB_565:									
+						case CSI_RGB_666:	
+						case CSI_RGB_888:		
+								 g_stHdmiRx.b1CscRxOutFormat = RGB_0;
+								 printLT(PRINT_PRIO_HIG, "\nCscRx out RGB_0");	
+								 break;
+							
+						case DSI_YUV422_16Bit:	
+						case DSI_YUV422_20Bit:	
+						case DSI_YUV422_24Bit:
+						case CSI_YUV422_8Bit:
+						case CSI_YUV422_10Bit:
+								 g_stHdmiRx.b1CscRxOutFormat = YCbCr422_1;
+								 printLT(PRINT_PRIO_HIG, "\nCscRx out YCbCr422_1");	
+								 break;
+
+						case DSI_YUV420_12Bit:	
+						case CSI_YUV420_8Bit:											
+								 g_stHdmiRx.b1CscRxOutFormat = YCbCr420_3;
+								 printLT(PRINT_PRIO_HIG, "\nCscRx out YCbCr420_3");	
+								 break;
+						
+						default:
+								 break;
+			 }
+			#else
+				g_stLvdsTx.ucLvdsTxDataMap = LVDS_DATAMAP;
+				switch(g_stLvdsTx.ucLvdsTxDataMap)
+				{
+						case VESA_RGB_8Bit:
+							   break;
+						case JEIDA_RGB_8Bit:	
+								 g_stHdmiRx.b1CscRxOutFormat = RGB_0;
+								 printLT(PRINT_PRIO_HIG, "\nCscRx out RGB_0");	
+								 break;
+						case SONY_YUV422_8Bit:
+								 g_stHdmiRx.b1CscRxOutFormat = YCbCr422_1;
+								 printLT(PRINT_PRIO_HIG, "\nCscRx out YCbCr422_1");	
+								 break;													
+						default:
+								 break;
+			 }					 
+			#endif		
+		g_stHdmiRx.b1CscRxEnable = ENABLED;
+		printLT(PRINT_PRIO_HIG, "\nCsc enable");
+	#endif
+}
+
+#if CSC_SUPPORT == ENABLED
+void LT6911GXE_HdmiRxCscCvt(void)
+{
+    if(g_stHdmiRx.b1CscRxEnable == ENABLED)
+    {
+        if((g_stHdmiRx.ucPixelEncoding == RGB_0)||(g_stHdmiRx.ucPixelEncoding == RGB_WIDE_4))
+        {
+            g_stHdmiRx.b1CscRxOutRange = FULL_RANGE;
+        }
+        else
+        {
+            g_stHdmiRx.b1CscRxOutRange = LIMIT_RANGE;
+        }
+				Drv_CscRx_RxtoTx(&g_stHdmiRx);
+    }
+}
+#endif
+
+void LT6911GXE_HdmiRxMsgNotify(u8 ucEvent)
+{
+    Mod_LMTx_EventMonitor(ucEvent);//mipi LVDS event
+    switch(ucEvent)
+    {
+        case HDMIRX_SOURECE_PLUG_EVENT:
+            break;
+
+        case HDMIRX_SOURECE_UNPLUG_EVENT:
+            break;
+
+        case HDMIRX_VIDEO_ON_EVENT:
+            Mod_HdmiRx_TmdsClkCal();
+
+            LT6911GXE_HdmiRxCscOrEncSel();
+            LT6911GXE_HdmiRxColorInfoCvt();
+        
+            #if CSC_SUPPORT == ENABLED
+            LT6911GXE_HdmiRxCscCvt();
+            #endif
+            break;
+
+        case HDMIRX_VIDEO_OFF_EVENT:
+						g_HdmirxVedioChangeFlag++;
+            Drv_HdmiRx_SyncPolSet(DISABLED);
+            Drv_HdmiRx_TmdsPcrPllDis();
+            Drv_Sys_DecPowerDomain(TRUE);
+            Drv_Sys_EncPowerDomain(TRUE);
+            #if CSC_SUPPORT == ENABLED
+            Drv_CscRx_Init();
+            #endif
+            break;
+
+        case HDMIRX_HDCP_VER_CHG_EVENT:
+            break;
+
+        case HDMIRX_AUDIO_CHG_EVENT:
+            LT6911GXE_HdmiRxAudioInfoCvt();
+            break;
+
+        case HDMIRX_VRR_NOTIFY_EVENT:
+            break;
+        case HDMIRX_INTERLACE_EVENT:
+            break;
+        case HDMIRX_DOBLY_HDR_NOTIFY_EVENT:
+            break;
+        case HDMIRX_STATIC_HDR_NOTIFY_EVENT:
+            break;        
+        case HDMIRX_DYNAMIC_HDR_NOTIFY_EVENT:
+            break;
+        case HDMIRX_AUDIO_MUTE_EN:
+            break;
+        case HDMIRX_AUDIO_MUTE_DIS:
+            break;
+        case HDMIRX_VIDEO_MUTE_EN:
+            break;
+        case HDMIRX_VIDEO_MUTE_DIS:
+            break;
+        default:
+            break;
+    }
+}
+
+#if TX_PORT_SIGN == MIPI_PORT
+void Audio_Interrupt_Detect(void)
+{
+		if((g_stMipiTx.ucTxState) > STATE_MIPITX_AUDIO_OUT_6)
+		{
+				if(Gpio_Int_Lock == 0)
+				{
+						if (Drv_HdmiRx_AudioChangeDetect())
+						{
+								Gpio_Int_Lock = 1;
+								Audio_interrupt_trigger = 1;
+								#if (CHIP_SEL == LT6911GXD_HD)
+								Drv_IOSoftLevel_Set(GPIO25_PWM3, LOW);
+								#else
+								Drv_IOSoftLevel_Set(INT, LOW);
+								#endif
+								printLT(PRINT_PRIO_TEST, "\n******Audio Change, INT_LOW!******");
+								Ocm_Timer_UpdLocalTime(&ulCurrentTime_audio);
+						}
+				}
+		}
+		if(Ocm_Timer_IsOverFlow(&ulCurrentTime_audio, MS_20)==TRUE)
+		{
+				if(Audio_interrupt_trigger)
+				{
+						Gpio_Int_Lock = 0;
+						Audio_interrupt_trigger = 0;
+						#if (CHIP_SEL == LT6911GXD_HD)
+						Drv_IOSoftLevel_Set(GPIO25_PWM3, HIGH);
+						#else
+						Drv_IOSoftLevel_Set(INT, HIGH);
+						#endif
+						printLT(PRINT_PRIO_TEST, "\n******Audio Change, INT_HIGH!******");
+						Ocm_Timer_UpdLocalTime(&ulCurrentTime_audio);
+				}
+		}
+}
+
+
+void Video_Ready_Interrupt_Detect(void)
+{
+		if((g_stMipiTx.ucTxState) > STATE_MIPITX_VIDEO_OUT_5)
+		{
+				if(Gpio_Int_Lock == 0)
+				{
+						video_ready_interrupt_trigger = Drv_MipiTx_VideoReadyDetect();
+						if(video_ready_interrupt_trigger)
+						{
+								Gpio_Int_Lock = 1;
+								#if (CHIP_SEL == LT6911GXD_HD)
+								Drv_IOSoftLevel_Set(GPIO25_PWM3, LOW);
+								#else
+								Drv_IOSoftLevel_Set(INT, LOW);
+								#endif
+								printLT(PRINT_PRIO_TEST, "\n******Video_Ready, INT_LOW!******");
+								Ocm_Timer_UpdLocalTime(&ulCurrentTime_video_ready);
+						}
+				}
+		}
+		if(Ocm_Timer_IsOverFlow(&ulCurrentTime_video_ready, MS_20)==TRUE)
+		{
+				if(video_ready_interrupt_trigger)
+				{
+						Gpio_Int_Lock = 0;
+						video_ready_interrupt_trigger = 0;
+						#if (CHIP_SEL == LT6911GXD_HD)
+						Drv_IOSoftLevel_Set(GPIO25_PWM3, HIGH);
+						#else
+						Drv_IOSoftLevel_Set(INT, HIGH);
+						#endif
+						printLT(PRINT_PRIO_TEST, "\n******Video_Ready, INT_HIGH!******");
+						Ocm_Timer_UpdLocalTime(&ulCurrentTime_video_ready);
+				}
+		}
+}
+
+void Video_Disappear_Interrupt_Detect(void)
+{
+		if(Gpio_Int_Lock == 0)
+		{
+				if(g_HdmirxVedioChangeFlag >0)
+				{
+						g_HdmirxVedioChangeFlag = 0;
+						video_disappear_interrupt_trigger = Drv_HdmiRx_VideoDisappearDetect();
+						if(video_disappear_interrupt_trigger)
+						{
+								Gpio_Int_Lock = 1;
+								#if (CHIP_SEL == LT6911GXD_HD)
+								Drv_IOSoftLevel_Set(GPIO25_PWM3, LOW);
+								#else
+								Drv_IOSoftLevel_Set(INT, LOW);
+								#endif
+								printLT(PRINT_PRIO_TEST, "\n******Video/Audio Disappear, INT_LOW!******");
+								Ocm_Timer_UpdLocalTime(&ulCurrentTime_video_disappear);
+						}
+				}
+		}
+		if(Ocm_Timer_IsOverFlow(&ulCurrentTime_video_disappear, MS_20)==TRUE)
+		{
+				if(video_disappear_interrupt_trigger)
+				{
+						Gpio_Int_Lock = 0;
+						video_disappear_interrupt_trigger = 0;
+						#if (CHIP_SEL == LT6911GXD_HD)
+						Drv_IOSoftLevel_Set(GPIO25_PWM3, HIGH);
+						#else
+						Drv_IOSoftLevel_Set(INT, HIGH);
+						#endif
+					  printLT(PRINT_PRIO_TEST, "\n******Video/Audio Disappear, INT_HIGH!******");
+						Ocm_Timer_UpdLocalTime(&ulCurrentTime_video_disappear);
+				}
+		}
+}
+#endif
+
+//========================================================================
+// Func Name   : LT6911GXE_Main_Scan
+// Description : The main loop for LT6911GXE
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void LT6911GXE_Main_Scan(void)
+{
+    //rx handler
+    Mod_HdmiRx_Handler();
+
+    //tx handler
+#if TX_PORT_SIGN == LVDS_PORT
+    Mod_LvdsTx_Handler();
+#endif
+	
+#if TX_PORT_SIGN == MIPI_PORT
+    Mod_MipiTx_Handler();
+#endif
+
+
+
+ #if TX_PORT_SIGN == MIPI_PORT
+	  Audio_Interrupt_Detect();
+    Video_Disappear_Interrupt_Detect();
+	  Video_Ready_Interrupt_Detect();
+	
+		if(g_stMipiTx.ucTxState == STATE_MIPITX_UPSTREAM_VIDEO_READY_3)
+		{
+				Drv_Sys_DHTxPowerDomain(FALSE);
+		}
+
+		if (g_stMipiTx.ucTxState == STATE_MIPITX_AUDIO_OUT_6)
+		{
+				Drv_Sys_DHTxPowerDomain(TRUE);
+		}
+
+//		if (g_stMipiTx.ucTxState >= STATE_MIPITX_AUDIO_OUT_6)
+//		{
+//				Drv_MipiTx_EnableControl();
+//		}
+#endif
+	
+	
+#if PWM_OUT == ENABLED
+    {           
+        if(PWM_DUTY_REG != PWM_DUTY)
+        {
+            PWM_Init(PWM_GPIO,PWM_FREQ,PWM_DUTY_REG);
+        }
+        else
+        {
+            PWM_Init(PWM_GPIO,PWM_FREQ,PWM_DUTY);
+        }
+    }
+#endif		
+}
+
+#endif

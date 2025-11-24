@@ -1,0 +1,911 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: DrvDscDec.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.05.31
+/******************************************************************************/
+#include "include.h"
+
+#if RX_PORT_SIGN == DP_PORT
+
+#if DPRX_DSC_DEC_SUPPORT == ENABLED
+
+
+//===============================专用定义================================
+DscDecInfo_S g_stDpRxDscDecInfo;//dsc相关的信息
+LtTiming_S g_stDpRxDscDecTiming;//把色彩空间和色深放在video info
+//=======================================================================
+
+
+void Drv_DpRxDscDec_ParaInit(void)
+{
+    memset(&g_stDpRxDscDecInfo, 0, sizeof(DscDecInfo_S));
+    memset(&g_stDpRxDscDecTiming, 0, sizeof(LtTiming_S));
+}
+
+void Drv_DpRxDscDec_RxInit(void)
+{
+    BKEE_86_REG = 0x1F;
+    
+    BKEE_97_REG = 0x00;
+    BKEE_A7_REG = 0x3a;//[5], [4], [3], [1] set 1
+   
+                      //[4]set to 1, than pps can load from pps sram
+                      //[4]set to 0, than pps can load from register
+
+    Drv_System_SramPathSet(DPRX_DSCDEC_PPS_PATH);
+
+    Drv_System_IntSet(IRQ_DPRX_PPS_PKT_INT,ON);
+//    Drv_System_IntClr(IRQ_DPRX_PPS_PKT_INT);
+
+    BKF3_00_REG = 0x06;//pixel count save for fifo for dsc
+    //color depth force to 8bit for dsc mode
+    BKF3_0A_REG |= BIT7_1;//[7]rg_depth_soft_mode, 1-soft mode
+    BKF3_16_REG &= 0xe3;
+    BKF3_16_REG |= BIT2_1;//[4:2]the value of pixel_depth in soft mode
+    //color space force to RGB for dsc mode
+    
+    BKF3_05_REG |= BIT7_1;//[7]rg_format_soft_mode, 1-soft mode
+    BKF3_16_REG &= 0xfc;//[1:0]the value of pixel_format in soft mode 
+
+    //[7]dp dsc stream
+    BKF3_63_REG |= 0xd0;//[4]software dsc enable
+                       //[7]dsc data swap enable: 1-en; [6]Dsc enable select: 1-software en;
+    BKF3_69_REG = 0x08;//hsync width
+    BKF3_82_REG = 0x20;//hsync delay
+
+//    BKF3_77_REG |= BIT0_1;//[0]rg_pcr_restart_mode: 1-h count dealy value more than rgd_step_hsync
+    BKF3_83_REG |= BIT7_1;//[7]rg_dsc_bypass: 1-not bypass
+    
+    BKA3_27_REG = 0x00;
+    BKA3_28_REG = 0x00;//for hblanking  = 80 issue
+}
+
+u8 Drv_DpRxDscDec_TimingGet(void)
+{
+    Drv_DpRx_RxTimingGet(&g_stDpRxDscDecTiming);//-wangtt- wait update
+
+    #if 1
+    printLT(PRINT_PRIO_TEST, "\n=================DscDec Info=================");
+    printLT(PRINT_PRIO_TEST, "\nHbp   : %-4d  Vbp   : %-4d", g_stDpRxDscDecTiming.usHbp,g_stDpRxDscDecTiming.usVbp);
+    printLT(PRINT_PRIO_TEST, "\nHfp   : %-4d  Vfp   : %-4d", g_stDpRxDscDecTiming.usHfp,g_stDpRxDscDecTiming.usVfp);
+    printLT(PRINT_PRIO_TEST, "\nHsync : %-4d  Vsync : %-4d", g_stDpRxDscDecTiming.usHsync,g_stDpRxDscDecTiming.usVsync);
+    printLT(PRINT_PRIO_TEST, "\nHact  : %-4d  Vact  : %-4d", g_stDpRxDscDecTiming.usHact,g_stDpRxDscDecTiming.usVact);
+    printLT(PRINT_PRIO_TEST, "\nHtol  : %-4d  Vtol  : %-4d", g_stDpRxDscDecTiming.usHtol,g_stDpRxDscDecTiming.usVtol);
+    #endif
+
+//    if (g_stDpRxDscDecTiming.usHact > 5120)//dsc decoder not support
+//    {
+//        printLT(PRINT_PRIO_TEST, "\n Dsc decoder not support > 5120 ");
+//        return NOT_SUPPORT;
+//    }
+    return CAN_RUNNING;
+}
+
+u8 Drv_DpRxDsc_SliceNum(void)
+{
+    u16 temp0,temp1;
+    temp0 = ((u16)BKEE_08_REG << 8) + BKEE_09_REG; // pic_width
+    temp1 = ((u16)BKEE_0C_REG << 8) + BKEE_0D_REG; // slice_width
+    return (temp0/temp1);
+}
+
+u8 Drv_DpRxDscDec_DscInfoGet(void)
+{
+//    u16 usPpsDetCnt;
+    u16 temp0, temp1;
+	Ocm_Delay1us(10);//must be wait load success
+	BKEE_AD_REG = 0xff;//important, ee00 ~ ee80 update, must be set
+	Ocm_Delay1ms(1);
+	if ((BKEE_00_REG >= 0x11) && (BKEE_00_REG <= 0x13))
+	{
+		printLT(PRINT_PRIO_HIG, "\nPPs LOAD SUCCEED");
+	}
+	else
+	{
+		return NOT_SUPPORT;
+	}
+    //color space and depth get
+    g_stDpRxDscDecInfo.ucColorDepth = (BKEE_03_REG >> 5);//8 bit = 0x04, so >> 4 and /2，is >> 5
+    if (BKEE_58_REG & BIT0_1)
+        g_stDpRxDscDecInfo.ucColorSpace = YCbCr422_1;
+    else if (BKEE_58_REG & BIT1_1)
+        g_stDpRxDscDecInfo.ucColorSpace = YCbCr420_3;
+    else if (BKEE_04_REG & BIT3_1)
+        g_stDpRxDscDecInfo.ucColorSpace = SIMPLE422_5;
+    else if (BKEE_04_REG & BIT4_1)//pps4[4]: 1-RGB, 0-nonRGB
+        g_stDpRxDscDecInfo.ucColorSpace = RGB_0;
+    else
+        g_stDpRxDscDecInfo.ucColorSpace = YCbCr444_2;
+
+    g_stDpRxDscDecInfo.usBpp = ((u16)(BKEE_04_REG & 0x03) << 8) + BKEE_05_REG;
+    temp1 = g_stDpRxDscDecInfo.usBpp;
+    temp0 = 3840;//8bpc * 3 * 160
+    if (g_stDpRxDscDecInfo.ucColorSpace == YCbCr422_1)// || (g_stDpRxDscDecInfo.ucColorSpace == YCbCr420_3))
+        temp1 >>= 1;
+
+    g_stDpRxDscDecInfo.ucCompressRatio = (u8)(temp0 / temp1);
+
+    g_stDpRxDscDecInfo.ucSliceNum = Drv_DpRxDsc_SliceNum();
+    if (g_stDpRxDscDecInfo.ucSliceNum > 4)
+    {
+        printLT(PRINT_PRIO_HIG, "\nWarning: Slice >  4");
+        return NOT_SUPPORT;
+    }
+
+    g_stDpRxDscDecInfo.usSliceHeight = ((u16)BKEE_0A_REG << 8) + BKEE_0B_REG;
+    g_stDpRxDscDecInfo.usSliceWidth  = ((u16)BKEE_0C_REG << 8) + BKEE_0D_REG;
+    if ((g_stDpRxDscDecInfo.ucColorSpace == YCbCr422_1) || (g_stDpRxDscDecInfo.ucColorSpace == YCbCr420_3))//420 or 422 or simple_422
+    {
+        g_stDpRxDscDecInfo.usSliceWidth >>= 1;
+    }
+    if (g_stDpRxDscDecInfo.ucColorSpace == YCbCr420_3)
+    {
+        g_stDpRxDscDecInfo.usSliceHeight >>= 1;
+    }
+
+    g_stDpRxDscDecInfo.usChunkSize = ((u16)BKEE_0E_REG << 8) + BKEE_0F_REG;
+    g_stDpRxDscDecInfo.ucCoreNum   = g_stDpRxDscDecInfo.ucSliceNum;
+
+    #if 1
+    printLT(PRINT_PRIO_TEST, "\nSliceNumber   : %-4bd   DscNumber    : %-4bd", g_stDpRxDscDecInfo.ucSliceNum, g_stDpRxDscDecInfo.ucCoreNum);
+    printLT(PRINT_PRIO_TEST, "\nCompressRatio : %-4bd   Bpp          : %-4d", g_stDpRxDscDecInfo.ucCompressRatio, g_stDpRxDscDecInfo.usBpp);
+    printLT(PRINT_PRIO_TEST, "\nColorSpace    : %-4bd   ColorDepth   : %-4bd", g_stDpRxDscDecInfo.ucColorSpace, g_stDpRxDscDecInfo.ucColorDepth << 1);
+    printLT(PRINT_PRIO_TEST, "\nGroupUnit     : %-4bd   ChunkSize    : %-4d", g_stDpRxDscDecInfo.ucGroupUnit, g_stDpRxDscDecInfo.usChunkSize);
+    printLT(PRINT_PRIO_TEST, "\nSliceHeight   : %-4d   SliceWidth   : %-4d", g_stDpRxDscDecInfo.usSliceHeight, g_stDpRxDscDecInfo.usSliceWidth);
+    printLT(PRINT_PRIO_TEST, "\n=============================================");
+    #endif
+
+    return CAN_RUNNING;
+}
+
+#if 0
+void Drv_DpRxDscDec_SyncPolCvt(void)
+{
+    (!(BKC8_6F_REG&BIT5_1))? (BKEE_97_REG |= BIT6_1) : (BKEE_97_REG &= BIT6_0);//vsync pol
+    (!(BKC8_6F_REG&BIT4_1))? (BKEE_97_REG |= BIT5_1) : (BKEE_97_REG &= BIT5_0);//hsync pol
+}
+#endif
+
+void Drv_DpRxDscDec_DummySet(void)
+{
+    u16 temp0;
+    u8 ucLaneCnt;
+    u8 bIsDummyData = TRUE;
+    #if CHIP_VERSION_SEL > U1_VERSION
+	u16 usChunkSizeTmp = 0x00;
+	#endif
+    //dp rx chunk size set
+    BKF3_63_REG &= BIT5_0;//[5]dsc data number of line is odd, 0-even
+    #if DPRX_MST_MODE_EN == ENABLED
+    ucLaneCnt = 4;//-wangtt- add judge, if rx is not mst mode when mst mode en is ENABLED
+    #else
+    ucLaneCnt = Mod_Aux_LinkCntGet();
+    #endif
+    switch(ucLaneCnt)
+    {
+        case 4://4lane
+            temp0 = g_stDpRxDscDecInfo.usChunkSize % 12;
+            if ((temp0 > 8) || (temp0 == 0))
+                bIsDummyData = FALSE;
+
+            if ((temp0 < 7) && (temp0 >= 1))
+                BKF3_63_REG |= BIT5_1;//[5]dsc data number of line is odd, 1-odd
+            break;
+
+        case 2://2lane
+            temp0 = g_stDpRxDscDecInfo.usChunkSize % 6;
+            if ((temp0 == 0) || (temp0 == 5))
+                bIsDummyData = FALSE;
+            break;
+
+        case 1://1lane
+            temp0 = g_stDpRxDscDecInfo.usChunkSize % 3;
+            if (temp0 == 0)
+                bIsDummyData = FALSE;
+            break;
+
+        default:
+            break;
+    }
+
+    if (bIsDummyData == FALSE)
+    {
+        BKF3_02_REG |= BIT6_1;//[6]no dummy in dsc mode: 1-is no dummy, 0-is dummy
+        printLT(PRINT_PRIO_TEST, "\nDpRx is no dummy data");
+    }
+    else
+    {
+        BKF3_02_REG &= BIT6_0;//[6]no dummy in dsc mode: 1-is no dummy, 0-is dummy
+        printLT(PRINT_PRIO_TEST, "\nDpRx have dummy data");
+    }
+
+    //chunk size
+    BKF3_88_REG = g_stDpRxDscDecInfo.usChunkSize >> 8;
+    BKF3_89_REG = g_stDpRxDscDecInfo.usChunkSize & 0xff;
+
+    temp0 = g_stDpRxDscDecInfo.usChunkSize % 6;
+    if (temp0 != 0)
+    {
+        BKF3_3E_REG &= 0x8f;
+        BKF3_3E_REG |= (6 - temp0) << 4;//[6:4]dsc byte dummy number set of last data every chunk.
+    }
+    else
+    {
+        BKF3_3E_REG &= 0x8f;
+    }
+
+    BKF3_8F_REG &= 0xc0;
+    BKF3_8F_REG |= g_stDpRxDscDecInfo.ucSliceNum;//[5:0]slice number per line in dsc mode
+	
+    #if CHIP_VERSION_SEL > U1_VERSION
+	usChunkSizeTmp = g_stDpRxDscDecInfo.usChunkSize;
+	if(g_stDpRxDscDecInfo.ucSliceNum == 1)
+	{
+		temp0 = ceil((double)usChunkSizeTmp / 6);
+		if(temp0 % 2)
+		{
+			temp0 *= 4;
+			BKF3_8A_REG = temp0 >> 8;
+			BKF3_8B_REG = temp0 & 0xff;
+			usChunkSizeTmp += 6;
+			BKF3_1F_REG |= BIT0_1; //[0]eco en
+			BKF3_88_REG = usChunkSizeTmp >> 8;
+			BKF3_89_REG = usChunkSizeTmp & 0xff;
+			BKF3_63_REG |= BIT3_1;
+			BKF3_3E_REG &= 0x83;
+			BKF3_3E_REG |= 0x04;
+		}
+		else
+		{
+			BKF3_8A_REG = 0x00;
+			BKF3_8B_REG = 0x00;
+			BKF3_1F_REG &= BIT0_0; //[0]eco disen
+			BKF3_63_REG &= BIT3_0;
+			BKF3_3E_REG &= 0x83;
+		}
+	}
+    #endif
+}
+void Drv_DpRxDscDec_WordDelaySet(void)
+{
+    u8 ucRecord = 0x00;
+    u16 usWordMin = 0x200;
+    u16 usWordMax = 0xC00;
+    u16 usWordDelay = 0x0400;
+    u32 ulTemp0, ulTemp1;
+    if(g_stDpRxDscDecInfo.ucCoreNum == 0x01)
+    {
+        usWordDelay = 0x0200;
+    }
+    else if(g_stDpRxDscDecInfo.ucCoreNum == 0x02)
+    {
+        if (g_stDpRxDscDecInfo.usBpp >= 384)//>bpp24
+        {
+            usWordDelay = 0x0140;
+        }
+        else if (g_stDpRxDscDecInfo.usBpp >= 320)//>bpp20
+        {
+            usWordDelay = 0x0200;
+        }
+        else if (g_stDpRxDscDecInfo.usBpp >= 256)//>bpp16
+        {
+            usWordDelay = 0x02c0;
+        }
+        else
+        {
+            usWordDelay = 0x0340;
+        }
+    }
+    else
+    {
+        usWordDelay = 0x400;
+        if (g_stDpRxDscDecTiming.usHact >= 7680)//8K
+        {
+//    -1.016*htotal -49.75*bpp + 0.00525*htotal*bpp + 11436
+
+            ulTemp0 = (u32)1016 * (u32)g_stDpRxDscDecTiming.usHtol;
+//            printf("\n===%ld===",ulTemp0);
+            ulTemp0 = (u32)(ulTemp0 / 1000);
+//            printf("\n===%ld===",ulTemp0);
+
+            ulTemp1 = (u32)4975 * (u32)g_stDpRxDscDecInfo.usBpp;
+            ulTemp1 = (u32)(ulTemp1/100);
+//            printf("\n===%ld===",ulTemp1);
+
+            ulTemp0 = (u32)(ulTemp0 + ulTemp1);
+//            printf("\n===%ld===",ulTemp0);
+
+            ulTemp1 = (u32)g_stDpRxDscDecTiming.usHtol * (u32)g_stDpRxDscDecInfo.usBpp;
+            ulTemp1 = (u32)(ulTemp1 / 1000);
+//            printf("\n===%ld===",ulTemp1);
+
+            ulTemp1 = (u32)ulTemp1 * (u32)525;
+            ulTemp1 = (u32)(ulTemp1/100);
+            ulTemp1 = (u32)(ulTemp1 + 11436);
+//            printf("\n===%ld===",ulTemp1);
+
+            ulTemp1 =(u32)(ulTemp1 - ulTemp0);
+//            printf("\n===%ld===",ulTemp1);
+            usWordDelay = ulTemp1;
+        }
+    }
+    
+    if (g_stDpRxDscDecTiming.usHact < 7680)//8K
+    {
+        if (g_stDpRxDscDecInfo.ucColorDepth >= 0x05)//10bit??
+        {
+            usWordDelay += 0xc0; 
+        }
+    }
+
+//    //    -1.016*htotal -49.75*bpp + 0.00525*htotal*bpp + 11436
+
+//            ulTemp0 = (u32)1016 * (u32)g_stDpRxDscDecTiming.usHtol;
+////            printf("\n===%ld===",ulTemp0);
+//            ulTemp0 = (u32)(ulTemp0 / 1000);
+////            printf("\n===%ld===",ulTemp0);
+
+//            ulTemp1 = (u32)4975 * (u32)g_stDpRxDscDecInfo.usBpp;
+//            ulTemp1 = (u32)(ulTemp1/100);
+////            printf("\n===%ld===",ulTemp1);
+
+//            ulTemp0 = (u32)(ulTemp0 + ulTemp1);
+////            printf("\n===%ld===",ulTemp0);
+
+//            ulTemp1 = (u32)g_stDpRxDscDecTiming.usHtol * (u32)g_stDpRxDscDecInfo.usBpp;
+//            ulTemp1 = (u32)(ulTemp1 / 1000);
+////            printf("\n===%ld===",ulTemp1);
+
+//            ulTemp1 = (u32)ulTemp1 * (u32)525;
+//            ulTemp1 = (u32)(ulTemp1/100);
+//            ulTemp1 = (u32)(ulTemp1 + 11436);
+////            printf("\n===%ld===",ulTemp1);
+
+//            ulTemp1 =(u32)(ulTemp1 - ulTemp0);
+////            printf("\n===%ld===",ulTemp1);
+//            usWordDelay = ulTemp1;
+            
+    BKEE_87_REG = (usWordDelay >> 8);
+    BKEE_88_REG = usWordDelay;
+    printLT(PRINT_PRIO_HIG,"\n&&&&&&&&&&&&&&&&&&&");
+    printLT(PRINT_PRIO_HIG,"\n======WORDDELAY = 0x%02bx,0x%02bx=====",BKEE_87_REG,BKEE_88_REG);
+}
+/*
+void Drv_DpRxDscDec_WordDelaySet(void)
+{
+    if(g_stDpRxDscDecInfo.ucCoreNum == 0x01)
+    {
+        BKEE_87_REG = 0x02;//word delay
+        BKEE_88_REG = 0x00;//word delay
+    }
+    else if((g_stDpRxDscDecInfo.ucCoreNum == 0x02)&&(g_stDpRxDscDecInfo.usBpp >=384))
+    {
+        BKEE_87_REG = 0x01;//word delay
+        BKEE_88_REG = 0x30;//word delay
+    }
+    else if((g_stDpRxDscDecInfo.ucCoreNum == 0x02)&&(g_stDpRxDscDecInfo.usBpp >= 256))
+    {
+        BKEE_87_REG = 0x02;//word delay
+        BKEE_88_REG = 0x00;//word delay
+    }
+    else
+    {
+        BKEE_87_REG = 0x04;//word delay
+        BKEE_88_REG = 0x00;//word delay
+    }
+}
+*/
+void Drv_DpRxDscDec_HstartCal(void)
+{
+    u8 ucMin, ucMax;
+    //set Hsync to 04 
+    if((g_stDpRxDscDecTiming.usHtol - g_stDpRxDscDecTiming.usHact) <= 80)
+    {
+        BKF3_69_REG = 0x04;
+    }
+    
+    //bs issue, mate40 pro
+    BKF3_82_REG = 0x08;
+    while(BKF3_82_REG <= 0xf0)
+    {
+        BKF3_52_REG |= BIT5_1;
+        BKF3_52_REG &= BIT5_0;
+        Ocm_Delay1ms(20);
+        if(BKF3_EB_REG & BIT5_1)//bs/de
+        {
+            BKF3_82_REG += 2;
+        }
+        else
+        {
+            break;
+        }
+    }
+    ucMin = BKF3_82_REG;
+	if(BKF3_82_REG >= 0xc0)
+	{
+		BKF3_82_REG = 0xff;
+	}
+	else
+	{
+		BKF3_82_REG += 0x40;
+	}
+    while(BKF3_82_REG >= ucMin)
+    {
+        BKF3_52_REG |= BIT5_1;
+        BKF3_52_REG &= BIT5_0;
+        Ocm_Delay1ms(20);
+        if(BKF3_EB_REG & BIT5_1)
+        {
+            BKF3_82_REG -= 2;
+        }
+        else
+        {
+            break;
+        }
+    }
+    ucMax = BKF3_82_REG;
+	printLT(PRINT_PRIO_HIG, "\nucMin,ucMax = 0x%02bx",ucMin,ucMax);
+    if (ucMax >= ucMin)
+    {
+        BKF3_82_REG = (ucMax + ucMin) / 2;
+    }
+    else
+    {
+        BKF3_82_REG = 0x20;
+        printLT(PRINT_PRIO_HIG, "\nWarning: hstart err");
+    }
+	
+    printLT(PRINT_PRIO_HIG, "\nDp rx Hstart is 0x%02bx, state is 0x%02bx", BKF3_82_REG, BKF3_EB_REG);
+}
+
+void Drv_DpRxDscDec_DataClkMuxSet(void)
+{
+    #define  MIN_DSC_HBLANK  40
+    u8 ucDiv;
+    u16 usHblank;
+    u32 ulRdClk;
+    u8 ucPcrpllDiv = 0;
+        
+    usHblank = (g_stDpRxDscDecTiming.usHtol - g_stDpRxDscDecTiming.usHact);
+    BKC7_D7_REG |= BIT6_1;//[6]dsc dec to tx
+
+    Drv_System_FmSet(TOP_FM,TOPFM_AD_DSCRX_DSC_RD_CLK);
+    Ocm_Delay1ms(3);
+    ulRdClk = Drv_System_FmGet(TOP_FM, HALF_PIX_CLK);
+	    //ad_dscrx_dsc_rd_clk
+	
+    //ad_pcrpll_div_pcr_clk
+    if (g_stDpRxDscDecInfo.ucCompressRatio >= 30)
+    {
+        ucDiv = 0x06;
+//        BKA3_25_REG = 0x05;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    }
+    else if (g_stDpRxDscDecInfo.ucCompressRatio >= 25)
+    {
+        ucDiv = 0x05;
+//        BKA3_25_REG = 0x04;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    }
+    else if (g_stDpRxDscDecInfo.ucCompressRatio >= 20)
+    {
+        ucDiv = 0x04;
+//        BKA3_25_REG = 0x03;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    }
+    else if (g_stDpRxDscDecInfo.ucCompressRatio >= 15)
+    {
+        ucDiv = 0x03;
+//        BKA3_25_REG = 0x02;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    }
+    else if (g_stDpRxDscDecInfo.ucCompressRatio >= 10)
+    {
+        ucDiv = 0x02;
+//        BKA3_25_REG = 0x01;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    }
+    else
+    {
+        ucDiv = 0x01;
+    }
+    if(((u16)ucDiv * MIN_DSC_HBLANK) > usHblank)
+    {
+        ucDiv  = usHblank/MIN_DSC_HBLANK;
+    }
+    if((g_stDpRxDscDecInfo.ucCompressRatio > 10)&&(ulRdClk <= 50000))//half pixel clk < 50M
+    {
+        ucDiv = 2;
+    }
+    BKA3_25_REG = (ucDiv - 1);
+    
+    if(((g_stDpRxDscDecInfo.ucCompressRatio > 15)||((g_stDpRxDscDecInfo.ucCompressRatio > 10) &&(ulRdClk >= 360000)))&&(ucDiv > 1)) 
+    {
+        BKA3_40_REG = (BKA3_40_REG&0xf0)|0x01;//0001-div2 2f/2
+    }
+    else
+    {
+        BKA3_40_REG = (BKA3_40_REG&0xf0);//0001-div2 2f/2
+    }
+//    //ad_dscrx_dsc_rd_clk
+
+    //ad_dscrx_dsc_clk
+    ucDiv = g_stDpRxDscDecInfo.ucCoreNum;
+    if ((g_stDpRxDscDecInfo.ucColorSpace == YCbCr422_1)&&(usHblank >= 200))
+    {
+        ucDiv *= 2;
+    }
+    if (ucDiv == 1)
+    {
+        BKA3_3F_REG = (BKA3_3F_REG&0xf0)| 0x02;//0010-div3
+    }
+    else
+    {
+        ucDiv = 0x08 | (ucDiv - 1);
+        BKA3_3F_REG  = (BKA3_3F_REG&0xf0)| ucDiv;
+    }
+    
+    ucPcrpllDiv = (u32)(ulRdClk/61200);//max to 124Mhz for ad_dscrx_dsc_clk
+    //case for M42D ,DSC mode,Timing: 533Mhz 4k60 420 Input 
+    if((usHblank <= 180)&&(g_stDpRxDscDecInfo.ucCoreNum == 0x04)&&(g_stDpRxDscDecInfo.ucColorSpace == YCbCr420_3))
+    {
+        BKA3_27_REG = ucPcrpllDiv;
+        BKA3_28_REG = 0x0c;
+        BKA3_3F_REG = 0x21;
+    }
+    if((g_stDpRxDscDecInfo.ucColorSpace != YCbCr422_1)||(g_stDpRxDscDecInfo.ucColorSpace != YCbCr420_3))
+    {
+        if(usHblank <= 90)
+        {
+            switch(g_stDpRxDscDecInfo.ucCoreNum)
+            {
+                case 4:
+                    BKA3_27_REG = ucPcrpllDiv;
+                    BKA3_28_REG = 0x0c;
+                    BKA3_3F_REG = 0x21;
+                    break;
+                default:
+                    BKA3_27_REG = 0x00;
+                    BKA3_28_REG = 0x00;
+                    break;
+            }
+        }
+    }
+}
+
+void Drv_DpRxDscDec_ExtraHactSet(void)
+{
+    u8 ucHact;
+
+    //extra hactive set
+    ucHact = ((u8)g_stDpRxDscDecTiming.usHact) >> 1;
+    if(g_stDpRxDscDecInfo.ucSliceNum == 0x01)
+    {
+        g_stDpRxDscDecInfo.ucExtraHact = 0x00;
+    }
+    else if(g_stDpRxDscDecInfo.ucSliceNum == 0x02)
+    {
+        g_stDpRxDscDecInfo.ucExtraHact = ucHact & BIT0_1;
+    }
+    else
+    {
+        ucHact &= 0x03;
+        if (ucHact == 0x00)
+        {
+            g_stDpRxDscDecInfo.ucExtraHact = 0x00;
+        }
+        else
+        {
+            g_stDpRxDscDecInfo.ucExtraHact = g_stDpRxDscDecInfo.ucSliceNum - ucHact;
+        }
+    }
+    BKEE_9F_REG = (g_stDpRxDscDecInfo.ucExtraHact << 2);
+}
+
+void Drv_DpRxDscDec_TimingSet(void)//
+{
+    u16 usTemp;
+
+    BKEE_A3_REG = g_stDpRxDscDecTiming.usVsync & 0xff;
+
+    BKEE_A6_REG = (g_stDpRxDscDecTiming.usVfp >> 8) & 0xff;
+    BKEE_96_REG = g_stDpRxDscDecTiming.usVfp & 0xff;
+
+    BKEE_90_REG = (g_stDpRxDscDecTiming.usVtol >> 8) & 0xff;
+    BKEE_91_REG = g_stDpRxDscDecTiming.usVtol & 0xff;
+
+    usTemp = g_stDpRxDscDecTiming.usHsync >> 1;
+    if (g_stDpRxDscDecInfo.ucColorSpace == YCbCr420_3)
+        usTemp >>= 1;
+    BKEE_A2_REG = usTemp & 0xff;
+
+    usTemp = g_stDpRxDscDecTiming.usHfp >> 1;
+    if (g_stDpRxDscDecInfo.ucColorSpace == YCbCr420_3)
+        usTemp >>= 1;
+    BKEE_A0_REG = usTemp >> 8;
+    BKEE_A1_REG = usTemp & 0xff;
+
+    usTemp = g_stDpRxDscDecTiming.usHtol >> 1;
+    if (g_stDpRxDscDecInfo.ucColorSpace == YCbCr420_3)
+        usTemp >>= 1;
+    BKEE_92_REG = usTemp >> 8;
+    BKEE_93_REG = usTemp & 0xff;
+}
+
+
+void Drv_DpRxDscDec_ParamSet(void)
+{
+    u8 ucTemp;
+    u16 usTemp;
+    u32 ulTemp;
+
+    g_stDpRxDscDecInfo.ucSliceRemainder = (u8)(g_stDpRxDscDecInfo.usSliceWidth % 3);
+    g_stDpRxDscDecInfo.usSliceGroup = (u16)(ceil((double)g_stDpRxDscDecInfo.usSliceWidth / 3));
+
+//    BKEE_98_REG |= BIT1_1;//[1]adaptive sync, timing follow
+
+    if(g_stDpRxDscDecInfo.ucColorSpace == YCbCr422_1)//422
+    {
+        BKEE_89_REG = 0xe0;
+        g_stDpRxDscDecInfo.ucGroupUnit = 0x04;
+    }
+    else
+    {
+        BKEE_89_REG = 0xac;
+        g_stDpRxDscDecInfo.ucGroupUnit = 0x03;
+    }
+
+    BKEE_81_REG  = g_stDpRxDscDecInfo.ucSliceRemainder << 6;
+    BKEE_81_REG |= ((u8)(g_stDpRxDscDecInfo.usSliceGroup >> 8));
+
+    if (BKEE_00_REG == 0x12)
+        BKEE_81_REG |= BIT4_1;//[4]dsc version1.2a enable: 1-en
+    else
+        BKEE_81_REG &= BIT4_0;//[4]dsc version1.2a enable: 0-dis
+
+    BKEE_82_REG  = (u8)g_stDpRxDscDecInfo.usSliceGroup;
+
+    if (g_stDpRxDscDecInfo.ucColorDepth == BPC8)
+    {
+        BKEE_83_REG = 0x47;//EE83 BIT3-0:7+2*(BPC-8)
+        BKEE_84_REG = 0x21;//EE84 BIT3-0:1+2*(BPC-8)
+    }
+    else
+    {
+        BKEE_83_REG = 0x4b;
+        BKEE_84_REG = 0x85;
+    }
+
+    if (g_stDpRxDscDecInfo.ucColorDepth == BPC8)
+    {
+        if(g_stDpRxDscDecInfo.ucColorSpace == RGB_0)
+            BKEE_8D_REG = 0x0f;
+        else
+            BKEE_8D_REG = 0x0e;
+    }
+    else
+    {
+        if(g_stDpRxDscDecInfo.ucColorSpace == RGB_0)
+            BKEE_8D_REG = 0x13;
+        else
+            BKEE_8D_REG = 0x12;//12
+    }
+
+    //middle
+    ulTemp = (u32)g_stDpRxDscDecInfo.usSliceWidth * (u32)g_stDpRxDscDecInfo.usBpp;
+    ucTemp = (u8)(ulTemp & 0x0f);
+    ulTemp = floor((double)ulTemp / 16);
+    BKEE_8E_REG=(u8)(ulTemp >> 8);
+    BKEE_8F_REG=(u8)(ulTemp);
+
+    if (ucTemp == 0)
+        BKEE_81_REG &= BIT3_0;//Bpp*SilceWidth: [3:0] is 0 ,ee81[3] is 0, otherwise is 1;
+    else
+        BKEE_81_REG |= BIT3_1;//Bpp*SilceWidth: [3:0] is 0 ,ee81[3] is 0, otherwise is 1;
+
+    usTemp = 3 * g_stDpRxDscDecInfo.usBpp;
+    usTemp = ceil((double)usTemp / (double)16);
+    BKEE_8B_REG = usTemp + 8;
+    BKEE_8C_REG = usTemp - g_stDpRxDscDecInfo.ucGroupUnit;
+
+    usTemp = ceil((double)g_stDpRxDscDecInfo.usChunkSize / 6);
+    BKEE_9A_REG = (u8)(usTemp >> 8);
+    BKEE_9B_REG = (u8)(usTemp);
+
+    //dsc last byte
+    BKEE_9C_REG = (g_stDpRxDscDecInfo.usChunkSize + 6 - usTemp * 6) % 6;
+    BKEE_AB_REG=(u8)(usTemp >> 8);
+    BKEE_AC_REG=(u8)(usTemp);
+
+    if(g_stDpRxDscDecInfo.ucCoreNum == 0x01)
+    {
+        BKEE_A9_REG = 0x00;
+        BKEE_AA_REG = 0x80;
+        BKEE_97_REG &= BIT0_0;
+    }
+    else
+    {
+        //hact/2/slc*(slc-1)/slc + 16
+        ucTemp = g_stDpRxDscDecInfo.ucCoreNum - 1;
+        usTemp = g_stDpRxDscDecTiming.usHact >> 1;
+        if (g_stDpRxDscDecInfo.ucColorSpace == YCbCr420_3)
+        {
+            usTemp >>= 1;
+        }
+        usTemp *= ucTemp;
+        ucTemp = g_stDpRxDscDecInfo.ucCoreNum * g_stDpRxDscDecInfo.ucCoreNum;
+        usTemp = usTemp / ucTemp;
+        usTemp += 16;
+        if(g_stDpRxDscDecInfo.ucSliceNum == 0x02)//Copy from 2207 ,2slice 1360*768 issue
+        {
+            if(usTemp < 0x2A0)
+            {
+                usTemp = 0x2A0;
+            }
+        }
+        BKEE_A9_REG = (usTemp >> 8) & 0xff;
+        BKEE_AA_REG = usTemp & 0xff;
+        BKEE_97_REG |= BIT0_1;
+    }
+
+    //start
+    if(g_stDpRxDscDecInfo.ucCoreNum == 0x01)
+    {
+        ucTemp = 0x80;
+    }
+    else if(g_stDpRxDscDecInfo.ucCoreNum == 0x02)
+    {
+        ucTemp = 0xc0;
+    }
+    else
+    {
+        ucTemp = 0xe0;
+    }
+
+    BKEE_80_REG = 0x00;
+    BKEE_F8_REG = 0x00;
+    Ocm_Delay1ms(2);
+    
+    BKEE_80_REG = g_stDpRxDscDecInfo.ucSliceNum | ucTemp;
+    BKEE_F8_REG = 0xff;
+}
+void Drv_DpRxDscDec_Rst(void)
+{
+    u8 ucTmp = 0;
+    ucTmp = BKEE_80_REG;
+    BKEE_80_REG = 0x00;
+    BKEE_F8_REG = 0x00;
+    Ocm_Delay1ms(2);
+    
+    BKEE_80_REG = ucTmp;
+    BKEE_F8_REG = 0xff;
+}
+
+void Drv_DpRxDscDec_ModuleEnable(void)
+{
+    #if 0
+    Drv_DpRxDscDec_SyncPolCvt();
+    #endif
+    Drv_DpRxDscDec_DummySet();
+    Drv_DpRxDscDec_WordDelaySet();
+//    Drv_DpRxDscDec_HstartCal();
+	
+    Drv_DpRxDscDec_DataClkMuxSet();
+	
+	Drv_DpRxDscDec_HstartCal();
+	
+    Drv_DpRxDscDec_ExtraHactSet();
+    Drv_DpRxDscDec_TimingSet();
+    Drv_DpRxDscDec_ParamSet();
+    g_stDpRxDscDecInfo.ucDscDecEn = ENABLED;
+}
+
+void Drv_DpRxDscDec_Set(u8 ucState)
+{
+    g_stDpRxDscDecInfo.ucDscDecEn = ucState;
+}
+
+void Drv_DpRxDscDec_Init(void)//recover to no dsc configure
+{
+    BKC7_D7_REG &= BIT6_0;//[6]1-dsc dec to tx
+    
+    //dsc module disable
+    BKEE_80_REG = 0x00;//dsc dec disable
+    BKEE_F8_REG = 0x00;
+
+    
+    BKF3_00_REG = 0x40;//pixel count save for fifo for dsc org-0x80
+//    BKF3_03_REG = 0x02;
+    BKF3_05_REG &= 0x03;//[7]rg_format_soft_mode, 0-hw
+                        //[6]dp rx soft msa en: 0-dis
+                        //[5:4]Vpol default
+                        //[3:2]Hpol default
+
+    BKF3_0A_REG &= BIT7_0;//[7]rg_depth_soft_mode, 0-hw modes
+    BKF3_16_REG &= 0xe0;
+
+    BKF3_63_REG = 0x06;//[4]software dsc enable
+                       //dp rx dsc disable
+
+//    BKF3_77_REG &= BIT0_0;//[0]rg_pcr_restart_mode: 0-sram fifo overflow
+    BKF3_83_REG &= BIT7_0;//[7]rg_dsc_bypass: 1-not bypass
+
+    BKA3_25_REG = 0x01;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    BKA3_3F_REG = 0x01; //[6:4]rg_clkgen_dscrx_dsc_muxsel  : 001-aa_pcrpll_dsc_in_clk
+    BKA3_40_REG = 0x11; //[6:4]rg_clkgen_dscrx_dscrd_muxsel: 000-aa_pcrpll_dsc_in_clk
+                         //[3:0]rg_clkgen_dscrx_dscrd_divsel: div 2
+
+    g_stDpRxDscDecInfo.ucDscDecEn = DISABLED;
+}
+
+#if DPRX_LINK_CTS == ENABLED
+u8 Drv_DpRxDscDec_DscParaCheck(void)
+{
+    u8 ucRtn = TRUE;
+    u16 usChunkSizeCal,usChunkSizeGet,usSliceWidth,usBpp;
+    u32 temp0 =0;
+
+    if (Drv_System_IntFlagGet(IRQ_DPRX_PPS_PKT_INT))//[3]pps data chg flag
+    {
+        Drv_System_IntClr(IRQ_DPRX_PPS_PKT_INT);
+        BKEE_AD_REG = 0xff;//important, ee00 ~ ee80 update, must be set
+        Ocm_Delay1ms(2);//must be wait load success
+    }
+    usBpp = ((u16)(BKEE_04_REG & 0x03) << 8) + BKEE_05_REG;
+    usSliceWidth  = ((u16)BKEE_0C_REG << 8) + BKEE_0D_REG;
+    usChunkSizeGet = ((u16)BKEE_0E_REG << 8) + BKEE_0F_REG;
+
+    temp0 = (u32)usSliceWidth * (u32)usBpp;
+    usChunkSizeCal = ceil((double)temp0/128);
+    if(usChunkSizeCal != usChunkSizeGet)
+    {
+        g_stDpRx.ucDscChunkSizeErr = DSC_CHUNKSIZE_ERR;
+        ucRtn = FALSE;
+    }
+    if(BKEE_AD_REG & 0x0f)
+    {
+        g_stDpRx.ucDscRcBufUnderRun = DSC_RCBUF_UNDERRUN;
+        ucRtn = FALSE;
+    }
+    if(BKEE_AE_REG & 0x0f)
+    {
+        g_stDpRx.ucDscRcBufOverFlow = DSC_RCBUF_OVERFLOW;
+        ucRtn = FALSE;
+    }
+    return ucRtn;
+}
+#endif
+
+u8 Drv_DpRxDscDec_SwitchGet(void)
+{
+    return g_stDpRxDscDecInfo.ucDscDecEn;
+}
+u8 Drv_DpRxDscDec_ColorDepthGet(void)
+{
+	return g_stDpRxDscDecInfo.ucColorDepth;
+}
+u8 Drv_DpRxDscDec_ColorSpaceGet(void)
+{
+	return g_stDpRxDscDecInfo.ucColorSpace;
+}
+
+void Drv_DpRxDscDec_ColorInfoGet(ColorInfo_S *pstInfo)
+{
+    switch(g_stDpRxDscDecInfo.ucColorDepth)
+    {
+        case BPC10:
+            pstInfo->ucBitDepth = DPRX_10BIT_2;
+            break;
+        case BPC12:
+            pstInfo->ucBitDepth = DPRX_12BIT_3;
+            break;        
+        default:
+            pstInfo->ucBitDepth = DPRX_8BIT_1;
+            break;
+    }
+    pstInfo->ucPixelEncoding = g_stDpRxDscDecInfo.ucColorSpace;
+    if(g_stDpRxDscDecInfo.ucColorSpace == SIMPLE422_5)
+    {
+        pstInfo->ucPixelEncoding = YCbCr444_2;
+    }
+}
+#endif
+
+#endif

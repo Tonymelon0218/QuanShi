@@ -1,0 +1,1067 @@
+/******************************************************************************
+  * @project: LT2204
+  * @file: ChipDpTx.c
+  * @author: wtt
+  * @company: LONTIUM
+  * @date: 2022.05.30
+/******************************************************************************/
+#include "include.h"
+
+#if TX_PORT_SIGN == DP_PORT
+
+DpTx_S g_stDpTx;
+LtTiming_S g_stDpTxTiming;
+
+
+void Mod_DpTx_PowerOnInit(void)
+{
+    memset(&g_stDpTx,0,sizeof(DpTx_S));
+    g_stDpTx.ucTxState = STATE_DPTX_POWER_ON_1;
+}
+
+void Mod_DpTx_VarInit(void)
+{
+    #if CHIP_SEL == LT6711GXE
+    LT6711GXE_DpTxVarInit();
+    #endif
+}
+
+void Mod_DpTx_GpioInit(void)
+{
+    #if CHIP_SEL == LT6711GXE
+    LT6711GXE_CCGpioInit();
+    #endif
+}
+
+void Mod_DpTx_DpOrTypecDet(void)
+{
+    #if CHIP_SEL == LT6711GXE
+    LT6711GXE_DpTxDpOrTypecDet();
+    #endif
+}
+
+void Mod_DpTx_MsgNotify(u8 ucEvent)
+{
+    #if CHIP_SEL == LT6711GXE
+    LT6711GXE_DpTxMsgNotify(ucEvent);
+    #endif
+}
+
+void Mod_DpTx_SetState(u8 ucState)
+{
+    u8 ucLastState;
+    if(ucState != g_stDpTx.ucTxState)
+    {        
+        ucLastState = g_stDpTx.ucTxState;
+        g_stDpTx.ucTxState = ucState;
+        g_stDpTx.b1TxStateChanged = TRUE;
+        printLT(PRINT_PRIO_TEST, "\nTxState = %bd", ucState);
+        
+        // other state-->STATE_DPRX_PLAY_BACK_16,need notify video on
+        if(g_stDpTx.ucTxState == STATE_DPTX_PLAY_BACK_11)
+        {
+           ; 
+        }
+        //STATE_DPRX_PLAY_BACK_16-->other state,need notify video off
+        if(ucLastState == STATE_DPTX_PLAY_BACK_11)
+        {
+            Drv_DpTx_VidOutEn(FALSE);
+        }
+        
+    }
+}
+
+void Mod_DpTx_TotalByteUpdate(u8 IsUpdate)
+{
+    #if CHIP_VERSION_SEL == U1_VERSION
+    u16 usHactive;
+    if(IsUpdate == TRUE)
+    {
+        #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+        if (g_stDpTx.b1SrcDscByEn == ENABLED)
+        {
+            return;
+        }
+        #endif
+        #if DPTX_DSC_ENC_SUPPORT == ENABLED
+        if (Drv_DpTxDscEnc_SwitchGet() == ENABLED)
+        {
+            return;
+        }
+        #endif
+        if(Mod_DpTx_LaneGet() <= 2)
+        {
+            return;
+        }
+        if(BKF7_E4_REG & 0x01)//total_byte
+        {
+            usHactive = ((u16)BKF7_FA_REG << 8) + BKF7_FB_REG;
+            usHactive *= 6;
+            BKF7_24_REG = usHactive >>8;
+            BKF7_25_REG = usHactive;
+            BKF7_2E_REG |= BIT0_1;
+        }
+    }
+    else
+    {            
+        BKF7_24_REG = 0x00;
+        BKF7_25_REG = 0x00;
+        BKF7_2E_REG &= BIT0_0;
+    }
+    #else
+    IsUpdate = FALSE;
+    #endif
+}
+
+void Mod_DpTx_HbeSet(u8 b1IsHbeEn)
+{
+    u16 usHtiming;
+    if(b1IsHbeEn == ENABLED)
+    {
+        usHtiming = ((u16)BKF7_F6_REG << 8) + BKF7_F7_REG;
+        usHtiming <<=1;
+        Tx_Buff[0] = usHtiming; 
+        Tx_Buff[1] = usHtiming>>8;
+        Mod_DpTxLink_DpcdWrite(0x00,0x3054,Tx_Buff,2);//output htotal
+        
+        usHtiming =  ((u16)BKF7_EA_REG << 8) + BKF7_EB_REG;
+        usHtiming += ((u16)BKF7_F0_REG << 8) + BKF7_F1_REG;
+        usHtiming <<=1;
+        Tx_Buff[0] = usHtiming;
+        Tx_Buff[1] = usHtiming>>8;
+        Mod_DpTxLink_DpcdWrite(0x00,0x3056,Tx_Buff,2);//output hstart
+        
+        usHtiming =  ((u16)BKF7_EA_REG << 8) + BKF7_EB_REG;
+        usHtiming <<= 1;
+        usHtiming = (BKF7_E7_REG&BIT4_1)?(usHtiming&0x7fff):(usHtiming|0x8000); 
+        Tx_Buff[0] = usHtiming; 
+        Tx_Buff[1] = usHtiming>>8;
+        Mod_DpTxLink_DpcdWrite(0x00,0x3058,Tx_Buff,2);//output hsync
+   }
+   else
+   {
+        Tx_Buff[0] = Tx_Buff[1] = 0x00;
+        Mod_DpTxLink_DpcdWrite(0x00,0x3054,Tx_Buff,2);//output htotal
+   }
+
+}
+
+u8 Mod_DpTx_HbeEnableJudge(void)
+{
+    if ((g_stDpTxTiming.usHtol == 4400) && (g_stDpTxTiming.usHact == 3840))
+    {
+        if ((g_stDpTxTiming.usVtol == 2250) && (g_stDpTxTiming.usVact == 2160))
+        {
+            return ENABLED;
+        }
+    }
+
+    return DISABLED;
+}
+
+u8 Mod_DpTx_DscEncEnableJudge(void)
+{
+    u8 ucRtn = DISABLED;
+
+    if (g_stDpTx.ulTxPixelClk > 1200000)
+    {
+        if (g_stAuxDpTx.ucDscSliceCap > 0x0f)//8slice
+        {
+            ucRtn = ENABLED;
+        }
+    }
+    else if (g_stDpTx.ulTxPixelClk > 600000)
+    {
+        if (g_stAuxDpTx.ucDscSliceCap > 0x03)//4slice
+        {
+            ucRtn = ENABLED;
+        }
+    }
+    else if (g_stDpTx.ulTxPixelClk > 300000)
+    {
+        if (g_stAuxDpTx.ucDscSliceCap > 0x01)
+        {
+            ucRtn = ENABLED;
+        }
+    }
+    else
+    {
+        ucRtn = ENABLED;
+    }
+
+    return ucRtn;
+}
+
+void Mod_DpTx_DscPktSet(void)
+{
+    #if DPTX_DSC_ENC_SUPPORT == ENABLED
+    if (Drv_DpTxDscEnc_SwitchGet() == ENABLED)
+    {
+        Drv_DpTxDscEnc_TxPktSet();
+    }
+    #endif
+    #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+    if (g_stDpTx.b1SrcDscByEn == ENABLED)
+    {
+        Drv_DpTxDscBy_PktSet();
+    }
+    #endif
+}
+
+void Mod_DpTx_AdaptiveSyncSet( u8 b1IsAdaptiveSyncEn)
+{
+    #if DPTX_ADAPTIVE_SYNC_SUPPORT == ENABLED
+    if(b1IsAdaptiveSyncEn == ENABLED)
+    {
+        BKF6_CE_REG = 0x22;
+        BKF6_CF_REG = 0x01;
+        BKF6_0E_REG |= BIT7_1;//adaptive sync enable
+    }
+    else
+    {           
+        BKF6_0E_REG &= BIT7_0;  //adaptive sync disable
+    }
+    #endif
+}
+
+void Mod_DpTx_SoftMsaSet(u8 IsSoftMsa)
+{
+    u8 usVstart_Plus;
+    LtTiming_S stTimingInfo;
+    if(IsSoftMsa == TRUE)
+    {
+        g_stDpTx.b1SoftMsaEn = TRUE;
+        usVstart_Plus = 0;
+
+        memcpy(&stTimingInfo,&g_stDpTxTiming,sizeof(LtTiming_S));
+        if(g_stDpTx.b1SrcInterlaceEn == ENABLED)
+        {
+            BKF7_0F_REG = stTimingInfo.usVtol>>8;
+            BKF7_10_REG = (stTimingInfo.usVtol)&0xfe;
+            BKF7_28_REG = stTimingInfo.usVtol>>8;
+            BKF7_29_REG = (stTimingInfo.usVtol)&0xfe;
+            BKF7_27_REG |= 0x06;
+            stTimingInfo.usVtol <<= 1;//must 2*votal
+            if(((stTimingInfo.usVsync + stTimingInfo.usVbp)&0x01) == 0x00)
+            {
+                usVstart_Plus = 1;
+            }
+        }
+        if(g_stDpTx.b1SrcVrrEn == ENABLED)
+        {
+            stTimingInfo.usVtol = 2 + stTimingInfo.usVbp + stTimingInfo.usVsync + stTimingInfo.usVact;
+        }
+        //soft msa H set
+        BKF7_05_REG = stTimingInfo.usHtol >> 8;
+        BKF7_06_REG = stTimingInfo.usHtol & 0xff;
+        BKF7_07_REG = (stTimingInfo.usHsync + stTimingInfo.usHbp) >> 8;
+        BKF7_08_REG = (stTimingInfo.usHsync + stTimingInfo.usHbp) & 0xff;
+        BKF7_09_REG &= 0x80;//[6:0]hsync width, [7]hsync polarity
+        BKF7_09_REG |= ((stTimingInfo.usHsync >> 8) & 0x7f);//[6:0]hsync width
+        BKF7_0A_REG = stTimingInfo.usHsync & 0xff;
+        BKF7_0B_REG = stTimingInfo.usHact >> 8;
+        BKF7_0C_REG = stTimingInfo.usHact & 0xff;
+        //soft msa V set
+        BKF7_0D_REG = stTimingInfo.usVtol >> 8;
+        BKF7_0E_REG = stTimingInfo.usVtol & 0xff;
+        BKF7_11_REG = (stTimingInfo.usVsync + stTimingInfo.usVbp + usVstart_Plus) >> 8;
+        BKF7_12_REG = (stTimingInfo.usVsync + stTimingInfo.usVbp + usVstart_Plus) & 0xff;
+        BKF7_13_REG &= 0x80;//[6:0]vsync width, [7]vsync polarity
+        BKF7_13_REG |= ((stTimingInfo.usVsync >> 8) & 0x7f);//[6:0]vsync width
+        BKF7_14_REG = stTimingInfo.usVsync & 0xff;
+        BKF7_15_REG = stTimingInfo.usVact >> 8;
+        BKF7_16_REG = stTimingInfo.usVact & 0xff;
+        if(BKF7_E7_REG& BIT4_1)//h pol
+        {
+            BKF7_09_REG &= BIT7_0;
+            BKF7_2A_REG &= BIT7_0;
+        }
+        else
+        {
+            BKF7_09_REG |= BIT7_1;
+            BKF7_2A_REG |= BIT7_1;
+        }
+        if(BKF7_E7_REG& BIT5_1)//v pol
+        {
+            BKF7_13_REG &= BIT7_0;
+            BKF7_2A_REG &= BIT6_0;
+        }
+        else
+        {
+            BKF7_13_REG |= BIT7_1;
+            BKF7_2A_REG |= BIT6_1;
+        }
+        BKF7_2A_REG |= BIT4_1;//[4]msa soft en, Video timing setting soft mode: From registers
+        printLT(PRINT_PRIO_TEST, "\nDpTx soft Msa");
+    }
+    else
+    {
+        #if DPTX_DSC_ENC_SUPPORT == ENABLED
+        if (Drv_DpTxDscEnc_SwitchGet() == ENABLED)
+        {
+            return;
+        }
+        #endif
+        #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+        if (g_stDpTx.b1TxDscByEn == ENABLED)
+        {
+            return;
+        }
+        #endif
+        g_stDpTx.b1SoftMsaEn = FALSE;
+        BKF7_09_REG &= BIT7_0;
+        BKF7_13_REG &= BIT7_0;
+        BKF7_27_REG &= 0xf9;
+        BKF7_2A_REG &= BIT7_0;
+        BKF7_2A_REG &= BIT6_0;
+        BKF7_2A_REG &= BIT4_0;//[4]msa soft en, Video timing setting soft mode: From registers
+    }
+}
+
+void Mod_DpTx_AudioInfoSet(void)
+{
+    #if TX_AUDIO_SEL != NO_AUDIO_DATA
+    #if DPTX_AUDIO_DATA_BYPASS == ENABLED
+    u8 ucLaneRate;
+    u32 ulMaud, ulTemp1;
+    u16 usFsValue_128;
+    float Temp0;
+    #endif
+
+    printLT(PRINT_PRIO_TEST, "\nAudio layout is 0x%02bx", g_stDpTx.ucLayout);
+    printLT(PRINT_PRIO_TEST, "\nAudio Channel is 0x%02bx", g_stDpTx.ucChannel);
+
+    if(g_stDpTx.ucLayout == 1)
+    {
+        BKF6_14_REG |= BIT0_1;//[0]1-dp audio 8ch mode
+    }
+    else
+    {
+        BKF6_14_REG &= BIT0_0;//[0]0-dp audio 2ch mode
+    }
+
+    BKF6_D1_REG = g_stDpTx.szAudioInfo[0];//hb1
+    BKF6_D2_REG = g_stDpTx.szAudioInfo[1];//hb2
+    BKF6_D3_REG = g_stDpTx.szAudioInfo[2];//hb3
+    BKF6_D4_REG = g_stDpTx.szAudioInfo[3];//pb0
+    BKF6_D5_REG = g_stDpTx.szAudioInfo[4];//pb1
+    BKF6_D6_REG = g_stDpTx.szAudioInfo[5];//pb2
+    BKF6_D7_REG = g_stDpTx.szAudioInfo[6];//pb3
+    BKF6_D8_REG = g_stDpTx.szAudioInfo[7];//pb4
+    if(g_stDpTx.ucCodingType == ENABLED)
+    {
+        BKF6_14_REG |= BIT0_1;//[0]1-dp audio 8ch mode
+        BKF6_EB_REG = 0x17;//hbr en
+    }
+    else
+    {
+        BKF6_EB_REG = g_stDpTx.ucChannel;//8 channel
+    }
+
+    #if DPTX_AUDIO_DATA_BYPASS == ENABLED// to fixe ACR no 128_fs clk issue.
+    //Naud = 0x8000;
+    //(Fhalf_lclk / 2) * 1000 * Maud = 4 * Naud * Fs * 64;
+    //Fhalf_lclk * 125 * Maud = Naud * Fs * 64;
+    //Fhalf_lclk * 125 * Maud = 0x8000 * 64 * Fs
+    //Maud = 0x200000 * Fs / (Fhalf_lclk * 125);
+
+    ucLaneRate = BKF5_5F_REG;
+    if (ucLaneRate == RBR)
+    {
+        ulTemp1 = 162;
+    }
+    else if (ucLaneRate == HBR)
+    {
+        ulTemp1 = 270;
+    }
+    else if (ucLaneRate == HBR2)
+    {
+        ulTemp1 = 540;
+    }
+    else
+    {
+        ulTemp1 = 810;
+    }
+    
+    BKF6_06_REG &= 0x0f;
+    BKF6_06_REG |= 0x90;
+
+    usFsValue_128 = ((u16)BKC6_7D_REG << 8) + BKC6_7E_REG;
+    ulTemp1 *= 125;
+//    ulMaud = ceil((double)usFsValue_128 * 16384 / ulTemp1);
+
+    Temp0 = (double)usFsValue_128 * 16384 / ulTemp1;
+
+    ulMaud = (u32)Temp0;//四舍五入
+    if(fabs(Temp0 - (float)ulMaud) >= 0.5f)
+    {
+        ulMaud++;
+    }
+    
+    printLT(PRINT_PRIO_TEST, "\nMaud is 0x%04lx",ulMaud);
+    
+    BKF6_0C_REG = ulMaud & 0xff;
+    BKF6_0B_REG = (ulMaud >> 8) & 0xff;
+    BKF6_0A_REG = (ulMaud >> 16) & 0xff;
+    #else
+    BKF6_06_REG &= 0x8f;//[6:4]rg_maud_fact: 010-maud/2
+    if(BKF6_EB_REG == 0x17)
+    {
+     BKF6_06_REG |= 0x10;//[6:4]rg_maud_fact: 010-maud/2
+    }
+    else
+    {
+     BKF6_06_REG |= 0x20;//[6:4]rg_maud_fact: 010-maud/2
+    }
+    #endif
+
+    BKF6_14_REG |= BIT7_1;//[7]atp pkt send sdp enable: 1-en
+    BKF6_DD_REG |= BIT0_1;//[1]psr data selet: 1-psr data from register
+    #endif
+}
+
+void Mod_DpTx_AudioIssueFixed(u8 ucOpt)
+{
+    #ifdef NVIDIA_FW_EN
+    if ((ucOpt == ENABLED) && (g_stDpTx.ulTxPeakClk < 40000))
+    {
+        BKF6_ED_REG |= 0xe0;
+    }
+    else
+    {
+        BKF6_ED_REG &= 0x1f;
+    }
+    #else
+    ucOpt = DISABLED;
+    #endif
+}
+
+void Mod_DpTx_ColorInfoSet(void)
+{
+    if(g_stDpTx.b1SrcInterlaceEn == ENABLED)
+    {
+        g_stDpTx.ucMsaValue |= BIT0_1;
+    }
+
+    if(g_stDpTx.ucMisc1&BIT6_1) 
+    {
+        BKF7_17_REG = g_stDpTx.ucMsaValue;
+        BKF7_18_REG = g_stDpTx.ucMisc0;
+        #ifdef NVIDIA_FW_EN   //nivida case
+        BKF7_19_REG = 0x00;//misc1
+        #else
+        BKF7_19_REG = g_stDpTx.ucMisc1;//misc1
+        #endif
+
+        BKF6_59_REG = 0x07;
+        BKF6_5A_REG = 0x05;
+        BKF6_5B_REG = 0x13;//head
+        BKF6_A0_REG = 0x00;
+        BKF6_B0_REG = g_stDpTx.ucVscDb16;//vsc sdp 
+        BKF6_B1_REG = g_stDpTx.ucVscDb17;
+        BKF6_B2_REG = g_stDpTx.ucVscDb18;
+
+        #if HDMIRX_DSC_BYPASS_HALFPIX_EN == ENABLED
+        if (g_stDpTx.b1SrcDscByEn == ENABLED)
+        {
+            ((g_stDpTx.ucVscDb16&0xf0) == 0x30)?(BKF6_06_REG |= BIT1_1):(BKF6_06_REG |= BIT0_1);
+        }
+        else
+        #endif
+        {
+            ((g_stDpTx.ucVscDb16&0xf0) == 0x30)?(BKF6_06_REG |= BIT0_1):(BKF6_06_REG &= BIT0_0);//Mvid sel 2
+        }
+
+        ((g_stDpTx.ucVscDb16&0xf0) == 0x30)?(BKF7_27_REG |= BIT0_1):(BKF7_27_REG &= BIT0_0);//[0]rg_420_en
+
+        #ifdef NVIDIA_FW_EN//nivida case
+        #else
+        BKF6_0E_REG |= BIT1_1;
+        #endif
+    }
+    else
+    {
+        BKF7_17_REG = g_stDpTx.ucMsaValue;
+        BKF7_18_REG = g_stDpTx.ucMisc0;
+        BKF7_19_REG = g_stDpTx.ucMisc1;//misc1
+        
+        BKF6_06_REG &= 0xfe;//cal mvid
+        BKF7_27_REG &= BIT0_0;//[0]rg_420_disable
+        BKF6_0E_REG &= BIT1_0;
+    }
+}
+u8 Mod_DpTx_SinkHpdDet(void)
+{  
+   u8 Result = NO_ACTION;
+    if(g_stDpTx.b1IsDpOrTypec == DP_INTF)
+    {
+//        return Mod_DpTx_SinkHpdDet();
+      
+        if (BKE5_45_REG & BIT5_1)//det low must using the irq_flag,
+        {
+            Result =  LOW;
+        }
+        else if ((BKE5_55_REG & BIT4_1)&&((BKE5_53_REG & BIT6_1)))//det high  must using the source flag;
+        {
+            Result =  HIGH;
+        }
+        return Result;
+    
+    }
+
+    #if TYPECRX_EN == ENABLED
+    if(g_stDpTx.b1IsDpOrTypec == TYPEC_INTF)
+    {   
+    return Mod_CC1ComDone_Get();
+    }
+    #endif
+ 
+    return FALSE;
+}
+
+void Mod_DpTx_HpdDetProc(void)
+{
+    if(g_stDpTx.ucTxState >= STATE_DPTX_UPSTREAM_DEVICE_READY_2)
+    {
+        //the current hpd detect is low.
+        //if(Mod_DpTx_SinkHpdDet() == LOW)//dp hpd is low
+        if(Mod_DpTx_SinkHpdDet() == LOW)
+        { 
+            //the last hpd detect is high.
+            Drv_DpTx_HpdClear();
+            if(g_stDpTx.b1IsTxHpdDet == HIGH)
+            {
+                g_stDpTx.b1IsTxHpdDet = LOW;
+          
+                Mod_DpTx_HpdLowAction();
+                printLT(PRINT_PRIO_HIG, "\ng_stDpTx.b1IsTxHpdDet = LOW");
+                Mod_DpTx_SetState(STATE_DPTX_UPSTREAM_DEVICE_READY_2);
+                Mod_DpTx_MsgNotify(DPTX_SINK_UNPLUG_EVENT);
+            } 
+        }
+        //the current hpd detect is high.
+        //else if(Mod_DpTx_SinkHpdDet() == HIGH)//dp hpd is low 
+        else if(Mod_DpTx_SinkHpdDet() == HIGH)
+        {
+            //the last hpd detect is low.
+            if(g_stDpTx.b1IsTxHpdDet == LOW)
+            {
+                g_stDpTx.b1IsTxHpdDet = HIGH;
+                Mod_DpTx_MsgNotify(DPTX_SINK_PLUG_EVENT);
+            }
+        }
+    } 
+}
+
+#if DPTX_HDCP_STATE_CHECK == ENABLED
+void Mod_DpTx_Hdcp1xReAuth(u8 HdcpRxVersion)
+{
+    if((BKF5_8C_REG & BIT0_1) != 0x00)
+    {
+        if((BKF5_C6_REG & 0xf0) >= 0x20)
+        {
+            g_stDpTx.ucHdcpTx1xAuthState = 0x01;
+        }
+        if(((BKF5_C6_REG & 0xf0) == 0x00)&&(g_stDpTx.ucHdcpTx1xAuthState == 0x01))
+        {
+            printLT(PRINT_PRIO_TEST,"\nHdcp1x Reauth");
+            Drv_HdcpTx_Enable(NO_HDCP);
+            Ocm_Delay1ms(1);
+            #if DPTX_HDCP_ENC_MODE == HW_MODE
+            Drv_HdcpTx_Enable(HdcpRxVersion);
+            #else
+            Drv_HdcpTx_Enable(DPTX_HDCP_ENC_MODE);
+            #endif
+            g_stDpTx.ucHdcpTx1xAuthState = 0x00;
+        }
+    }
+    else
+    {
+        g_stDpTx.ucHdcpTx1xAuthState = 0x00;
+    }
+}
+#endif
+
+void Mod_DpTx_StateJudge(void)
+{
+    u8 ucMinState = g_stDpTx.ucTxState;
+
+    //monitor upstream device stable.
+    if(ucMinState > STATE_DPTX_UPSTREAM_DEVICE_READY_2)
+    {
+        if(g_stDpTx.b1UpstreamDeviceReady == FALSE)
+        {
+            Mod_DpTx_HpdLowAction();
+            ucMinState = MIN(ucMinState,STATE_DPTX_UPSTREAM_DEVICE_READY_2);
+        }
+    }
+    //monitor upstream video stable.
+    if(ucMinState > STATE_DPTX_UPSTREAM_VIDEO_READY_5)
+    {
+        if(g_stDpTx.b1UpstreamVideoReady == FALSE)
+        {
+            Mod_DpTx_HpdLowAction();
+            ucMinState = MIN(ucMinState,STATE_DPTX_UPSTREAM_VIDEO_READY_5);
+        }
+    }
+    //monitor interfalce_flag;
+    if(ucMinState > STATE_DPTX_LINK_TRAINING_7)
+    {
+        if((g_stDpTx.b1SrcInterlaceChg == TRUE)&&(g_stDpTx.b1SrcInterlaceEn == ENABLED))
+        {
+            g_stDpTx.b1SrcInterlaceChg = FALSE;
+            Mod_DpTx_SoftMsaSet(TRUE);
+        }
+    }
+    //monitor adaptive sync
+    #if DPTX_ADAPTIVE_SYNC_SUPPORT == ENABLED
+    if (ucMinState > STATE_DPTX_LINK_TRAINING_7)
+    {
+        if (g_stDpTx.b1SrcVrrChg == TRUE)
+        {
+            g_stDpTx.b1SrcVrrChg = FALSE;
+             Mod_DpTx_AdaptiveSyncSet(g_stAuxDpTx.ucASyncCap);
+            if((g_stDpTx.b1SrcVrrEn == ENABLED) && (g_stDpTx.b1TxDscByEn == DISABLED))
+            {
+                Mod_DpTx_SoftMsaSet(TRUE);
+            }
+            else
+            {
+                Mod_DpTx_SoftMsaSet(FALSE);
+            }
+        }
+    }
+    #endif
+    if(ucMinState > STATE_DPTX_LINK_TRAINING_7)
+    {
+        if(g_stDpTx.b1SoftMsaUpdate == TRUE)
+        {
+            g_stDpTx.b1SoftMsaUpdate = FALSE;
+            if(g_stDpTx.b1SoftMsaEn == TRUE)
+            {
+                Mod_DpTx_SoftMsaSet(TRUE);
+            }
+        }            
+    }
+    //monitor hdr
+    if (ucMinState > STATE_DPTX_VIDEO_OUT_8)
+    {
+        //monitor dobly hdr flag
+        if((g_stDpTx.b1SrcDoblyHdrChg == TRUE)&&(g_stDpTx.b1SrcDoblyHdrEn  == ENABLED))
+        {
+            g_stDpTx.b1SrcDoblyHdrChg = FALSE;
+            Drv_DpTx_DoblyHdrEnable(g_stDpTx.b1DpTxAppleFlag);
+        }
+        //monitor static hdr flag
+        if((g_stDpTx.b1SrcStaticHdrChg == TRUE)&&(g_stDpTx.b1SrcStaticHdrEn  == ENABLED))
+        {
+            g_stDpTx.b1SrcStaticHdrChg = FALSE;
+            Drv_DpTx_StaticHdrEnable();
+        }
+        if((g_stDpTx.b1SrcStaticHdrEn == DISABLED)&&(g_stDpEdidInfo.b1HDREdid==1)&&(g_stDpTx.b1SrcDoblyHdrEn  == DISABLED))
+        { 
+            Drv_DpTx_StaticHdrDisable();
+        }
+        //monitor dynamic hdr flag
+        if((g_stDpTx.b1SrcDynamicHdrChg == TRUE)&&(g_stDpTx.b1SrcDynamicHdrEn  == ENABLED))
+        {
+            g_stDpTx.b1SrcDynamicHdrChg = FALSE;
+            Drv_DpTx_DynamicHdrEnable();
+        }
+    }
+    //monitor dp tx audio 8 chl
+    if (ucMinState > STATE_DPTX_AUDIO_OUT_9)
+    {
+        if (g_stDpTx.b1AudioInfoChg == TRUE)
+        {
+            g_stDpTx.b1AudioInfoChg = FALSE;
+            Mod_DpTx_AudioInfoSet();
+            Mod_DpTx_AudioIssueFixed(ENABLED);
+            #if DPTX_AUD_PATTERN_SEL != NO_PATTERN
+            Drv_Audio_OutEn(ON);
+            #endif
+           
+        }
+        else
+        {
+            #if DPTX_AUD_PATTERN_SEL == NO_PATTERN
+            Drv_Audio_MuteCheck(g_stDpTx.b1AudioMuteEn);
+            #endif
+           
+        }
+    }
+    #if DPTX_HDCP_ENC_MODE != NO_HDCP
+    if (ucMinState > STATE_DPTX_HDCP_ENABLE_10)
+    {
+        #if DPTX_HDCP_ENC_MODE == HW_MODE
+        if (g_stDpTx.ucHdcpRxVerChg == TRUE)
+        { 
+            g_stDpTx.ucHdcpRxVerChg = FALSE;
+            Drv_HdcpTx_Enable(g_stDpTx.ucHdcpRxVersion);
+        }
+        #else
+        if (g_stDpTx.ucHdcpRxVerChg == TRUE)
+        {
+            g_stDpTx.ucHdcpRxVerChg = FALSE;
+            Drv_HdcpTx_Enable(DPTX_HDCP_ENC_MODE);
+        }
+        #endif
+        #if DPTX_HDCP_STATE_CHECK == ENABLED
+        Mod_DpTx_Hdcp1xReAuth(g_stDpTx.ucHdcpRxVersion); //Act only on HDCP1X
+        #endif
+    }
+    #endif
+
+    if (ucMinState != g_stDpTx.ucTxState)
+    {
+        Mod_DpTx_SetState(ucMinState);
+    }
+}
+
+void Mod_DpTx_StateHandler(void)
+{
+    static u32 ulCurrentTime = 0;
+
+    switch(g_stDpTx.ucTxState)
+    {
+        case STATE_DPTX_POWER_ON_1:
+            Mod_DpTx_GpioInit();
+//            #if TYPECTX_EN == ENABLED
+//            Drv_CCTx_PHYDigSet();
+//            #endif
+            Drv_DpTx_PowerOnInit();
+            #if TYPECRX_EN == ENABLED
+            Mod_CC1CableVari_Init();
+            #endif
+            Mod_DpTx_SetState(STATE_DPTX_UPSTREAM_DEVICE_READY_2);
+            break;
+
+        case STATE_DPTX_UPSTREAM_DEVICE_READY_2://Typec Rx CC is done or dp is ok
+            if(g_stDpTx.b1TxStateChanged == TRUE)
+            {
+                Mod_DpTx_DpOrTypecDet();
+                g_stDpTx.b1TxStateChanged = FALSE;
+                
+            }
+            if(g_stDpTx.b1UpstreamDeviceReady == TRUE)
+            {
+                
+                Mod_DpTx_SetState(STATE_DPTX_WAITE_HPD_3);
+            }
+            break;
+
+        case STATE_DPTX_WAITE_HPD_3:
+            if(g_stDpTx.b1IsTxHpdDet == HIGH)//dp hpd is high.
+            {
+                #if TYPECTX_EN == ENABLED
+                Drv_DpTx_TypeCOutSet();
+                #endif
+                #ifdef NVIDIA_FW_EN
+                #if (SLEEP_MODE == ENABLED)
+                Mode_Sleep_DpTxPowerdown(DISABLED);
+                #endif
+                #endif
+                Mod_DpTx_SetState(STATE_DPTX_READ_SINK_INFO_4);
+            }
+            else
+            {   
+                #ifdef NVIDIA_FW_EN
+                #if (SLEEP_MODE == ENABLED)
+                Mode_Sleep_DpTxPowerdown(ENABLED);
+                #endif
+                #endif
+            }
+            break;
+
+        case STATE_DPTX_READ_SINK_INFO_4:
+            Mod_DpTx_VarInit();
+            Mod_DpTxLink_SinkCapRead();
+            Mod_DpTxLink_SinkEdidRead(szEdidData);
+            Mod_DpTx_MsgNotify(DPTX_EDID_VALID_EVENT);
+            Mod_DpTx_SetState(STATE_DPTX_UPSTREAM_VIDEO_READY_5);
+            break;
+
+        case STATE_DPTX_UPSTREAM_VIDEO_READY_5:
+            if(g_stDpTx.b1UpstreamVideoReady == TRUE)
+            {
+                Drv_DpTx_SettingInit();
+                //fec dis
+                Drv_DpTx_DivLinkClkSet();
+                #if DPTX_DSC_ENC_SUPPORT == ENABLED
+                Drv_DpTxDscEnc_Init();
+                #endif
+                #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+                Drv_DpTxDscBy_Init();
+                #endif
+                Drv_Sys_EncPowerDomain(TRUE);
+                Mod_DpTx_SoftMsaSet(FALSE);
+                Mod_DpTx_TotalByteUpdate(FALSE);
+                Mod_DpTx_AudioIssueFixed(DISABLED);
+                Drv_Sys_DhTxSrcSel(DHTX_SRC_SEL_DPTX);
+                g_stDpTx.ucTxLinkStartEn = FALSE;
+                Mod_DpTx_SetState(STATE_DPTX_DSCENC_CONFIG_6);
+            }
+            break;
+
+        case STATE_DPTX_DSCENC_CONFIG_6:
+            #if DPTX_DSC_ENC_SUPPORT == ENABLED
+            if (g_stDpTx.b1EncodeEn == ENABLED)
+            {
+                Drv_Sys_EncPowerDomain(FALSE);
+                Drv_DpTxDscEnc_ParaInit();
+                Drv_DpTxDscEnc_InfoGet();
+                Drv_DpTxDscEnc_ModuleEnable();
+                g_stDpTx.ucMsaValue &= 0x83;//[6:4]rgd_pixel_depth: 001-8bit
+                                            //[3:2]rgd_pixel_format: 000-rgb
+                g_stDpTx.ucMsaValue |= 0x10;
+            }
+            #endif
+            #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+            if (g_stDpTx.b1SrcDscByEn == ENABLED)
+            {
+                Drv_DpTxDscBy_ClkMux();
+                g_stDpTx.ucMsaValue &= 0x83;//[6:4]rgd_pixel_depth: 001-8bit
+                                            //[3:2]rgd_pixel_format: 000-rgb
+                g_stDpTx.ucMsaValue |= 0x10; 
+            }
+            #endif
+            Mod_DpTx_SetState(STATE_DPTX_LINK_TRAINING_7);
+            break;
+
+        case STATE_DPTX_LINK_TRAINING_7:
+            if(g_stDpTx.b1TxStateChanged == TRUE)
+            {
+                g_stDpTx.b1TxStateChanged = FALSE;
+                g_stDpTx.ucTxLinkStep = STATE_LINK_INIT_1;
+                g_stDpTx.ucTxLinkStartEn = TRUE;
+                Drv_DpTx_VidOutEn(FALSE);
+                #if DPTX_HDCP_ENC_MODE != NO_HDCP
+                Drv_HdcpTx_Enable(NO_HDCP);
+                #endif
+                Mod_DpTx_HbeSet(g_stDpTx.b1HbeEnable);
+                Mod_DpTx_DscPktSet();
+                g_stDpTx.ucTxLinkTrainingCnt = 0;
+                #if DPTX_LINKTRAIN_REDUCTION == ENABLED
+                g_stDpTx.ucTxLinkReduceNumber = 0;
+                g_stDpTx.ucTxLinkTpsState = 0;
+                g_stDpTx.ucTxLinkStopDrvAdjust = 0;
+                g_stDpTx.ucTxLinkStopReduction = 0;
+                memset(g_stDpTx.ucTxLinkTrainSinkState,0x00,3);
+                #endif
+            }
+            if(g_stDpTx.ucTxLinkStep >= STATE_LINK_FAIL_9)
+            {
+                #if DPTX_DSC_BYPASS_SUPPORT == ENABLED
+                if (g_stDpTx.b1SrcDscByEn == ENABLED)
+                {
+//                    Drv_DpTx_MvidCal();
+                }
+                #endif
+                Mod_DpTx_SetState(STATE_DPTX_VIDEO_OUT_8);
+            }
+            break;
+
+        case STATE_DPTX_VIDEO_OUT_8:
+            if(g_stDpTx.b1TxStateChanged == TRUE)
+            {
+                Mod_DpTx_ColorInfoSet();
+                g_stDpTx.b1TxStateChanged = FALSE;
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+            }
+            if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_200) == TRUE)
+            {
+                if(STABLE == Drv_DpTx_VdChkStableJudge())
+                {
+                    if(g_stAuxDpTx.ucSinkCnt > 0)//4.2.2.8 dp link cts
+                    {
+                        Mod_DpTx_TotalByteUpdate(TRUE);
+                        Drv_DpTx_VidOutEn(TRUE);
+                    }
+                    Mod_DpTx_SetState(STATE_DPTX_AUDIO_OUT_9);
+                }
+            }
+            break;
+
+        case STATE_DPTX_AUDIO_OUT_9:
+            if(g_stDpTx.b1TxStateChanged == TRUE)
+            {
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                g_stDpTx.b1TxStateChanged = FALSE;
+            }
+            if(Ocm_Timer_IsOverFlow(&ulCurrentTime, MS_500) == TRUE)
+            {
+                Drv_Audio_OutEn(OFF);
+                Mod_DpTx_SetState(STATE_DPTX_HDCP_ENABLE_10);
+            }
+            break;
+
+        case STATE_DPTX_HDCP_ENABLE_10:
+            if(g_stDpTx.b1TxStateChanged == TRUE)
+            {
+                Ocm_Timer_UpdLocalTime(&ulCurrentTime);
+                g_stDpTx.b1TxStateChanged = FALSE;
+            }
+            if(Ocm_Timer_IsOverFlow(&ulCurrentTime, SECOND_2) == TRUE)
+            {       
+                #ifdef NVIDIA_FW_EN
+                #if (SOFT_POWER_DOWN == ENABLED)
+                Mod_Sleep_PowerDownSet(TRUE);
+                #endif
+                #endif
+                #if DPTX_HDCP_STATE_CHECK == ENABLED
+                g_stDpTx.ucHdcpTx1xAuthState = 0x00;
+                #endif
+                #if DPTX_HDCP_ENC_MODE != HW_MODE
+                g_stDpTx.ucHdcpRxVerChg = TRUE;
+                #endif
+                Mod_DpTx_SetState(STATE_DPTX_PLAY_BACK_11);
+            }
+            break;
+
+        case STATE_DPTX_PLAY_BACK_11:
+            break;
+
+        default:
+            break;
+    }
+}
+
+void Mod_DpTx_HpdLowAction(void)
+{
+    Drv_Audio_OutEn(OFF);
+    Drv_DpTx_PhyDis(ENABLED);
+    Drv_DpTx_VidOutEn(FALSE);
+    Mod_DpTx_TotalByteUpdate(FALSE);
+    #if DPTX_HDCP_ENC_MODE != NO_HDCP
+    Drv_HdcpTx_Enable(NO_HDCP);
+    #endif
+    #if DPTX_DSC_ENC_SUPPORT == ENABLED
+    Drv_DpTxDscEnc_DoduleDisable();
+    #endif
+    #if DPTX_ADAPTIVE_SYNC_SUPPORT == ENABLED
+//    Mod_DpTx_AdaptiveSyncSet(DISABLED);
+    #endif
+    #if DPTX_AUTOMATED_CTS_SUPPORT == ENABLED
+    Mod_DpTx_Automated_Test_Init();
+    #endif
+    if(Mod_DpTx_SinkHpdDet() == HIGH)//dp hpd is low
+    {
+        Tx_Buff[0] = 0x02;
+        Mod_DpTxLink_DpcdWrite(0x00,0x0600,Tx_Buff,1);//[2:0]1-normal work, 2-power down state
+    }
+
+ 
+    #ifdef NVIDIA_FW_EN
+    #if (SLEEP_MODE == ENABLED)
+    memset(&g_stSleep, 0, sizeof(StructSleepInfo));
+    g_stSleep.ucSleepState = SLEEP_INIT_0;
+    #endif
+    #endif
+    printLT(PRINT_PRIO_HIG, "\nDpTx Disabled");
+}
+
+void Mod_DpTx_Handler(void)
+{
+    Mod_DpTx_HpdDetProc();
+    Mod_DpTx_StateJudge();
+    Mod_DpTx_StateHandler();
+    Mod_DpTx_LinkTraining();
+    Mod_DpTx_HpdIrqHdl();
+}
+
+#if (DPTX_VID_PATTERN_SEL != NO_PATTERN)
+void Mod_DpTx_Pattern(void)
+{
+    printLT(PRINT_PRIO_HIG, "\nDp Tx Pattern Eanble"); 
+    Drv_System_VidPatternSet();
+    #if DPTX_AUD_PATTERN_SEL != NO_PATTERN
+    Drv_System_AudioPatternSet();
+    #endif
+    //============dp tx stub function set==============
+    memset(&g_stDpTx, 0, sizeof(DpTx_S));
+    g_stDpTx.ucTxState = STATE_DPTX_POWER_ON_1;
+    g_stDpTx.b1UpstreamDeviceReady = TRUE;
+    g_stDpTx.b1UpstreamVideoReady  = TRUE;
+    g_stDpTx.b1SrcDscByEn    = DISABLED;
+    g_stDpTx.b1EncodeEn      = DISABLED;
+    g_stDpTx.ucHdcpRxVerChg  = TRUE;
+    g_stDpTx.ucHdcpRxVersion = NO_HDCP;
+    g_stDpTx.b1AudioInfoChg  = FALSE;//-wangtt- wait confirm
+    #if DPTX_AUD_PATTERN_SEL != NO_PATTERN
+    g_stDpTx.b1AudioInfoChg  = TRUE;//-wangtt- wait confirm
+    g_stDpTx.ucChannel = 0x01;
+    g_stDpTx.szAudioInfo[0] = 0x84;//hb1
+    g_stDpTx.szAudioInfo[1] = 0x1b;//hb2
+    g_stDpTx.szAudioInfo[2] = 0x48;//hb3
+    g_stDpTx.szAudioInfo[3] = 0x01;//pb0
+    g_stDpTx.szAudioInfo[4] = 0x00;//pb1
+    g_stDpTx.szAudioInfo[5] = 0x00;//pb2
+    g_stDpTx.szAudioInfo[6] = 0x00;//pb3
+    g_stDpTx.szAudioInfo[7] = 0x00;//pb4
+    #endif
+    g_stDpTx.b1EncodeEn      = DISABLED;
+    g_stDpTx.b1FecEnable     = DISABLED;  
+    g_stDpTx.ucMsaValue  = 0x10;
+    g_stDpTx.ucMisc0     = 0x20;
+    g_stDpTx.ucMisc1     = 0x40;
+    g_stDpTx.ucVscDb16   = 0x00;
+    g_stDpTx.ucVscDb17   = 0x01;
+    g_stDpTx.ucVscDb18   = 0x03;
+    //============dp tx stub function set==============
+        #if TYPECTX_EN == ENABLED
+    DRV_CCPHY_DigSet();
+    #endif
+
+    BKA2_A9_REG &= BIT1_0;
+    Ocm_Delay1ms(100);
+    BKA2_A9_REG |= BIT1_1;
+    while(1)
+    {
+        #if DPTX_DSC_ENC_SUPPORT == ENABLED
+        if(g_stDpTx.ucTxState == STATE_DPTX_UPSTREAM_VIDEO_READY_5)
+        {
+            if((g_stAuxDpTx.ucDscCap == TRUE)&&(g_stAuxDpTx.ucFecCap == TRUE))
+            {
+                g_stHdmiRx.ucPixelEncoding = RGB_0;//Input Color space
+                g_stHdmiRx.ucBitDepth      = BPC8; //8 bit = 0x04
+                #if DPTX_VID_PATTERN_SEL == PTN480P
+                g_stDpTx.ulTxPixelClk = 25000;
+                #elif DPTX_VID_PATTERN_SEL == PTN720P
+                g_stDpTx.ulTxPixelClk = 74250;
+                #elif DPTX_VID_PATTERN_SEL == PTN1080P
+                g_stDpTx.ulTxPixelClk = 148500;
+                #elif DPTX_VID_PATTERN_SEL == PTN4K30
+                g_stDpTx.ulTxPixelClk = 297000;
+                #elif DPTX_VID_PATTERN_SEL == PTN4K60
+                g_stDpTx.ulTxPixelClk = 594000;
+                #elif DPTX_VID_PATTERN_SEL == PTN4K120
+                g_stDpTx.ulTxPixelClk = 1180000;
+                #elif DPTX_VID_PATTERN_SEL == PTN8K30
+                g_stDpTx.ulTxPixelClk = 1180000;
+                #endif
+                printLT(PRINT_PRIO_HIG, "\nTxPixelClk is %ld", g_stDpTx.ulTxPixelClk);
+                if(g_stDpTx.ulTxPixelClk > Mod_DpTx_LinkBandWidthGet())
+                {
+                    g_stDpTx.b1EncodeEn  = ENABLED;
+                    g_stDpTx.b1FecEnable = ENABLED;  
+                }
+            }
+        }
+        #endif
+        Mod_DpTx_Handler();
+        #if TYPECRX_EN == ENABLED
+        Mod_CC1Rx_Loop();
+        #endif
+        #if DPTX_AUD_PATTERN_SEL != NO_PATTERN
+        BKC6_2E_REG = 0xb0;// BIT7 DP ptn en, sel dp audio ptn
+        
+        BKC6_37_REG |= BIT0_1;  //rgd-aud-ptn-sel
+        BKC9_20_REG |= BIT4_1;  //PTN_SEL CLOCK SEL
+        BKED_10_REG = 0x11;     //DPTX fs64 clock source select
+        BKED_11_REG = 0x10;     //DPTX audio mux clock source select
+        BKF6_06_REG = 0x20;//maud/2
+        #endif
+    }
+}
+#endif 
+#endif

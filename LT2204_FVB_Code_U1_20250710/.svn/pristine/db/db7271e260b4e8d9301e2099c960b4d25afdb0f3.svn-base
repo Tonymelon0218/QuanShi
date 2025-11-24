@@ -1,0 +1,43 @@
+C51 COMPILER V9.53.0.0   MODRXTYPEC                                                        06/21/2023 15:46:20 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODRXTYPEC
+OBJECT MODULE PLACED IN .\Objects\ModRxTypec.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModRxTypec.c LARGE OPTIMIZE(8,SIZE) OPTIMIZE(8,SIZ
+                    -E) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBUG O
+                    -BJECTEXTEND PRINT(.\Listings\ModRxTypec.lst) OBJECT(.\Objects\ModRxTypec.obj)
+
+line level    source
+
+   1          //////////////////////////////////////
+   2          //Project:   LT2101
+   3          //Filename:  I2CMast.c
+   4          //Version:   V1.0
+   5          //Copyright: Lontium
+   6          //////////////////////////////////////
+   7          #include "Include.h"
+   8          
+   9          #if TYPECRX_EN == ENABLED
+  10          void Mod_CCRx_Loop(void)
+  11          {
+  12   1          
+  13   1          
+  14   1      }
+  15          
+  16          #endif
+  17          
+  18          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =      1    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,829 @@
+//===========================================
+//func  :Drvtypec
+//input :N/A
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+#include "include.h"
+
+// this TypecRx It means Typec UCC
+#if ((TYPECRX_EN == ENABLED)||(TYPECTX_EN == ENABLED))
+void DRV_CCRXRate_Set(u8 UCC_DCC)
+{
+    if(UCC_DCC == UCC)
+    {
+        BKFC_22_REG = 0x0E;
+        BKFC_4D_REG = 0x0E;
+        BKFC_40_REG = 0x63;//IDLE DET_EN 13 and Rx rate detect mode important for collision avodiance
+        BKFC_41_REG = 0x76;//IDLE DET_EN 13 and Rx rate detect mode important for collision avodiance
+        BKFC_31_REG = 0x09;//40m Type-C RX first sample position
+    }
+    else if(UCC_DCC == DCC)
+    {
+//        #if SYSCLK == SYS_CLK_40M
+//        BKFC_B1_REG = 0x08;//48m Type-C RX first sample position
+//        BKFC_B2_REG = 0x5A;//Type-C RX second sample position
+//        BKFC_B3_REG = 0x5B;
+//        BKFC_B4_REG = 0x5C;
+//        BKFC_B5_REG = 0x70;
+//        BKFC_A2_REG = 0x59;//RX receiving half-bit positon
+//        BKFC_9F_REG = 0xB3;//
+//        #elif SYSCLK == SYS_CLK_48M
+//        BKFC_B1_REG = 0x08;//48m Type-C RX first sample position
+//        BKFC_B2_REG = 0x70;//Type-C RX second sample position
+//        BKFC_B3_REG = 0x71;//RX
+//        BKFC_B4_REG = 0x72;//RX
+//        BKFC_B5_REG = 0x73;//RX
+//        BKFC_A2_REG = 0x6C;//RX receiving half-bit positon
+//        BKFC_9F_REG = 0xd8;//RX
+//        #endif
+        BKFC_A2_REG = 0x08;
+        BKFC_CD_REG = 0x08;
+        BKFC_C0_REG = 0xF0;//IDLE DET_EN 13 and Rx rate detect mode important for collision avodiance
+        BKFC_C1_REG = 0x74;//IDLE DET_EN 13 and Rx rate detect mode important for collision avodiance
+        BKFC_B1_REG = 0x07;//40m Type-C RX first sample position
+    }
+}
+void DRV_CCTXRate_Set(u8 UCC_DCC)
+{
+    if(UCC_DCC == UCC)
+    {
+        #if SYSCLK == SYS_CLK_40M
+        BKFC_2D_REG = 0x42;//TX transmitting half-bit position 50
+        BKFC_2E_REG = 0x85;//TX transmitting time of one bitA0
+        //BKFC_41_REG = 0x13;//IDLE DET_EN 13
+        BKFC_42_REG = 0x4A;//HALF 270K
+        BKFC_43_REG = 0x28;//HALF 330K--500K
+        BKFC_45_REG = 0x94;//
+        BKFC_46_REG = 0x6B;//    
+        #elif SYSCLK == SYS_CLK_48M
+        BKFC_2D_REG = 0x50;//TX transmitting half-bit position
+        BKFC_2E_REG = 0xA0;//TX transmitting time of one bit
+        //BKFC_41_REG = 0x13;//IDLE DET_EN 13
+        BKFC_42_REG = 0x59;//HALF 270K
+        BKFC_43_REG = 0x30;//HALF 330K--500K
+        BKFC_45_REG = 0xb2;//270K
+        BKFC_46_REG = 0x80;//330K
+//        #else //25M
+//        BKFC_2D_REG = 0x64;
+//        BKFC_2E_REG = 0xc8;
+//        BKFC_41_REG = 0x02;//IDLE DET_EN
+//        BKFC_42_REG = 0x60;//HALF 270K
+//        BKFC_43_REG = 0x20;//HALF 330K
+//        BKFC_45_REG = 0x8e;//270K
+//        BKFC_46_REG = 0x68;//330K
+        #endif
+    }
+    else if(UCC_DCC == DCC)
+    {
+        #if SYSCLK == SYS_CLK_40M
+        BKFC_AD_REG = 0x42;//TX transmitting half-bit position
+        BKFC_AE_REG = 0x85;//TX transmitting time of one bit
+        //BKFC_D1_REG = 0x13;//IDLE DET_EN
+        BKFC_D2_REG = 0x42;//HALF 270K
+        BKFC_D3_REG = 0x28;//HALF 330K
+        BKFC_D5_REG = 0x94;//
+        BKFC_D6_REG = 0x6B;//
+        #elif SYSCLK == SYS_CLK_48M
+        BKFC_AD_REG = 0x50;//TX transmitting half-bit position
+        BKFC_AE_REG = 0xA0;//TX transmitting time of one bit
+        //BKFC_D1_REG = 0x13;//IDLE DET_EN
+        BKFC_D2_REG = 0x59;//HALF 270K
+        BKFC_D3_REG = 0x30;//HALF 330K
+        BKFC_D5_REG = 0xb2;//270K
+        BKFC_D6_REG = 0x80;//330K
+//        #else
+//        BKFC_AD_REG = 0x64;
+//        BKFC_AE_REG = 0xc8;
+//        BKFC_D1_REG = 0x02;//IDLE DET_EN
+//        BKFC_D2_REG = 0x60;//HALF 270K
+//        BKFC_D3_REG = 0x20;//HALF 330K
+//        BKFC_D5_REG = 0x8e;//270K
+//        BKFC_D6_REG = 0x68;//330K
+        #endif
+    }
+}
+
+
+void DRV_CCInt_Init(u8 UCC_DCC)
+{
+    if(UCC_DCC == UCC)
+    {
+        //Clear
+//        BKE5_14_REG &= BIT1_0;  //UCC1 INT MASK
+//        BKE5_34_REG |= BIT1_1;    // clear interrupt 2
+//        BKE5_34_REG &= BIT1_0;
+//        BKFC_0C_REG = 0x60;
+//        BKFC_0D_REG = 0x0A; // close vconnaA
+//        BKFC_13_REG = 0x0B; // goodcrc delay
+//        //type-c int source
+//        BKFC_15_REG = 0xA0; //interrupt en 0xa8
+//        //BKFC_16_REG = 0x0f;
+//        BKFC_16_REG = 0x0e;
+//        BKFC_17_REG = 0x40; //auto goodcrc
+//        BKFC_19_REG = 0x01; //prswap in& order set
+//        
+//        BKFC_1C_REG = 0xF8;//clear error
+        
+        Drv_System_IntSet(IRQ_CC1_INT,ON);
+        Drv_System_IntClr(IRQ_CC1_INT);
+        BKFC_0C_REG = 0x60;
+        BKFC_0D_REG = 0x0A; // close vconnaA
+        BKFC_13_REG = 0x0B; // goodcrc delay
+        //type-c int source
+        BKFC_15_REG = 0xA0; //interrupt en 0xa8
+        //BKFC_16_REG = 0x0f;
+        BKFC_16_REG = 0x0e;
+        BKFC_17_REG = 0x40; //auto goodcrc
+        BKFC_19_REG = 0x01; //prswap in& order set
+        
+        BKFC_1C_REG = 0xF8;//clear error
+    }
+    else if(UCC_DCC == DCC)
+    {
+//        BKE5_14_REG &= BIT0_0;  //UCC1 INT MASK
+//        BKE5_34_REG |= BIT0_1;    // clear interrupt 2
+//        BKE5_34_REG &= BIT0_0;
+//        #if TYPEC_FRSWAP_EN == ENABLED
+//        #if VBUS_DET == ENABLED
+//        BKE5_1C_REG &= BIT4_0;  //ucc2_vbus_off_det
+//        BKE5_3C_REG |= BIT4_1;    //ucc2_vbus_off_det 2
+//        BKE5_3C_REG &= BIT4_0;
+//        #endif
+//        #endif
+//        //Clear
+//        BKFC_8C_REG = 0x60;
+//        BKFC_8D_REG = 0x0A; // close vconnaA
+//        BKFC_93_REG = 0x0E; // goodcrc delay
+//        //type-c int source
+//        BKFC_95_REG = 0xA0; //interrupt en 0xa8
+//        BKFC_96_REG = 0x0F;//XXXXXXX
+//        BKFC_97_REG = 0x40; //auto goodcrc
+//        BKFC_99_REG = 0x01; // order set
+//        
+//        #if TYPEC_FRSWAP_EN  == ENABLED
+//        #if VBUS_DET == ENABLED
+//        BKFC_9B_REG |= BIT0_1;//int clear
+//        BKFC_95_REG |= BIT0_1;//int enable    
+//        #endif
+//        BKFC_A6_REG = 0x20;//300us
+//        BKFC_A7_REG = 0x0a;//300us
+//        #endif
+//        
+//        BKFC_B6_REG = 0xEB;
+//        BKFC_9B_REG = 0xFF;
+//        BKFC_9C_REG = 0xF8;
+
+        Drv_System_IntSet(IRQ_CC2_INT,ON);
+        Drv_System_IntClr(IRQ_CC2_INT);
+//        #if TYPEC_FRSWAP_EN == ENABLED
+//        #if VBUS_DET == ENABLED
+//        BKE5_1C_REG &= BIT4_0;  //ucc2_vbus_off_det
+//        BKE5_3C_REG |= BIT4_1;    //ucc2_vbus_off_det 2
+//        BKE5_3C_REG &= BIT4_0;
+//        #endif
+//        #endif
+        //Clear
+        BKFC_8C_REG = 0x60;
+        BKFC_8D_REG = 0x0A; // close vconnaA
+        BKFC_93_REG = 0x0E; // goodcrc delay
+        //type-c int source
+        BKFC_95_REG = 0xA0; //interrupt en 0xa8
+        BKFC_96_REG = 0x0F;//XXXXXXX
+        BKFC_97_REG = 0x40; //auto goodcrc
+        BKFC_99_REG = 0x01; // order set
+        
+        #if TYPEC_FRSWAP_EN  == ENABLED
+        #if VBUS_DET == ENABLED
+        BKFC_9B_REG |= BIT0_1;//int clear
+        BKFC_95_REG |= BIT0_1;//int enable    
+        #endif
+        BKFC_A6_REG = 0x20;//300us
+        BKFC_A7_REG = 0x0a;//300us
+        #endif
+        
+        BKFC_B6_REG = 0xEB;
+        BKFC_9B_REG = 0xFF;
+        BKFC_9C_REG = 0xF8;
+    }
+}////TBD
+
+void DRV_CCDebounce_Set(u8 UCC_DCC)
+{
+    if(UCC_DCC == UCC)
+    {
+        BKFC_0A_REG = 0x13;//CC DEBAOUNCE WIDTH
+//        BKFC_0B_REG = 0x10;//can not be too large
+//        BKFC_2A_REG = 0x00;
+//        BKFC_2B_REG = 0x80;
+        BKFC_29_REG = 0x10; // cc_det_debounce
+        BKFC_2C_REG = 0x62; //Dcc connect soft en
+        #if SYSCLK == SYS_CLK_40M //90us
+        BKFC_3C_REG = 0x10;//FR_DEBOUNCE_WIDTH[7:0]
+        BKFC_3D_REG = 0x0c;//FR_DEBOUNCE_WIDTH[15:8]//BIT4-7 is very important for FR swap
+        #elif SYSCLK == SYS_CLK_48M //90us
+        BKFC_3C_REG = 0xE0;//FR_DEBOUNCE_WIDTH[7:0]//BIT4-7 is very important for FR swap
+        BKFC_3D_REG = 0x0c;//FR_DEBOUNCE_WIDTH[15:8]
+        #endif
+        #if TYPEC_FRSWAP_EN  == ENABLED
+        BKFC_3D_REG &= BIT6_0;//FR swap gen en //FOR CTS:TEST PD PHY 08
+        #endif
+        BKFC_3E_REG = 0x00;// rd  0x00: 0x01;// rp must follow the 0xd306
+    }
+    else if(UCC_DCC == DCC)
+    {
+        
+        BKFC_8A_REG = 0x13;//CC DEBAOUNCE WIDTH    
+        #if TYPEC_FRSWAP_EN == ENABLED
+        BKFC_A8_REG = 0x30;
+        BKFC_A9_REG = 0x00;
+        #else
+        BKFC_A9_REG = 0x10; // cc_det_debounce
+        #endif
+        BKFC_AC_REG = 0x62; //Dcc connect soft en
+        BKFC_BD_REG = 0x0e;//FR_DEBOUNCE_WIDTH
+        BKFC_BE_REG = 0x00;//rd must follow the 0xd30e
+        
+    }
+}
+void DRV_CCRxPHY_Set(u8 UCC_DCC)
+{
+    if(UCC_DCC == UCC)
+    {
+//        BKD3_00_REG = 0x47;//bit1: UCC1 isolate switch enable bit 0:UCC1 deadbattery Rd 
+//        BKD3_02_REG = 0x58;//bit0: UCC1 TX and RX enable da control
+//        BKD3_03_REG = 0x3f;//ufp
+//        BKD3_05_REG = 0x56;//UCC1 RD CAL ISO EN, UCC1 DETET EN
+//        BKD3_06_REG = 0x20;//0x20 rd 0x60 Rp bit6: ucc1 mode sel
+//        BKD3_07_REG = 0x00;//frl det
+//        
+//        BKD3_04_REG = 0x09;//
+         
+        BKA2_AB_REG = 0x09;//BIT3-2: UCC1 system clock select: BIT1-0:UCC1 TX LDO 1100mV
+        BKA2_AC_REG = 0x08;//BIT0:digital CONTROL UCC1 TX and RX enable
+        BKA2_AD_REG = 0x7c;//BIT6-2:UCC1 TX phy slew rate control
+        BKA2_AE_REG = 0x09;//BIT6??? rx0:400mV RX1:550mV RX2:700mV
+        
+        BKA2_B1_REG = 0xBA;//VBUS DET:400mV,VBUS DET EN,
+        BKA2_B2_REG = 0x20;//BIT5:1=2101, 0 = 2204
+        
+        BKA2_B0_REG = 0x40;//525mv
+        //SWITCH要放在最后，不然会有CC浮空的时间
+        BKA2_A9_REG = 0x87;//bit1: UCC1 isolate switch enable bit 0:UCC1 deadbattery Rd
+    }
+    else if(UCC_DCC == DCC)
+    { 
+//        BKD3_08_REG = 0x47;//UCC2 
+//        BKD3_0A_REG = 0x58;
+//        BKD3_0B_REG = 0x3f;//ufp
+//        BKD3_0C_REG = 0x00;//dvbus off det ref 5v
+//        BKD3_0D_REG = 0x16;//200mV
+//        BKD3_0E_REG = 0x20;//ucc2 rd
+        
+        
+        BKA2_B5_REG = 0x05;//BIT3-2: UCC1 system clock select: BIT1-0:UCC1 TX LDO 1100mV
+        BKA2_B6_REG = 0x08;//BIT0:digital CONTROL UCC1 TX and RX enable
+        BKA2_B7_REG = 0x7c;//BIT6-2:UCC1 TX phy slew rate control
+        BKA2_B8_REG = 0x2B;//BIT6??? rx0:400mV RX1:550mV RX2:700mV
+        
+        BKA2_BB_REG = 0xBA;//VBUS DET:400mV,VBUS DET EN,
+        BKA2_BC_REG = 0x00;//BIT5:1=2101, 0 = 2204
+        
+        BKA2_BA_REG = 0x08;//400mv--4.4V
+        //SWITCH要放在最后，不然会有CC浮空的时间
+        BKA2_B3_REG = 0x27;//bit1: UCC1 isolate switch enable bit 0:UCC1 deadbattery Rd 
+    }
+}
+void DRV_CC_LogicRst(u8 UCC_DCC) 
+{
+    if(UCC_DCC == UCC)
+    {
+        BKE1_0A_REG &= BIT2_0;//UCC logic soft reset
+        BKE1_0A_REG |= BIT2_1;//UCC logic soft reset
+    }
+    else if(UCC_DCC == DCC)
+    {
+        BKE1_0A_REG &= BIT3_0;//DCC logic soft reset
+        BKE1_0A_REG |= BIT3_1;//DCC logic soft reset
+    }
+}
+
+
+void DRV_CcOrder_Set(u8 UCC_DCC,u8 OrderType)
+{
+    if(UCC_DCC == UCC)
+    {
+        BKFC_19_REG = OrderType;
+        BKFC_19_REG = 0x01;        
+    }
+    else
+    {
+        BKFC_99_REG = OrderType;
+        BKFC_99_REG = 0x01; 
+    }
+}
+//void DRV_PowRoleRpCur_Set(IN u8 CC_Port,IN u8 ucPow_Role,IN u8 Rp_Cur)
+//{
+//    u8 ucRpCur_Tmp = 0x00;
+//    if(CC_Port == UCC)
+//    {
+//        if(ucPow_Role == SINK)
+//        {
+//            BKFC_3E_REG = 0x00;//
+////            BKD3_06_REG &= BIT6_0;
+//            BKA2_B1_REG &= BIT2_0;
+//        }
+//        else if(ucPow_Role == SOURCE)
+//        {          
+//            //BKD3_06_REG |= BIT6_1;
+////            ucRpCur_Tmp = BKD3_06_REG;
+////            ucRpCur_Tmp &= (BIT4_0&BIT5_0);
+////            ucRpCur_Tmp |= (Rp_Cur<<4);
+////            ucRpCur_Tmp |= BIT6_1;
+////            BKD3_06_REG = ucRpCur_Tmp; 
+//            ucRpCur_Tmp = BKA2_B1_REG;
+//            ucRpCur_Tmp &= (BIT0_0&BIT1_0);
+//            ucRpCur_Tmp |= Rp_Cur;
+//            ucRpCur_Tmp |= BIT2_1;
+//            BKA2_B1_REG = ucRpCur_Tmp; 
+//            BKFC_3E_REG = 0x01;//
+//            
+//        }        
+//    }
+//    else if(CC_Port == DCC)
+//    {
+//        if(ucPow_Role == SINK)
+//        {
+//            BKFC_BE_REG = 0x00;//
+////            BKD3_0E_REG &= BIT6_0;
+//            BKA2_BB_REG &= BIT2_0;
+//        }
+//        else if(ucPow_Role == SOURCE)
+//        {        
+//            //BKD3_0E_REG |= BIT6_1;
+////            ucRpCur_Tmp = BKD3_0E_REG;
+////            ucRpCur_Tmp &= (BIT4_0|BIT5_0);
+////            ucRpCur_Tmp |= (Rp_Cur<<4);
+////            ucRpCur_Tmp |= BIT6_1;
+////            BKD3_0E_REG = ucRpCur_Tmp; 
+//            ucRpCur_Tmp = BKA2_BB_REG;
+//            ucRpCur_Tmp &= (BIT1_0&BIT1_0);
+//            ucRpCur_Tmp |= Rp_Cur;
+//            ucRpCur_Tmp |= BIT2_1;
+//            BKA2_BB_REG = ucRpCur_Tmp; 
+//            BKFC_BE_REG = 0x01;//
+//        }        
+//    }
+//}
+
+void DRV_RpCur_Sel(IN u8 CC_Port,IN u8 Rp_Cur)
+{
+    u8 ucRpCur_Tmp = 0x00;
+    if(CC_Port == UCC)
+    {
+        ucRpCur_Tmp = BKA2_B1_REG;
+        ucRpCur_Tmp &= (BIT0_0&BIT1_0);
+        ucRpCur_Tmp |= Rp_Cur;
+        BKA2_B1_REG = ucRpCur_Tmp; 
+    }
+    else if(CC_Port == DCC)
+    {
+        ucRpCur_Tmp = BKA2_BB_REG;
+        ucRpCur_Tmp &= (BIT0_0&BIT1_0);
+        ucRpCur_Tmp |= Rp_Cur;
+        BKA2_BB_REG = ucRpCur_Tmp; 
+    }
+}
+
+void DRV_PowerRole_Set(IN u8 CC_Port,IN u8 ucPow_Role)
+{
+    if(CC_Port == UCC)
+    {
+        if(ucPow_Role == SINK)
+        {
+            BKA2_B1_REG &= BIT2_0;
+            BKFC_3E_REG &= BIT0_0;
+        }
+        else if(ucPow_Role == SOURCE)
+        {
+            BKA2_B1_REG |= BIT2_1;
+            BKFC_3E_REG |= BIT0_1;
+        }
+    }
+    else if(CC_Port == DCC)
+    {
+        if(ucPow_Role == SINK)
+        {
+            BKA2_BB_REG &= BIT2_0;
+            BKFC_BE_REG &= BIT0_0;
+        }
+        else if(ucPow_Role == SOURCE)
+        {
+            BKA2_BB_REG |= BIT2_1;
+            BKFC_BE_REG |= BIT0_1;
+        }
+    }
+}
+
+void Drv_CC1USB3Mux_Ctrl(StructCcStatus *pstCcState)
+{
+    if(pstCcState->b1IsFlip == FALSE)
+    {
+        if(pstCcState->uclaneCount <= TWO_LANE)//USB3.1 SW
+        {
+            BKA1_01_REG = 0x30;
+        }
+        else
+        {
+            BKA1_01_REG = 0x20;
+        }
+    }
+    else
+    {
+        if(pstCcState->uclaneCount <= TWO_LANE)//USB3.1 SW
+        {
+            BKA1_01_REG = 0x70;
+        }
+        else
+        {
+            BKA1_01_REG = 0x20;
+        }
+    }
+}
+//================================
+//
+//the function is find out UCC orientation
+//ucRx_MaxLane:maximum lane,if less than 4lanes,USB switch will be enabled
+//b1Input_type:female or male
+//================================
+//void Drv_CC1Flip_Judge(u8 ucRx_MaxLane,u8 b1Input_type)//flip det
+void Drv_CC1Flip_Judge(StructCcStatus *pstCcState)//flip det
+{
+	static u8 ucCCOrienDet_Cnt;
+	pstCcState->b1IsFlip = FALSE;
+	if(pstCcState->b1UCcInput_type == FEMALE)
+	{
+		for(ucCCOrienDet_Cnt=0;ucCCOrienDet_Cnt<10;ucCCOrienDet_Cnt++)
+		{
+			if(((!(BKA2_B1_REG&BIT2_1))&&(BKFC_30_REG&0xc0))||(BKFC_30_REG&BIT6_1)) //normal
+			{					
+				//TBD
+//                UCCPORTUSBMUX_CTRL(LOW);
+				pstCcState->b1IsFlip = FALSE;//CC1
+                BKFC_2F_REG &= BIT1_0; //flip 1 soft
+				break;
+			}
+			else if(((!(BKA2_B1_REG&BIT2_1))&&(BKFC_30_REG&0x30))||(BKFC_30_REG&BIT4_1)) //invese
+			{		
+                pstCcState->b1IsFlip = TRUE;  
+                BKFC_2F_REG |= BIT1_1;//flip 1 soft                          
+				break;
+			}
+			else
+			{
+				Ocm_Delay1us(10);
+			}
+		}        
+	}
+    else
+    {
+        pstCcState->b1IsFlip = FALSE;
+    }
+    #if CHIP_SEL == LT6711GXE
+    Drv_DpTx_TypeCOutSet();
+    #endif
+	Drv_CC1USB3Mux_Ctrl(pstCcState);
+}
+void Drv_CC1Flip_Scan(StructCcStatus *pCcState)
+{
+    //ucc1 SINK MODE,DO NOT DURING RP/RD EXCHANGE PERIOD
+    if(((BKA2_B1_REG&BIT2_1) == 0x00)&&(pCcState->ucPRSwaping != 2)) //
+    {
+        if(BKFC_30_REG&0xc0) //??
+        {            
+            BKFC_2F_REG &= BIT1_0;//flip 1 soft
+            pCcState->b1IsFlip = FALSE;
+        }
+        else if(BKFC_30_REG&0x30)//             
+        {
+            BKFC_2F_REG |= BIT1_1;//flip 1 soft
+            pCcState->b1IsFlip = TRUE;
+        }
+    }
+    if(pCcState->ucFRSwaping != FRSWAP_NULL)
+    {
+        return;
+    }
+    if(BKFC_30_REG&0xf0)//ucc is on
+    {
+		////TBD
+        if(BKA3_87_REG&BIT2_1)//SOURCE_GPIO_CTRL is HIGH
+        {
+            ;
+        }
+        else
+        {
+            if(Drv_CC2On_Det(SINK) == TRUE)//dcc is on
+            {
+                ;
+            }
+            else
+            {
+                SOURCE_GPIO_CTRL(IN HIGH); //1,ufP
+            }
+        }                
+    }
+}
+void DRV_FrTrig_Send(void)
+{
+    BKFC_3D_REG |= BIT6_1;//FR swap gen en //FOR CTS:TEST PD PHY 08
+    BKFC_44_REG = 0x01;
+    BKFC_44_REG = 0x00;
+//    BKFC_44_REG |= BIT0_1;//fr swap triggle
+//    BKFC_44_REG &= BIT0_0;
+}
+
+#if TYPEC_FRSWAP_EN  == ENABLED
+
+void Drv_CC2VoltageLvl_Det(void)
+{
+	u8 ucVbus_off_volt = 0;
+	u16 usVbus_Used_Volt;
+	BKA2_BA_REG = 0x00;
+    //如果电压扫描不到的话，会导致while无法退出
+	while((ucVbus_off_volt <= 253)&&(!(BKE5_A1_REG&BIT0_1)))
+	{
+		ucVbus_off_volt += 2;
+//		BKA2_BC_REG = ucVbus_off_volt;
+		BKA2_BA_REG = ucVbus_off_volt;
+		Ocm_Delay1us(5);
+	}
+//	printLT(PRINT_PRIO_HIG,"\nVbus_Lvl_Ori = %02bx",BKA2_BA_REG);
+//    usVbus_Used_Volt = ucVbus_off_volt;
+//    usVbus_Used_Volt = (usVbus_Used_Volt*85)+300;
+//    usVbus_Used_Volt = ((usVbus_Used_Volt-300)/100);
+//    BKE2_26_REG = usVbus_Used_Volt;
+	if(ucVbus_off_volt > 2)
+	{
+		usVbus_Used_Volt = ucVbus_off_volt;
+		if(ucVbus_off_volt <= 0x8C)
+		{
+			usVbus_Used_Volt = (usVbus_Used_Volt*87)-12*13;//87% cut off
+		}
+		else if(ucVbus_off_volt <= 0xb0)
+		{
+			usVbus_Used_Volt = (usVbus_Used_Volt*92)-12*13;//87% cut off
+		}
+		else
+		{
+			usVbus_Used_Volt = (usVbus_Used_Volt*93)-12*13;//87% cut off
+		}
+        usVbus_Used_Volt = (usVbus_Used_Volt/100);
+		BKA2_BA_REG = usVbus_Used_Volt;
+		BKA2_BA_REG &= BIT0_0;
+	}
+    else
+    {
+        ucVbus_off_volt = 0;
+    }
+	Drv_Cc2VbusDet_IntClr(FALSE);
+}
+#endif
+void Drv_Cc2VbusDet_IntClr(u8 b1IsClr)
+{
+    (b1IsClr == TRUE)?(BKFC_9B_REG |= BIT0_1):(BKFC_9B_REG &= BIT0_0);
+}
+void Drv_Cc2VbusDet_IntSet(u8 b1IsSet)
+{
+    (b1IsSet == ENABLED)?(BKFC_95_REG |= BIT0_1):(BKFC_95_REG &= BIT0_0);
+}
+u8 Drv_Cc2VbusOff_Det(void)
+{
+    return (BKE5_A0_REG & BIT4_1);
+}
+u8 Drv_CC1RpOn_Scan(void)
+{
+    u8 CC_Connect_State = 0;
+    u8 CC_Connect_Loop;
+    for(CC_Connect_Loop=0;CC_Connect_Loop<150;CC_Connect_Loop++)
+    {    
+//        if(BKD3_06_REG&BIT6_1) 
+        if(BKA2_B1_REG&BIT2_1)//SOURCE MODE
+        {
+            if(BKFC_30_REG&0x50)
+            {
+                CC_Connect_State = 1;
+                break;
+            }
+            else
+            {
+                Ocm_Delay1us(10);
+                CC_Connect_State = 0;            
+            }
+        }
+        else
+        {
+            CC_Connect_State = 0;    
+            break;    
+        }
+    }
+    return CC_Connect_State;
+}
+u8 Drv_CC1RdOn_Scan(void)
+{
+    u8 CC_Connect_State = 0;
+    u8 CC_Connect_Loop;
+    for(CC_Connect_Loop=0;CC_Connect_Loop<150;CC_Connect_Loop++)
+    {
+//        if(!(BKD3_06_REG&BIT6_1))
+        if(!(BKA2_B1_REG&BIT2_1))//SINK MODE
+        {
+            if(BKFC_30_REG&0xF0)
+            {
+                CC_Connect_State = 1;
+                break;
+            }
+            else
+            {
+                Ocm_Delay1us(10);
+                CC_Connect_State = 0;
+            }
+        }
+        else
+        {
+            CC_Connect_State = 0;    
+            break;
+        }
+    }
+    return CC_Connect_State;
+}
+
+void DRV_CCRterm_Cali(u8 UCC_DCC)
+{
+    u8 CC_Cali_Cnt = 0;
+    if(UCC_DCC == UCC)
+    {
+        BKE1_0A_REG &= BIT1_0;//UCC Cali logic reset
+        BKE1_0A_REG |= BIT1_1;//UCC Cali logic reset
+        DRV_CC_LogicRst(UCC);
+        BKA2_B1_REG = 0x82;//BIT5=VBUS_VTHYS
+        BKA2_B2_REG = 0x3c;//BIT5=VBUS_VTHYS
+        BKA2_A9_REG = 0x84;//RG_UCC1_CC_EN
+        for(CC_Cali_Cnt=0;CC_Cali_Cnt<10;CC_Cali_Cnt++)
+        {
+            BKE2_12_REG &= BIT0_0;
+            Ocm_Delay1ms(1);
+            BKE2_12_REG |= BIT0_1;//UCC1 RTERM CAL
+            Ocm_Delay1ms(10);
+            if((BKE2_20_REG&BIT1_1) == 0x00)//cali done
+            {
+                ;
+            }
+            else if(BKE2_20_REG&BIT0_1)//cali fail
+            {
+                ;
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+    else if(UCC_DCC == DCC)
+    {
+        BKE1_0A_REG &= BIT0_0;//UCC Cali logic reset
+        BKE1_0A_REG |= BIT0_1;//UCC Cali logic reset
+        DRV_CC_LogicRst(DCC);
+        BKA2_BB_REG = 0x82;//BIT5=VBUS_VTHYS
+        BKA2_BC_REG = 0x07;//BIT5=VBUS_VTHYS
+        BKA2_B3_REG = 0x24;//RG_UCC1_CC_EN
+        for(CC_Cali_Cnt=0;CC_Cali_Cnt<10;CC_Cali_Cnt++)
+        {
+            BKE2_19_REG &= BIT0_0;
+            Ocm_Delay1ms(1);
+            BKE2_19_REG |= BIT0_1;//UCC1 RTERM CAL
+            Ocm_Delay1ms(10);
+            if((BKE2_22_REG&BIT1_1) == 0x00)//cali done
+            {
+                ;
+            }
+            else if(BKE2_22_REG&BIT0_1)//cali fail
+            {
+                ;
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+}
+
+//u8 CHIP_Dcc_OnDet(u8 ucPow_Role)
+//{
+//    if(ucPow_Role&SINK)
+//    {
+////        if(((BKD3_0E_REG&BIT6_1)==0x00)&&(BKFC_AF_REG&BIT5_1))//DCC RD Mode
+//        if(((BKA2_B1_REG&BIT2_1)==0x00)&&(BKFC_AF_REG&BIT5_1))//DCC RD Mode
+//        {
+//            return TRUE;
+//        }
+//    }
+//    if(ucPow_Role & SOURCE)
+//    {
+////        if((BKD3_0E_REG &BIT6_1)&&(BKFC_B0_REG&0x50))//DCC RP Mode
+//        if((BKA2_B1_REG&BIT2_1)&&(BKFC_B0_REG&0x50))//DCC RP Mode
+//        {
+//            return TRUE;
+//        }
+//    }
+//    return FALSE;
+//}
+u8 Drv_CC2On_Det(IN u8 ucPow_Role)
+{
+    u8 ucDCC_Connect_Loop;
+    if(ucPow_Role&SINK)
+    {
+        if((BKA2_BB_REG & BIT2_1)==0x00)//DCC RD Mode
+        {
+            #if DCC_DET_WITHCC == 1
+//            if(((BKFC_B0_REG&0xf0)==0x00)&&(((BKE5_D4_REG&BIT4_1)==0x00)/*&&(Chip_UccChargeGpio_Enabled() == FALSE)*/))
+            if(((BKFC_B0_REG&0xf0)==0x00)&&(((BKE5_A2_REG&BIT7_1)==0x00)/*&&(Chip_UccChargeGpio_Enabled() == FALSE)*/))
+            #else
+//            if((BKE5_D4_REG&BIT4_1)==0x00)//DCC RD Mode
+            if((BKE5_A2_REG&BIT7_1)==0x00)//DCC RD Mode
+            #endif
+            {
+                for(ucDCC_Connect_Loop =0;ucDCC_Connect_Loop<100;ucDCC_Connect_Loop++)
+                {
+                    Ocm_Delay1us(4);
+                    #if DCC_DET_WITHCC == 1
+//                    if(((BKFC_B0_REG&0xf0)==0x00)&&(((BKE5_D4_REG&BIT4_1)==0x00)/*&&(Chip_UccChargeGpio_Enabled() == FALSE)*/))
+                    if(((BKFC_B0_REG&0xf0)==0x00)&&(((BKE5_A2_REG&BIT7_1)==0x00)/*&&(Chip_UccChargeGpio_Enabled() == FALSE)*/))
+                    #else
+//                    if((BKE5_D4_REG&BIT4_1)==0x00)//DCC RD Mode
+                    if((BKE5_A2_REG&BIT7_1)==0x00)//DCC RD Mode
+                    #endif
+                    {
+                        ;
+                    }
+                    else
+                    {
+                        return TRUE;
+                    }
+                }
+            }
+            else
+            {
+                return TRUE;
+            }
+        }         
+    }
+    #if DCC_TOGGLE_SUPPORT == ENABLED
+    else if(ucPow_Role & SOURCE)
+    {
+//        if(BKE2_27_REG &BIT2_1)
+        if(BKA2_BB_REG &BIT2_1)
+        {
+            if((BKFC_B0_REG&0x50)==0x00)//DCC RP Mode
+            {
+                for(ucDCC_Connect_Loop =0;ucDCC_Connect_Loop<100;ucDCC_Connect_Loop++)
+                {
+                    if((BKFC_B0_REG&0x50)==0x00)//DCC RP Mode
+                    {
+                        ;
+                    }
+                    else
+                    {
+                        return TRUE;
+                    }
+                }
+            }
+            else               
+            {
+                return TRUE;
+            }
+        }              
+    }
+    #endif
+    return FALSE;
+}
+
+void DRV_CCPHY_DigSet(void)
+{
+    DRV_CCRterm_Cali(UCC);
+    DRV_CCRXRate_Set(UCC);
+    DRV_CCRXRate_Set(DCC);
+    DRV_CCTXRate_Set(UCC);
+    DRV_CCTXRate_Set(DCC);
+    DRV_CCInt_Init(UCC);
+    DRV_CCInt_Init(DCC); 
+    DRV_CCDebounce_Set(UCC);
+    DRV_CCDebounce_Set(DCC);
+//    DRV_Interrupt_Set(IRQ_RXUCC_INT,ON);
+//    DRV_Interrupt_Set(IRQ_RXDCC_INT,ON);
+    DRV_CCRxPHY_Set(UCC);
+    DRV_CCRxPHY_Set(DCC); 
+}
+#endif

@@ -1,0 +1,307 @@
+C51 COMPILER V9.53.0.0   MODCC2MSGTYPEC                                                    02/13/2025 10:14:00 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MODCC2MSGTYPEC
+OBJECT MODULE PLACED IN .\Objects\ModCC2MsgTypec.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\C51\BIN\C51.EXE ..\User\L1_Module\ModCC2MsgTypec.c LARGE OBJECTADVANCED OPTIMIZE(11,
+                    -SIZE) REGFILE(.\Objects\LT2204.ORC) BROWSE INCDIR(..\User\L0_App;..\User\L1_Module;..\User\L2_Drive;..\User\L3_Ocm) DEBU
+                    -G PRINT(.\Listings\ModCC2MsgTypec.lst) OBJECT(.\Objects\ModCC2MsgTypec.obj)
+
+line level    source
+
+   1          #include "Include.h"
+   2          
+   3          #if ((CHIP_SEL == LT8711GXE)||(CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP)||(CHIP_SEL == LT6711G
+             -XE))
+   4          
+   5          #if TYPECTX_EN == ENABLED
+              #if TYPEC_FRSWAP_EN  == ENABLED
+              void Mod_CC2MsgSend_Retry(void)
+              {
+                  if(DCCMSG.b1RcvGoodCRC == FALSE)
+                  {
+                      DCCStatus.b1Msg_ID_Change = FALSE;
+                      if(DCCStatus.ucRetryCounter <  DCCStatus.ucnRetryCount)
+                      {       
+                          DCCMSG.pDataOrder = DCCMSG.pBuffer_Order;
+                          Mod_CC2Msg_Send();
+                          Ocm_TR2_ValueSet();            //TR2 = 1;           
+                      }
+                      else
+                      {
+                                      DRV_RpCur_Sel(DCC,Rp_SinkTxNG);
+                          DRV_PowerRole_Set(DCC,SOURCE);
+                          Ocm_Delay1ms(50);
+                          DRV_PowerRole_Set(DCC,SINK);
+                          DCCStatus.b1Msg_ID_Change = TRUE;
+                          DCCMSG.b1RcvGoodCRC = TRUE;
+                          DCCStatus.ucRetryCounter = 0; 
+                      }
+                  }
+              }
+              
+              void Mod_CC1PsRdy_Send(void)
+              {
+                  if(UCCStatus.ucPRSwaped == 5)
+                  {
+                      UCCStatus.b1PrDone = FALSE;
+                      UCCStatus.ucPRSwaping = 2;
+                      UCCStatus.ucPRSwaped = 6;
+                      UCCStatus.b1PowerRole = FALSE; 
+                      DRV_PowerRole_Set(UCC,SINK);
+                      Ocm_Delay1ms(2);      
+                  }
+                  #if TYPEC_FRSWAP_EN == ENABLED
+                  DCCStatus.b1FrTriggle = FALSE;
+                  Drv_CC2VoltageLvl_Det();
+                  DCCStatus.b1FrTriggle = TRUE;
+                  #endif
+                  UCCStatus.b1PsRdy_Send = FALSE;
+                  #if TYPEC_FRSWAP_EN  == ENABLED
+                      #if VBUS_DET == ENABLED
+                  Drv_Cc2VbusDet_IntClr(TRUE);
+                  Drv_Cc2VbusDet_IntSet(ENABLED);
+                      #endif  
+C51 COMPILER V9.53.0.0   MODCC2MSGTYPEC                                                    02/13/2025 10:14:00 PAGE 2   
+
+                  #endif
+                  if(UCCStatus.b1PrSwapDone == TRUE)
+                  {
+                      UCCStatus.b1PrSwapDone = FALSE;
+                      UCCStatus.ucPRSwaping = 1;//PRSwap Done and go to cc off detect for CVTE Chrombook issue
+                  }
+                  //to solve lenovo PD30 issue
+                  if(UCCStatus.ucFRSwaping == FRSWAP_ONGOING)
+                  {
+                      DRV_PowerRole_Set(UCC,SINK);
+                  }
+                  if(UCCAmsType.ucPrSwap_Ams == AMS_GOEXP)
+                  {
+                      UCCAmsType.ucPrSwap_Ams = AMS_DONE;
+                  }
+                  UCCMSG.pDataOrder = szCC_CtrlMsg[1];    //send PS_RDY //UFP_SINK 7
+                  UCCMSG.ucLastMsgType = Mod_CC1MsgType_Calc(Ctrl_Msg,PS_RDY,StrVdm);
+                  Mod_CC1Msg_Send();    
+                  UCCStatus.ucFlow_Step = 1;
+              }
+              
+              void Mod_CC2PowerLost_VarIni(void)
+              {
+                  ADAPTER_GPIO_CTRL(LOW);
+                  #if DCC_TOGGLE_SUPPORT == ENABLED
+                  DCCStatus.b1DccUfpMode = FALSE;
+                  DCCStatus.b1DccDfpMode = FALSE;
+                  #endif
+                  DCCStatus.b1FrTriggle = FALSE;
+                  DCCStatus.b1AdapterWithPD = FALSE;
+                  UCCStatus.b1PrDone = FALSE;
+                  UCCStatus.b1DataRole = FALSE;
+                  UCCStatus.ucPRSended = 0;
+                  UCCStatus.ucPRSwaping = 0;
+                  UCCStatus.ucPRSwaped = 0;        
+                  UCCStatus.ucFlow_Step = 0;
+                  UCCAmsType.ucPrSwap_Ams = AMS_NONE;
+              //        DCCStatus.ucDccState_Tmp = 0;
+                  #if NINTENDO_SWITCH == ENABLED
+                  CC1NINTENDOState.b2Switch_Ada_Online = NOT_SWITCH;
+                  #endif
+                  BKFC_3D_REG &= BIT6_0;//FR swap gen en //FOR CTS:TEST PD PHY 08
+              }
+              //void Mod_CC2VbusOff_DoTrig(void)
+              //{
+              //    if((DCCStatus.b1FrTriggle == TRUE)&&(UCCStatus.b1PrDone == TRUE))
+              //    {    
+              //        DRV_FrTrig_Send();
+              //              UCCStatus.ucFRSwaping = FRSWAP_INITIATE;
+              //              SOURCE_GPIO_CTRL(LOW);
+              //        Mod_CC2PowerLost_VarIni();
+              //    }
+              //}
+              void Mod_CC2CCOff_Det(void)  //DCC 断开时，UCC做快速触发
+              {
+                  if((DCCStatus.b1FrTriggle == TRUE)&&(UCCStatus.b1PrDone == TRUE)) //
+                  {
+                      DRV_FrTrig_Send();   //
+                      UCCStatus.ucFRSwaping = FRSWAP_INITIATE;  //
+              //        SOURCE_GPIO_CTRL(LOW); //
+                  }
+                  else
+C51 COMPILER V9.53.0.0   MODCC2MSGTYPEC                                                    02/13/2025 10:14:00 PAGE 3   
+
+                  {
+                      DCCStatus.b2Charger_Scan = PDSCANSTART;
+              //        SOURCE_GPIO_CTRL(TRUE); //
+                  }
+                  Mod_CC2PowerLost_VarIni();
+              }
+              
+              #endif
+              void Mod_CC2Pd_Interrupt(void)
+              {
+                  static u8 ucDccMsgLength;
+                  static u8 ucDccExtMsg;
+                  static u8 ucDccMsgType;
+                  static u8 ucDccTypecInt;
+                  static u8 ucDccKeyCode;
+                  static u8 ucDccRXCount;
+              
+                  #if TYPEC_FRSWAP_EN  == ENABLED
+                      #if VBUS_DET == ENABLED
+                  u8 Typec_Vbus_Off;
+                  Typec_Vbus_Off = BKFC_9B_REG & BIT0_1;
+                      #endif
+                  #endif
+                  ucDccTypecInt = BKFC_B6_REG;
+                  BKFC_B6_REG = 0xeb;
+                  BKFC_9B_REG = 0xff;
+                  if(ucDccTypecInt & BIT7_1)//rcv_keycode_rdy
+                  {
+                      #if TYPEC_FRSWAP_EN  == ENABLED
+                      if((BKFC_B0_REG&0xf0)==0x00)
+                      {
+                          Mod_CC2CCOff_Det();
+                      }
+                      #endif
+                  }
+                  if(ucDccTypecInt & BIT6_1)//rcv_keycode_rdy
+                  {
+                      ucDccRXCount = 0;
+                      ucDccKeyCode =(BKFC_9C_REG & 0x07);
+                      BKFC_9C_REG = 0xf8;
+                      if(ucDccKeyCode == SOP)//check sop
+                      {
+                          BKFC_97_REG &= BIT4_0;//en auto goodcrc
+                      }
+                      else
+                      {
+                          BKFC_97_REG |= BIT4_1;//disable auto goodcrc
+                      }
+                  }
+              
+                  if(ucDccTypecInt & BIT0_1)//rcv_header
+                  {
+                      DCCMSG.szHeader[1] = BKFC_BB_REG;
+                      DCCMSG.szHeader[0] = BKFC_BA_REG;
+                      ucDccMsgType   = (DCCMSG.szHeader[0] & 0x1f);
+                      ucDccMsgLength = ((DCCMSG.szHeader[1] & 0x70) >> 2);
+                      ucDccExtMsg = (DCCMSG.szHeader[1] & BIT7_1)?(1):(0);
+                      if((BKFC_B6_REG & BIT5_1) == 0x00)
+                      {
+                          ucDccTypecInt &= BIT5_0;
+                      }
+                  }
+C51 COMPILER V9.53.0.0   MODCC2MSGTYPEC                                                    02/13/2025 10:14:00 PAGE 4   
+
+              
+                  if((ucDccTypecInt & BIT5_1) == 0x00)//rx_fifo_empty
+                  {
+                      do
+                      {
+                          DCCMSG.szRcvDate[ucDccRXCount] = BKFC_A3_REG;
+                          ucDccRXCount++;
+                          ucDccTypecInt |= BKFC_B6_REG;
+                      } while((ucDccTypecInt & BIT5_1) == 0x00);
+                      ucDccTypecInt |= BKFC_B6_REG;
+                  }
+              
+                  if(ucDccTypecInt & BIT4_1) //eop level
+                  {
+                      BKFC_B6_REG |= BIT4_1;
+                      if(UCCStatus.b1PsRdy_Send)
+                      {
+                          ;
+                      }
+                      else
+                      {
+                          TR2 = 0;
+                      }
+                      ucDccTypecInt = BKFC_B6_REG;
+                      ucDccRXCount = 0;
+                      DCCStatus.ucRetryCounter = 0;
+              
+                      DCCMSG.b1RcvGoodCRC = TRUE;
+              
+                      if(ucDccKeyCode == SOP)//check sop
+                      {
+                          if((!ucDccMsgLength)&&(ucDccMsgType == GoodCRC))
+                          {
+                              ;
+                          }
+                          else
+                          {
+                              DCCMSG.b1SendEN = TRUE;
+                          }
+                      }
+                      else
+                      {
+                          DCCMSG.b1SendEN = FALSE;
+                      }
+                      if((ucDccMsgLength)||(ucDccMsgType != GoodCRC))//message
+                      {
+                          ;
+                      }
+                      else//goodcrc
+                      {
+                          DCCStatus.b1CCDataMsg_Sent = FALSE;
+                      }
+                  }
+              
+                  #if TYPEC_FRSWAP_EN  == ENABLED
+                      #if VBUS_DET == ENABLED
+                  if(Typec_Vbus_Off == BIT0_1)
+                  {
+                      if(BKFC_95_REG & BIT0_1)//INT ENABLE
+                      {
+                          Mod_CC2VbusOff_Det();
+                      }
+C51 COMPILER V9.53.0.0   MODCC2MSGTYPEC                                                    02/13/2025 10:14:00 PAGE 5   
+
+                      else
+                      {
+                          ;
+                      }
+                  }
+                      #endif
+                  #endif
+              
+                  if(ucDccTypecInt & BIT2_1)//Send Over
+                  {
+                      BKFC_B6_REG = BIT2_1;
+                      if(DCCStatus.b1CCDataMsg_Sent == TRUE)
+                      {
+                          DCCStatus.b1CCDataMsg_Sent = FALSE;
+                          Ocm_TR2_ValueSet();
+                          TR2 = 1;
+                      }
+              
+                      if(DCCMSG.b1SendEN == TRUE)
+                      {
+                          DCCMSG.b1SendEN = 0;
+                          if(ucDccKeyCode == SOP)//needed,or SOP' will be sended
+                          {             
+                              Mod_CC2Msg_Deal(ucDccMsgType, ucDccMsgLength, ucDccExtMsg);            
+                          }
+                      }
+                  }    
+              }
+              
+              #endif
+ 269          #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

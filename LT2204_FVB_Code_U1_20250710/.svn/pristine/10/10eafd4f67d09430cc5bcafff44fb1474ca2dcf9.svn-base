@@ -1,0 +1,225 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  HdcpTx.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+
+void Drv_HdcpTx_HdcpInit(void)
+{
+    #if SYSCLK == SYS_CLK_40M//info:20211123-1 //hdcp1.4
+    //hdcp2.2
+    BKE9_2C_REG = 0x9c;//1ms standard timer[15:8]
+    BKE9_2D_REG = 0x40;//1ms standard timer[7:0]
+
+    BKE9_80_REG = 0x1f; //HDCP22TX_RGD_DPTX_ENC_DLY_CNT
+    BKE9_80_REG &= BIT0_0;//solve encode+hdcptx2.3+1lane fail problem
+
+    BKE9_AF_REG = 0x40; //[7:0]
+    BKE9_B0_REG = 0x9C; //HDCP1.4 1ms preset [15:8]  related with "link verification response"
+    BKE9_B1_REG = 0x00; //7:0 Preset value for HDCP 100ms timer
+    BKE9_B2_REG = 0x08; //15:8 Preset value for HDCP 100ms timer
+    BKE9_B3_REG = 0x3D; //23:16 Preset value for HDCP 100ms timer
+   
+
+    BKF5_A0_REG = 0xec;//rgd_dptx_hdcp13_5s_timer[ 7:0]
+    BKF5_A1_REG = 0x0b;//rgd_dptx_hdcp13_5s_timer[15:8]
+    
+    BKF5_A2_REG = 0x3e;//rgd_dptx_hdcp13_100s_timer[ 7:0]
+    #endif
+
+    #if SYSCLK == SYS_CLK_48M//info:20211123-1 //hdcp1.4
+    //hdcp2.2
+    BKE9_2C_REG = 0xbb;//1ms standard timer[15:8]
+    BKE9_2D_REG = 0x80;//1ms standard timer[7:0]
+
+    BKE9_80_REG = 0x25; //HDCP22TX_RGD_DPTX_ENC_DLY_CNT
+    BKE9_80_REG &= BIT0_0;//solve encode+hdcptx2.3+1lane fail problem
+
+    BKE9_AF_REG = 0x80; //[7:0]
+    BKE9_B0_REG = 0xBB; //HDCP1.4 1ms preset [15:8]  related with "link verification response"
+    BKE9_B1_REG = 0x00; //7:0 Preset value for HDCP 100ms timer
+    BKE9_B2_REG = 0x3E; //15:8 Preset value for HDCP 100ms timer
+    BKE9_B3_REG = 0x49; //23:16 Preset value for HDCP 100ms timer
+
+    BKF5_A0_REG = 0x57;//rgd_dptx_hdcp13_5s_timer[ 7:0] 
+    BKF5_A1_REG = 0x0e;//rgd_dptx_hdcp13_5s_timer[15:8]
+
+    BKF5_A2_REG = 0x4a;//rgd_dptx_hdcp13_100s_timer[ 7:0]
+
+    #endif
+    
+    //dptx hdcp en
+    #if TX_PORT_SIGN == DP_PORT
+    #if DPTX_HDCP_ENC_MODE != NO_HDCP
+    BKE9_07_REG |= 0xc0;//[7]tx_hdcp_en: 1-en; [6]tx_auth_en: 1-en;
+    BKE9_08_REG &= BIT5_0;//[5]hdcp22tx_rg_hpd_rsen_re_auth: 0-dis re_auth
+    BKE9_16_REG = 0x40; //hdcp22 tx reauth cnt
+    BKE9_1B_REG &= BIT2_0;//[2]rg_hdcp_en_sel:
+
+    BKE9_25_REG &= BIT4_0;//[4]hdcp22tx_rg_tx_auth_en_auto_en: 0-dp;
+    BKE9_29_REG &= BIT3_0;//[3]rg__poll_rx_st_sel: 0-dp
+    
+    BKE9_81_REG |= BIT3_1;//[3]rgd_tx_hdcp22_sel: 1-dp mode
+    BKE9_83_REG = 0xff;// DPTX HDCP22 aux read wait time after command sending
+    BKE9_85_REG |= BIT7_1;//rgd_ake_cert_err_sel: 1-after ake_cert_send message
+    BKE9_8F_REG = 0x02;   //rgd_h2_tx_msg_dly_cnt
+    
+    BKF5_81_REG &= BIT7_0;//[7]rgd_hdcp_bypass: 0-hdcp path
+    BKF5_8D_REG &= BIT7_0;//[7]rgd_cp_dat_en: 1-software enable encryption
+    BKF5_9B_REG = 0x66;//[5]rgd_dptx_hdcp13_enc_start_sel: 1-after r0 match
+                       //[4]rgd_dptx_hdcp13_hpd_irq_en: 1-en
+                       //[2]rgd_dptx_hdcp13_aut_en: 1-en
+                       //[1]rgd_dptx_hdcp22_aut_en: 1-en    
+    BKF5_A6_REG |= BIT6_1;//[6]rgd_dptx_hdcp13_enc_neg_en: 1-en
+    
+    #if DPTX_HDCP_STATE_CHECK == ENABLED
+    BKF5_9B_REG = 0x6e;
+    BKF5_9C_REG &= BIT4_0;//hdcp13_reauth_auto_en
+    #endif
+    
+    #endif
+    #endif
+
+    //hdmi tx hdcp en
+    #if TX_PORT_SIGN == HDMI_PORT
+    #if HDMITX_HDCP_ENC_MODE != NO_HDCP
+    
+    BKE9_04_REG = 0x33;
+    BKE9_16_REG = 0x60;//ver_det time for CTS
+    BKE9_1A_REG &= BIT7_0;//[7]hdcp22tx_rg_hdcp_en_pos_ctrl: 1-close
+    BKE9_1B_REG &= BIT2_0;//[2]tx_hdcp_en_SEL: 1-key valid;  
+    
+    BKE9_21_REG = 0x38;//hdcp22tx_rd_rx_interval_cnt[15:8]
+    BKE9_22_REG = 0x30;//hdcp22tx_rd_rx_interval_cnt[ 7:0]
+    BKE9_25_REG |= BIT4_1;//[4]hdcp22tx_rg_tx_auth_en_auto_en: 1-hdmi;
+    
+    BKE9_81_REG &= BIT3_0;//[3]rgd_tx_hdcp22_sel: 1-hdmi mode
+    BKE9_8D_REG = 0x8c;
+    
+    BKE9_B5_REG = 0xac;//[1:0]force_hpd/rsen_high_1.4tx
+    BKE9_B6_REG = 0x98;//[4]=1'b0时，frm_dec_en 控制tx加密帧使能
+    
+    BKE9_C3_REG = 0xC3;//[1]rx_only [3]tx_rpt_mode,[7]use_ext_key = 0 for test key
+    BKE9_C7_REG = 0xff;//[7]tx_only_mode
+    BKE9_CA_REG = 0x03;//[4]rgd_h1_en_sof_en
+    
+    BKE9_D3_REG = 0xff;//hdcp_auth_again_cnt_for_CTS
+    BKE9_E3_REG |= BIT7_1;//[7]rgd_hdmi_mode_chk_skip = 1
+
+    BKEA_05_REG = 0x04;//[3:2]rgd_encode_data_style: 01-hdcp encode path
+    BKEA_4F_REG = 0x52;//[1:0]rgd_htx21_data_sytle: 10-hdcp encode path
+    #endif
+    #endif
+}
+
+//===========================================
+//  func: hdcp encoder init
+// input:  
+//output: N/A
+//return: void
+//  Info: N/A
+//===========================================
+void Drv_HdcpTx_Enable(IN u8 ucOpt)
+{
+    #if TX_PORT_SIGN == DP_PORT
+    #if DPTX_HDCP_ENC_MODE != NO_HDCP
+    if (ucOpt & HDCP1X)
+    {
+       // BKF5_8D_REG =0X40;//只是握手不加密
+        BKF5_9F_REG  = 0XFF;
+        BKF5_9B_REG &= BIT6_0;//[6]1'b0:hardware control aux when hdcp1x enable
+        BKF5_9B_REG &= BIT1_0;//[1]rgd_dptx_hdcp22_auto_en: 0-dis
+        BKF5_8C_REG |= BIT0_1;//[0]rgd_dp_hdcp_en: 1-en
+        printLT(PRINT_PRIO_TEST, "\nDptx hdcp1x en");
+    }
+    else if (ucOpt & HDCP2X)
+    {
+        #if ((DPTX_HDCP_STATE_CHECK == ENABLED) || (CHIP_VERSION_SEL > U1_VERSION))
+        BKF5_A6_REG |= BIT5_1;
+        BKF5_A6_REG |= BIT4_1;//hdcp 1.3 clear HPD_irq state
+        BKE9_8B_REG &= BIT2_0;//rst hdcp22
+        Ocm_Delay1ms(1);
+        BKF5_A6_REG &= BIT5_0;
+        BKF5_A6_REG &= BIT4_0;
+        BKE9_8B_REG |= BIT2_1;
+
+        #if (CHIP_VERSION_SEL > U1_VERSION)
+        BKF5_A6_REG |= BIT3_1;
+        BKF5_A6_REG &= BIT3_0;//hpd_irq_status_rd_done_clr
+        #endif
+        
+        #endif
+        
+        BKF5_9B_REG &= BIT6_0;//[6]1'b0:hardware control aux when hdcp2x enable
+        BKF5_9B_REG |= BIT1_1;//[1]rgd_dptx_hdcp22_auto_en: 1-en
+        BKF5_8C_REG |= BIT0_1;//[0]rgd_dp_hdcp_en: 1-en
+        printLT(PRINT_PRIO_TEST, "\nDptx hdcp2x en");
+    }
+    else//disable all
+    {
+
+        BKE9_85_REG |= BIT5_1;
+        BKE9_85_REG &= BIT5_0;//[5]rgd_h2_dptx_enc_dis
+        BKF5_8D_REG |=BIT6_1;
+        Ocm_Delay1ms(20);//important
+        BKF5_8C_REG &= BIT0_0;//[0]rgd_dp_hdcp_en: 0-dis
+        BKF5_8D_REG &=BIT6_0;
+        
+        BKF5_9B_REG &= BIT1_0;//[1]rgd_dptx_hdcp22_auto_en: 0-dis
+        BKF5_9B_REG |= BIT6_1;//[6]1'b1:release to dp tx control aux when hdcp disable
+
+        #if DPTX_HDCP_STATE_CHECK == ENABLED
+        BKF5_89_REG &= BIT5_0;//
+        BKF5_89_REG |= BIT5_1;//hdcp13 rst
+        #endif
+        printLT(PRINT_PRIO_TEST, "\nDptx hdcp Disable");
+    }
+    #else
+    ucOpt = NO_HDCP;
+    #endif
+    #endif
+
+    #if TX_PORT_SIGN == HDMI_PORT
+    #if HDMITX_HDCP_ENC_MODE != NO_HDCP
+    if (ucOpt & HDCP1X)
+    {
+        BKE9_D5_REG |= BIT7_1;//[7]tx_hdcp14_en: 1-en
+        BKE9_CA_REG |= BIT4_1;//[4]tx_hdcp14_soft_en: 1-en
+        BKE9_E2_REG &= BIT5_0;//[5]tx_ver_jud_en: 0-dis
+        printLT(PRINT_PRIO_TEST, "\nHdmi tx hdcp1x en");
+    }
+    else if (ucOpt & HDCP2X)
+    {
+        BKE9_DD_REG &= 0xfc;//
+
+        BKE9_07_REG |= BIT7_1;//[7]tx_hdcp22_en: 1-en
+        BKE9_E2_REG |= BIT5_1;//[5]tx_ver_jud_en: 1-en
+        printLT(PRINT_PRIO_TEST, "\nHdmi tx hdcp2x en");
+    }
+    else//disable all
+    {
+        BKE9_07_REG &= BIT7_0;//[7]tx_hdcp22_en: 0-dis
+        BKE9_D5_REG &= BIT7_0;//[7]tx_hdcp14_en: 0-dis
+        BKE9_E2_REG &= BIT5_0;//[5]tx_ver_jud_en: 0-dis
+        BKE9_CA_REG &= BIT4_0;//[4]tx_hdcp14_soft_en: 0-dis
+    }
+    #else
+    ucOpt = NO_HDCP;
+    #endif
+    #endif
+
+    #if TX_PORT_SIGN == LVDS_PORT
+    ucOpt = NO_HDCP;
+    #endif
+    #if TX_PORT_SIGN == MIPI_PORT
+    ucOpt = NO_HDCP;
+    #endif
+}
+
+void Drv_Hdcp22Tx_Reset(void)
+{
+    BKE9_8A_REG &= BIT5_0;
+    BKE9_8A_REG |= BIT5_1;
+}

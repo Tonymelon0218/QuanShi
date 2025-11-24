@@ -1,0 +1,2320 @@
+//////////////////////////////////////
+//Project:   LT2101
+//Filename:  System.c
+//Version:   V1.0
+//Copyright: Lontium
+//////////////////////////////////////
+#include "Include.h"
+#if ((HDMITX_VID_PATTERN_SEL != NO_PATTERN)||(DPTX_VID_PATTERN_SEL != NO_PATTERN))
+//                           hstart     vstart    hactive   vactive   htotal    vtotal    hsync vsync divset freqset
+u8 code timing480p60hz[17] = {0x00,0x44,0x00,0x1b,0x01,0x40,0x01,0xe0,0x01,0x90,0x02,0x0d,0x00,0x30,0x02,0x40,0xe0};
+u8 code timing720p60hz[17] = {0x00,0x82,0x00,0x19,0x02,0x80,0x02,0xd0,0x03,0x39,0x02,0xee,0x00,0x14,0x05,0x2f,0xd0};
+u8 code timing1080p60hz[17] ={0x00,0x60,0x00,0x29,0x03,0xc0,0x04,0x38,0x04,0x4c,0x04,0x65,0x00,0x16,0x05,0x2f,0xc0};
+u8 code timing4k30hz[17] =   {0x00,0xc0,0x00,0x52,0x07,0x80,0x08,0x70,0x08,0x98,0x08,0xca,0x00,0x2c,0x0a,0x2f,0xb0};
+u8 code timing4k60hz[17] =   {0x00,0xc0,0x00,0x52,0x07,0x80,0x08,0x70,0x08,0x98,0x08,0xca,0x00,0x2c,0x0a,0x2f,0xa0};
+u8 code timing4k120hz[17] =  {0x00,0xc0,0x00,0x52,0x07,0x80,0x08,0x70,0x08,0x98,0x08,0xca,0x00,0x2c,0x0a,0x2f,0x90};
+u8 code timing8k30hz[17] =   {0x01,0x80,0x00,0x40,0x0F,0x00,0x10,0xE0,0x11,0x94,0x11,0x30,0x00,0x58,0x14,0x2F,0x90};   
+#endif
+    
+//===========================================
+//func  :xtal init
+//input :N/A
+//output:N/A
+//return:void
+//Info  :N/A
+//===========================================
+void Drv_System_XtalSet(void)
+{
+    u8 ucSyspll_Cnt;
+    
+    BKA3_00_REG &= BIT7_0;//[7]rg_syspll_pd: 0-normal work, 1-power down;
+    BKA3_02_REG |= BIT0_1;// syspll 600M enable
+    
+    BKA3_00_REG |= BIT6_1; 
+    BKE2_89_REG = 0x20;//ks = 2
+    ucSyspll_Cnt = 0;
+    do
+    {
+        BKE2_89_REG &= BIT6_0;
+        BKE1_09_REG &= 0xfc;
+        BKE1_09_REG |= 0x03;
+        BKE2_89_REG |= BIT6_1;
+        Ocm_Delay1ms(5);
+    }while((ucSyspll_Cnt < 3)&&((BKE2_93_REG&BIT6_1) == 0x00));
+    BKA3_00_REG &= BIT6_0; 
+    #if SYSCLK == SYS_CLK_40M
+    BKE6_E9_REG |= 0x50;//
+
+    BKC7_46_REG = 0x9c;//rgd_fm_fm_timer_set[15:8]
+    BKC7_47_REG = 0x40;//rgd_fm_fm_timer_set[ 7:0]
+
+    BKE2_A1_REG = 0x9c;//rgd_fm_timer_set[15:8]
+    BKE2_A2_REG = 0x40;//rgd_fm_timer_set[ 7:0]
+
+    BKE6_96_REG = 0x9c;//rgd_top_fm_fm_timer_set[15:8]
+    BKE6_97_REG = 0x40;//rgd_top_fm_fm_timer_set[ 7:0]
+
+    BKED_38_REG = 0x9c;//rgd_txfm_fm_timer_set[15:8]
+    BKED_39_REG = 0x40;//rgd_txfm_fm_timer_set[ 7:0]
+    #endif
+
+    #if SYSCLK == SYS_CLK_48M
+    BKE6_E9_REG |= 0x60;//
+
+    BKC7_46_REG = 0xbb;//rgd_fm_fm_timer_set[15:8]
+    BKC7_47_REG = 0x80;//rgd_fm_fm_timer_set[ 7:0]
+
+    BKE2_A1_REG = 0xbb;//rgd_fm_timer_set[15:8]
+    BKE2_A2_REG = 0x80;//rgd_fm_timer_set[ 7:0]
+
+    BKE6_96_REG = 0xbb;//rgd_top_fm_fm_timer_set[15:8]
+    BKE6_97_REG = 0x80;//rgd_top_fm_fm_timer_set[ 7:0]
+
+    BKED_38_REG = 0xbb;//rgd_txfm_fm_timer_set[15:8]
+    BKED_39_REG = 0x80;//rgd_txfm_fm_timer_set[ 7:0]
+    #endif
+}
+
+//===============================================
+//func  :enable  int for lt8711
+//input : Int typec   IS ON/OFF
+//output:N/A
+//return:void
+//Info  :N/A
+//================================================
+void Drv_System_IntSet(EnumInterrupt ucIntType, u8 b1IsOn)
+{
+    switch(ucIntType)
+    {
+        case IRQ_RXPLL_UNSTB_INT:
+            break;
+
+        #if RX_PORT_SIGN == DP_PORT
+        case IRQ_DPRX_AUX_INT:
+            (b1IsOn)?(BKE5_00_REG &= BIT7_0):(BKE5_00_REG |= BIT7_1);
+            break;
+        #if DPRX_ADAPTIVE_SYNC == ENABLED
+        case IRQ_DPRX_ADAPTIVE_SYNC_INT:
+            (b1IsOn)?(BKF2_17_REG |= BIT0_1):(BKF2_17_REG &= BIT0_0);    
+            break;
+        #endif
+        case IRQ_DPRX_VSI_INT: //
+            (b1IsOn)?(BKF2_16_REG |= BIT7_1):(BKF2_16_REG &= BIT7_0);
+            break;
+        case IRQ_DPRX_PPS_PKT_INT:
+            (b1IsOn)?(BKF2_17_REG |= BIT4_1):(BKF2_17_REG &= BIT4_0);
+            break;
+        case IRQ_DPRX_STATICHDR_INT: //using the user define pkt
+            (b1IsOn)?(BKF2_16_REG |= BIT3_1):(BKF2_16_REG &= BIT3_0);
+            break;
+        case IRQ_DPRX_DYNAMICHDR_INT:
+            break;
+        case IRQ_RXHDCP1X_INT:
+			if(b1IsOn)
+            {
+                //BKE5_00_REG &= BIT3_0;//[1]dp rx int msk, hdcp1.3 must open
+                BKF1_A7_REG |= BIT3_1;//[3]dprx hdcp interrupt enable, 1-en, 0-dis
+                BKF1_BB_REG |= 0x50;//interrupt en
+            }
+            else
+            {
+                //BKE5_00_REG |= BIT3_1;//[1]dp rx int msk, hdcp1.3 must open
+                BKF1_A7_REG &= BIT3_0;//[3]dprx hdcp interrupt enable, 1-en, 0-dis
+                BKF1_BB_REG &= 0xaf;  //interrupt dis
+            }
+            BKE5_30_REG |= BIT3_1;//[1]dp rx int clr en
+            BKE5_30_REG &= BIT3_0;//[1]dp rx int clr dis   
+			break;
+		case IRQ_RXHDCP2X_INT:
+			if(b1IsOn)
+            {
+//                BKE5_01_REG &= BIT7_0;//[6]hdcp2.3 rx int msk
+                BKCA_28_REG |= 0x39;//interrupt en
+                BKCA_2A_REG |= 0x0f;//interrupt en
+            }
+            else
+            {
+//                BKE5_01_REG |= BIT7_1;//[6]hdcp2.3 rx int msk
+                BKCA_28_REG &= 0xc6;//interrupt dis
+                BKCA_2A_REG &= 0xf0;//interrupt dis
+            }
+            BKCA_29_REG |= 0x39;//flag clear en
+            BKCA_29_REG &= 0xc6;//flag clear dis
+            BKE5_31_REG |= BIT7_1;//[6]hdcp rx int clr en
+            BKE5_31_REG &= BIT7_0;//[6]hdcp rx int clr dis  
+            break;
+        case IRQ_DPRX_PPS_DATA_CHG_INT:
+            (b1IsOn)?(BKE5_09_REG &= BIT0_0):(BKE5_09_REG |= BIT0_1);
+            break;
+        #endif
+
+        #if RX_PORT_SIGN == HDMI_PORT
+        case IRQ_TMDS_UNSTB_INT:
+            break;
+        case IRQ_RXPLL_UNLOCK_INT:
+            break;
+        case IRQ_HDMIRX_VSI_INT: //
+            (b1IsOn)?(BKCC_60_REG |= BIT3_1):(BKCC_60_REG &= BIT3_0);
+            break;
+        case IRQ_HDMIRX_STATICHDR_INT: //using the user define pkt
+            (b1IsOn)?(BKCC_12_REG |= BIT4_1):(BKCC_12_REG &= BIT4_0);
+            break;
+        case IRQ_HDMIRX_DYNAMICHDR_INT:
+            (b1IsOn)?(BKCC_64_REG |= BIT1_1):(BKCC_64_REG &= BIT1_0);
+            break;
+        case IRQ_HDMIRX_PPS_LOAD_SUCC_INT:
+            (b1IsOn)?(BKCC_64_REG |= BIT3_1):(BKCC_64_REG &= BIT3_0);
+            break;
+        case IRQ_HDMIRX_PPS_DATA_CHG_INT:
+            if(b1IsOn)
+            {
+                BKE6_EE_REG |= BIT0_1;//[0]rgd_pps_cksum_en: 1-en
+//                BKE5_09_REG &= BIT0_0;
+//                BKE5_88_REG |= BIT3_1; //[3]1'b1:software pps cksum enable
+            }
+            else
+            {
+                BKE6_EE_REG &= BIT0_0;//[0]rgd_pps_cksum_en: 0-dis
+//                BKE5_09_REG |= BIT0_1;
+//                BKE5_88_REG &= BIT3_0; //[3]1'b1:software pps cksum enable
+            }
+            break;
+        case IRQ_HDMIRX_VRRSTART_INT:
+            (b1IsOn)?(BKCC_22_REG |= BIT7_1):(BKCC_22_REG &= BIT7_0);
+            break;
+        case IRQ_HDMIRX_VRRSTOP_INT:
+            (b1IsOn)?(BKCC_22_REG |= BIT6_1):(BKCC_22_REG &= BIT6_0);
+            break;
+        #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT 
+        case IRQ_HDMIRX_FRL_INT:
+            (b1IsOn)?(BKE5_01_REG &= BIT4_0):(BKE5_01_REG |= BIT4_1);  //[5]hdmi21 rx int mask dis
+            break;
+        #endif
+        #endif 
+        #if BB_EN == ENABLED    
+        case IRQ_BB_INT:
+            (b1IsOn)?(BKE5_10_REG &= BIT6_0):(BKE5_10_REG |= BIT6_1);  //bit5:bb_int_maskt 
+            break;
+        #endif
+        
+        case IRQ_CC1_INT:
+            (b1IsOn)?(BKE5_12_REG &= BIT1_0):(BKE5_12_REG |= BIT1_1);  //UCC1 INT MASK
+            break;
+        case IRQ_CC2_INT:
+            (b1IsOn)?(BKE5_12_REG &= BIT0_0):(BKE5_12_REG |= BIT0_1);  //UCC1 INT MASK
+            break;
+        default:
+            break;    
+    }
+}
+
+u8 Drv_System_IntSrcGet(EnumInterrupt ucIntType)
+{
+    u8 ucRtn;
+
+    switch(ucIntType)
+    {
+        case IRQ_TMDS_STB_INT:
+            ucRtn = (BKE5_5B_REG & BIT0_1)? (TRUE) : (FALSE);
+            break;
+        case IRQ_TMDS_PKDET_INT:
+            ucRtn = (BKE5_56_REG & BIT2_1)? (TRUE) : (FALSE);
+            break;
+        default:
+            break;    
+    }
+    return ucRtn;
+}
+
+u8 Drv_System_IntFlagGet(EnumInterrupt ucIntType)
+{
+    u8 ucRtn = 0x00;
+
+    switch(ucIntType)
+    {
+        #if RX_PORT_SIGN == DP_PORT
+        case IRQ_DPRX_AUX_INT:
+            ucRtn = (BKE5_40_REG & BIT7_1);
+            break;
+        #if DPRX_ADAPTIVE_SYNC == ENABLED
+        case IRQ_DPRX_ADAPTIVE_SYNC_INT:
+            ucRtn = (BKF2_EE_REG & BIT0_1);
+            break;
+        #endif
+        case IRQ_DPRX_VSI_INT: //
+			ucRtn = (BKF2_ED_REG & BIT7_1);
+            break;
+        case IRQ_DPRX_PPS_PKT_INT:
+            ucRtn = (BKF2_EE_REG & BIT4_1);
+            break;
+        case IRQ_DPRX_MSA_INT:
+            ucRtn = (BKF2_EE_REG & BIT2_1);
+            break;
+        case IRQ_DPRX_STATICHDR_INT: //using the user define pkt
+            ucRtn = (BKF2_ED_REG & BIT3_1);
+            break;
+        case IRQ_DPRX_DYNAMICHDR_INT:
+            break;
+        case IRQ_DPRX_PPS_DATA_CHG_INT:
+            ucRtn = (BKE5_49_REG & BIT0_1);
+            break;
+        #endif
+
+        #if RX_PORT_SIGN == HDMI_PORT
+        case IRQ_TMDS_UNSTB_INT:
+            ucRtn = (BKE5_4B_REG & BIT1_1);
+            break;
+       case IRQ_HDMIRX_VSI_INT: 
+            ucRtn = (BKCC_F4_REG & BIT2_1);
+            break; 
+        case IRQ_HDMIRX_STATICHDR_INT: //using the user define pkt
+             ucRtn = (BKCC_F2_REG & BIT5_1);
+             break;
+        case IRQ_HDMIRX_DYNAMICHDR_INT:
+            ucRtn = (BKCC_F4_REG & BIT3_1);
+            break;
+        case IRQ_HDMIRX_PPS_LOAD_SUCC_INT:
+            ucRtn = (BKCC_F4_REG & BIT4_1);
+            break;
+        case IRQ_HDMIRX_PPS_DATA_CHG_INT:
+            ucRtn = (BKE5_49_REG & BIT0_1);
+            break;
+        case IRQ_HDMIRX_VRRSTART_INT:
+            ucRtn = (BKCC_F1_REG&BIT7_1);
+            break;
+        case IRQ_HDMIRX_VRRSTOP_INT:
+            ucRtn = (BKCC_F1_REG&BIT6_1);
+            break;        
+        case IRQ_RXPLL_UNLOCK_INT:
+            ucRtn = (BKE5_4B_REG & BIT3_1);
+            break;
+        
+//        #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT 
+//        case IRQ_HDMIRX_FRL_INT:
+//            ucRtn = (BKE5_41_REG & BIT4_1);
+//            break;
+//        #endif
+        #endif
+        #if BB_EN == ENABLED    
+        case IRQ_BB_INT:
+            ucRtn = (BKE5_40_REG & BIT6_1);
+            break;
+        #endif
+        case IRQ_CC1_INT:
+            ucRtn = (BKE5_42_REG & BIT1_1);  //UCC1 INT MASK
+            break;
+        case IRQ_CC2_INT:
+            ucRtn = (BKE5_42_REG & BIT0_1);  //UCC1 INT MASK
+            break;
+        default:
+            break;    
+    }
+    if(ucRtn != 0x00)
+    {
+        ucRtn = TRUE;
+    }
+    return ucRtn;
+}
+
+//===============================================
+//func  :enable  int for lt8711
+//input : Int typec   IS ON/OFF
+//output:N/A
+//return:void
+//Info  :N/A
+//================================================
+void Drv_System_IntClr(EnumInterrupt ucIntType)
+{
+    switch(ucIntType)
+    {
+        #if RX_PORT_SIGN == DP_PORT
+        case IRQ_DPRX_AUX_INT:
+            BKE5_30_REG |= BIT7_1;//bit0 clear interrupt 0
+            BKE5_30_REG &= BIT7_0;//bit0 release interrupt 0
+            break;
+        #if DPRX_ADAPTIVE_SYNC == ENABLED
+        case IRQ_DPRX_ADAPTIVE_SYNC_INT:
+            BKF2_19_REG |= BIT0_1;//[0]adaptive sync int clr en
+            BKF2_19_REG &= BIT0_0;//[0]adaptive sync int clr dis
+        #endif
+        case IRQ_DPRX_VSI_INT: //
+			BKF2_18_REG |= BIT7_1;//[0]adaptive sync int clr en
+            BKF2_18_REG &= BIT7_0;//[0]adaptive sync int clr dis
+            break;
+        case IRQ_DPRX_PPS_PKT_INT:
+            BKF2_19_REG |= BIT4_1;//[0]PPS packet int clr en
+            BKF2_19_REG &= BIT4_0;//[0]PPS packet int clr dis
+            break;
+        case IRQ_DPRX_STATICHDR_INT: //using the user define pkt
+            BKF2_18_REG |= BIT3_1;//[0]adaptive sync int clr en
+            BKF2_18_REG &= BIT3_0;//[0]adaptive sync int clr dis
+            break;
+        case IRQ_DPRX_DYNAMICHDR_INT:
+            break;
+        case IRQ_DPRX_PPS_DATA_CHG_INT:
+            BKE5_39_REG |= BIT0_1;
+            BKE5_39_REG &= BIT0_0;
+            break;
+        #endif
+
+        #if RX_PORT_SIGN == HDMI_PORT
+        case IRQ_TMDS_UNSTB_INT:
+            BKE5_3B_REG |= BIT1_1;//tmds clr en
+            BKE5_3B_REG &= BIT1_0;//tmds clr dis
+            break;
+        case IRQ_HDMIRX_VSI_INT: //using the user define pkt
+            BKCC_60_REG |= BIT2_1;
+            BKCC_60_REG &= BIT2_0;
+            break;
+        case IRQ_HDMIRX_STATICHDR_INT: //using the user define pkt
+            BKCC_12_REG |= BIT5_1;
+            BKCC_12_REG &= BIT5_0;
+            break;
+        case IRQ_HDMIRX_DYNAMICHDR_INT:
+            BKCC_64_REG |= BIT0_1;
+            BKCC_64_REG &= BIT0_0;
+            break;
+        case IRQ_HDMIRX_PPS_LOAD_SUCC_INT:
+            BKCC_64_REG |= BIT2_1;//rgd_hdmirx_pps_upd_intr_clr en
+            BKCC_64_REG &= BIT2_0;//rgd_hdmirx_pps_upd_intr_clr dis
+            break;
+        case IRQ_HDMIRX_PPS_DATA_CHG_INT:
+            BKE5_39_REG |= BIT0_1;
+            BKE5_39_REG &= BIT0_0;
+            break;
+        case IRQ_HDMIRX_VRRSTART_INT:
+            BKCC_22_REG |= BIT5_1;//[5]rgd_vrr_en_pos_intr_clr en
+            BKCC_22_REG &= BIT5_0;
+            break;
+        case IRQ_HDMIRX_VRRSTOP_INT:
+            BKCC_22_REG |= BIT4_1;//[4]rgd_vrr_en_neg_intr_clr en
+            BKCC_22_REG &= BIT4_0;
+            break;
+        case IRQ_RXPLL_UNLOCK_INT:
+            BKE5_3B_REG |= BIT3_1;//rxpll clr en
+            BKE5_3B_REG &= BIT3_0;//rxpll clr dis
+            break;
+        case IRQ_HDMIRX_VIDCHK_INT:
+            BKC8_71_REG |= 0xc0;// hactive vactive clr = 1;
+            BKC8_71_REG &= 0x3f;// hactive vactive clr = 0;
+           
+            BKC8_70_REG |= 0x02;// sync timer clr = 0;
+            BKC8_70_REG &= 0xfd;// sync timer clr = 0;
+             
+            break;
+        #if HDMIRX_MAX_FRL_RATE != FRL_NOT_SPT 
+        case IRQ_HDMIRX_FRL_INT:
+            BKE5_31_REG |= BIT4_1;//[5]hdmi21 rx int clr en
+            BKE5_31_REG &= BIT4_0;//[5]hdmi21 rx int clr dis
+            break;
+        #endif
+        #endif 
+        #if BB_EN == ENABLED    
+        case IRQ_BB_INT:
+            BKE5_30_REG |= BIT6_1;//[5]clear bb_ininterrupt en
+            BKE5_30_REG &= BIT6_0;//[5]clear bb_ininterrupt dis
+            break;
+        #endif
+        case IRQ_CC1_INT:
+            BKE5_32_REG |= BIT1_1;    // clear interrupt 2
+            BKE5_32_REG &= BIT1_0;
+            break;
+        case IRQ_CC2_INT:
+            BKE5_32_REG |= BIT0_1;    // clear interrupt 2
+            BKE5_32_REG &= BIT0_0;
+            break;
+        default:
+            break;    
+    }
+}
+
+void Drv_System_FmSet(EnumFreqMeter emType, EnumClk ucSrc)
+{
+    switch(emType)
+    {
+        case RX_FM:
+            BKC7_40_REG = ucSrc;
+            break;
+
+        case RXLINK_FM:
+            printLT(PRINT_PRIO_HIG, "\nThis fm rxpll_in_clk");
+            break;
+
+        case TX_FM:
+            printLT(PRINT_PRIO_HIG, "\nThis fm dhtx_div_link_clk");
+            break;
+
+        case TOP_FM:
+            BKE6_90_REG = ucSrc;
+            break;
+
+        default:
+            break;
+    }
+}
+
+u8 Drv_System_FmStbGet(EnumFreqMeter emType)
+{
+    u8 ucRtn = STABLE;
+
+    switch(emType)
+    {
+        case RX_FM:
+            ucRtn = (BKC7_58_REG & BIT5_1)? (STABLE) : (UNSTABLE);
+            break;
+
+        case RXLINK_FM:
+            ucRtn = (BKC7_48_REG & BIT5_1)? (STABLE) : (UNSTABLE);
+            break;
+
+        case TX_FM:
+            ucRtn = (BKED_3B_REG & BIT5_1)? (STABLE) : (UNSTABLE);
+            break;
+
+        case TOP_FM:
+            
+            ucRtn = (BKE6_98_REG & BIT6_1)? (STABLE) : (UNSTABLE);
+            break;
+
+        default:
+            break;
+    }
+
+    return ucRtn;
+}
+
+//===========================================
+//func  :system freq meter value get
+//input :emType: freq meter
+//      :ucOpt: HALF_PIX_CLK, PIX_CLK
+//output:N/A
+//return:u32
+//Info  :N/A
+//===========================================
+u32 Drv_System_FmGet(EnumFreqMeter emType, u8 ucOpt)
+{
+    u32 ulRtn;
+    switch(emType)
+    {
+        case RX_FM:
+            BKC7_40_REG |= BIT7_1;//[7]freq_khz_frz_en: 1-en
+            ulRtn = PACK_24_BIT(BKC7_58_REG & 0x0f, BKC7_59_REG, BKC7_5A_REG);
+            BKC7_40_REG &= BIT7_0;//[7]freq_khz_frz_en: 0-dis
+            break;
+        
+        case RXLINK_FM:
+            ulRtn = PACK_24_BIT(BKC7_48_REG & 0x0f, BKC7_49_REG, BKC7_4A_REG);
+            break;
+        
+        case TX_FM:
+            BKED_30_REG |= BIT1_1;//[1]rgd_txfm_freq_khz_frz_en: 1-en
+            ulRtn = PACK_24_BIT(BKED_3C_REG & 0x0f, BKED_3D_REG, BKED_3E_REG);
+            BKED_30_REG &= BIT1_0;//[1]rgd_txfm_freq_khz_frz_en: 0-dis
+            break;
+
+        case TOP_FM:
+            BKE6_90_REG |= BIT7_1;//[7]freq_khz_frz_en: 1-en
+            ulRtn = PACK_24_BIT(BKE6_98_REG & 0x0f, BKE6_99_REG, BKE6_9A_REG);
+            BKE6_90_REG &= BIT7_0;//[7]freq_khz_frz_en: 0-dis
+            break;
+
+        default:
+            printLT(PRINT_PRIO_HIG, "\nWARNING: Freq meter get fail");
+            break;
+    }
+
+    ulRtn <<= ucOpt;
+    return ulRtn;
+}
+
+void Drv_System_PktHeadSet(EnumPacktType ucType)
+{
+    switch(ucType)
+    {
+        case USER_DEFINE_PKT_0X77:
+            BKCC_0A_REG = 0x77;
+            break;
+        case VSI_INFO_FRAME_0X81:
+            BKCC_5C_REG = 0X03;
+            BKCC_5D_REG = 0x81;
+            BKCC_5E_REG = 0X46;
+            BKCC_5F_REG = 0xD0;        
+            break;
+        case HDR_INFO_FRAME_0X87:
+            //HDR PKT det SET
+            BKCC_09_REG = 0XF3;
+            BKCC_0A_REG = 0X87;
+            BKCC_0B_REG = 0X01;
+            BKCC_0C_REG = 0X1A;
+            break;
+        default:
+            break;
+    }
+}
+
+u8 Drv_System_PktDataChk(EnumPacktType ucType)
+{
+    u8 ucRtn = FAIL;
+
+    switch(ucType)
+    {
+        case USER_DEFINE_PKT_0X77:
+            break;
+        case VSI_INFO_FRAME_0X81:
+            if ((BKCC_B1_REG == 0x81)&&(BKCC_B5_REG == 0x46)&&(BKCC_B6_REG == 0xD0)&&(BKCC_B7_REG == 0x00))
+            {
+                ucRtn = SUCCESS;
+           }  
+           #if RX_PORT_SIGN == HDMI_PORT
+           #if HDR10PLUS==ENABLED  
+            if ((BKCC_B1_REG == 0x81)&&(BKCC_B5_REG == 0x8b)&&(BKCC_B6_REG == 0x84)&&(BKCC_B7_REG == 0x90))
+            {
+                ucRtn = SUCCESS+1;
+            } 
+           #endif   
+           #endif 
+            break;
+        case HDR_INFO_FRAME_0X87:
+            if ((BKCC_75_REG == 0x87)&&(BKCC_76_REG == 0x01)&&(BKCC_77_REG == 0x1A))//&& (BKCC_79_REG!=0
+            {
+                ucRtn = SUCCESS;
+            }
+            break;
+        case AVI_INFO_FRAME_0X82:
+            if ((BKCC_9F_REG == 0x82) &&
+                ((BKCC_A0_REG == 0x02) || (BKCC_A0_REG == 0x03)) &&
+                (BKCC_A1_REG == 0x0d))
+            {
+                ucRtn = SUCCESS;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    return ucRtn;
+}
+
+void Drv_System_VidChkSet(u8 ucSrc)
+{
+    if (RX_OUT_VIDEO == ucSrc)
+    {
+        BKC9_20_REG |= BIT7_1;//[7]rgd_vid_chk_pix_clk_src_sel: 1-pcrpll_div_pcr_clk
+        BKC8_7D_REG &= BIT0_0;//[0]rgd_vid_chk_src_sel: 0-rx out
+    }
+    else if (CSC_OUT_VIDEO == ucSrc)
+    {
+        BKC9_20_REG &= BIT7_0;//[7]rgd_vid_chk_pix_clk_src_sel: 0-pcrpll_pcr_clk
+        BKC8_7D_REG |= BIT0_1;//[0]rgd_vid_chk_src_sel: 1-csc out
+    }
+}
+
+u8 Drv_System_VidChkStateGet(u8 b1GetEnable)
+{
+    static u8 ucVidChk_Scan_Cnt = 0;
+    if(b1GetEnable == DISABLED)
+    {
+        ucVidChk_Scan_Cnt = 0; 
+    }
+    else
+    {
+        BKC8_71_REG &= 0x3f;// hacitve vactive clr = 0;
+        BKC8_70_REG &= BIT1_0;// htotal clr = 0;
+        if((BKC8_6F_REG & 0x0C)==0x04)
+        {
+            ucVidChk_Scan_Cnt++;
+        }
+        else if(((BKC8_6F_REG & BIT2_1) == 0x00)||(BKC8_6E_REG&0x30)||(BKC8_6D_REG&0x02))
+        {
+            BKC8_71_REG |= 0xc0;// hactive vactive clr = 1;
+            BKC8_70_REG |= 0x02;// htotal clr = 0;
+            BKC8_71_REG &= 0x3f;// hactive vactive clr = 0;
+            BKC8_70_REG &= 0xfd;// htotal clr = 0;
+            ucVidChk_Scan_Cnt = 0;
+            return UNSTABLE; 
+        }
+        if(ucVidChk_Scan_Cnt >= 200)
+        {
+            return STABLE;
+        }
+    }
+    return UNKNOWN; 
+}
+/*
+u16 Drv_System_FrameGet(void)
+{
+    u8 ucIndex = 60, ucNum;
+    u32 ulVsyncNum, ulLastVsyncNum;
+
+    while(ucIndex--)
+    {
+        ulVsyncNum = PACK_24_BIT(BKC8_3B_REG, BKC8_3C_REG, BKC8_3D_REG);
+        if (ulLastVsyncNum != ulVsyncNum)
+        {
+            ucNum = 0;
+            ulLastVsyncNum = ulVsyncNum;
+        }
+        else
+        {
+            ucNum++;
+        }
+        Ocm_Delay1ms(2);
+
+        if (ucNum > 15)
+        {
+            break;
+        }
+    }
+
+    #if SYSCLK == SYS_CLK_48M
+    return floor((double)48000000 / ulLastVsyncNum);
+    #endif
+
+    #if SYSCLK == SYS_CLK_40M
+    return floor((double)40000000 / ulLastVsyncNum);
+    #endif
+}
+*/
+void Drv_Sys_ChipRxSrcSel(u8 ucSel)
+{
+    BKC7_D7_REG &= 0xcf;//[5:4]rgd_chip_rx_sel: 00-dprx, 01-hdmirx
+    BKC7_D7_REG |= ucSel;//[5:4]
+}
+
+//========================================================================
+// Func Name   : Drv_System_SramPathSet
+// Description : sram src and sink set
+// Input       : IN EnumSramPath ucPath  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_System_SramPathSet(IN EnumSramPath ucPath)
+{
+    u8 ucSaveReg;
+
+    ucSaveReg = 0x00;//[6:4]pps sink sel: 000-hdmi tx
+                     //[3:2]pps src sel: 00-hdmi rx
+    switch (ucPath)
+    {
+        #if RX_PORT_SIGN == DP_PORT
+        case DPRX_INIT_SET_PATH:
+            BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-link clk
+            ucSaveReg = (BKE5_6B_REG & 0xf0) | 0x04;
+            BKE5_6B_REG = ucSaveReg;//[3:2]pps src sel: 01-dp rx
+            break;
+        case DPRX_DSCDEC_PPS_PATH:
+            BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-link clk
+            BKE5_6B_REG = 0x24;//[6:4]pps sink sel: 2-select dsc decoder control
+                               //[3:2]pps src sel: 01-dp rx
+            break;
+        case DPRX_DSCBYPASS_PPS_PATH:
+            BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-link clk
+            ucSaveReg = (BKE5_6B_REG & 0xf0) | 0x04;
+            BKE5_6B_REG = ucSaveReg;//[3:2]pps src sel: 01-dp rx
+            break;
+        #endif
+
+        #if RX_PORT_SIGN == HDMI_PORT
+        case HDMIRX_INIT_SET_PATH:
+            BKE1_40_REG &=BIT0_0;
+            ucSaveReg = BKE5_6B_REG & 0xf0;
+            BKE5_6B_REG = ucSaveReg;//[3:2]pps src sel: 00-hdmi rx
+            break;
+        case HDMIRX_DSCDEC_PPS_PATH:
+            BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-tmds clk
+            BKE5_6B_REG = 0x20;//[6:4]pps sink sel: 010-select dsc decoder control
+                               //[3:2]pps src sel: 00-hdmi rx
+            break;
+        case HDMIRX_DSCBYPASS_PPS_PATH:
+            BKE1_40_REG &= BIT0_0;//[0]rgd_pps_data_wr_clk_src_sel: 0-tmds clk
+            ucSaveReg = (BKE5_6B_REG & 0x0f) | 0xd0;
+            BKE5_6B_REG = ucSaveReg; //[7]rgd_pps_rd_en = 1; [6:4]rgd_pps_sink_sel
+            break;
+        #endif
+
+        #if TX_PORT_SIGN == DP_PORT
+        case DPTX_INIT_SET_PATH:
+            ucSaveReg = (BKE5_6B_REG & 0x0f) | 0x10;
+            BKE5_6B_REG = ucSaveReg;//[6:4]pps sink sel: 001-dp tx
+            break;
+        case DPTX_DSCENC_PPS_PATH:
+            BKE5_6B_REG = 0x18;//[6:4]pps sink sel: 001-dp tx
+                               //[3:2]pps src sel: 10-dsc enc
+            break;
+        case DPTX_DSCBYPASS_PPS_PATH:
+            ucSaveReg = (BKE5_6B_REG & 0x0f) | 0x10;
+            BKE5_6B_REG = ucSaveReg;//[6:4]pps sink sel: 001-dp tx
+                                    //[3:2]pps src sel: 01-dp rx
+            break;
+        case DPTX_HDR_PKT_PATH:
+//            BKF6_EF_REG |= BIT6_1;//[6]rg_pps_upd_dis: 1-dis pps update
+            #if RX_PORT_SIGN == DP_PORT
+            ucSaveReg |= 0x14;
+            BKE5_6B_REG = ucSaveReg;//[6:4]pps sink sel: 001-dp tx
+                                    //[3:2]pps src sel: 01-dp rx
+            #endif
+            #if RX_PORT_SIGN == HDMI_PORT
+            ucSaveReg |= 0x10; 
+            BKE5_6B_REG = ucSaveReg;//[6:4]pps sink sel: 001-dp tx
+                                    //[3:2]pps src sel: 00-hdmi rx
+            #endif
+            break;
+        #endif
+
+        #if TX_PORT_SIGN == HDMI_PORT
+        case HDMITX_INIT_SET_PATH:
+            BKE5_6B_REG &= 0x0f;//[6:4]pps sink sel: 000-hdmi tx
+            break;
+        case HDMITX_DSCENC_PPS_PATH:
+            BKE5_6B_REG = 0x08;//[6:4]pps sink sel: 000-hdmi tx
+                               //[3:2]pps src sel: 10-dsc enc
+            break;
+        case HDMITX_DSCBYPASS_PPS_PATH:
+            BKE5_6B_REG &= 0x0f;//[6:4]pps sink sel: 000-hdmi tx
+            break;
+        case HDMITX_HDR_PKT_PATH:
+            BKEA_1A_REG &= BIT0_0;//[0]rgd_pps_update_en: 0-sw
+            #if RX_PORT_SIGN == DP_PORT
+            ucSaveReg |= 0x04;//[3:2]pps src sel: 01-dp rx
+            BKE5_6B_REG = ucSaveReg;
+            #endif
+
+            #if RX_PORT_SIGN == HDMI_PORT
+            BKE5_6B_REG = ucSaveReg;//[3:2]pps src sel: 00-hdmi rx
+            #endif
+            break;
+        #endif
+
+        #if TX_PORT_SIGN == MIPI_PORT
+        case MIPITX_DSCENC_PPS_PATH:
+        BKE5_6B_REG = 0x38;//[6:4]pps sink sel: 011-mipi tx
+                           //[3:2]pps src sel: 10-dsc enc
+        break;
+        #endif
+
+        default:
+            printLT(PRINT_PRIO_HIG,"Warning: input is invalid");
+            break;
+    }
+}
+
+
+//========================================================================
+// Func Name   : Drv_Sys_HdcpKeyLoad
+// Description : load hdcp key from flash to sram.
+// Input       : void  
+// Output      : None
+// Return      : void
+//========================================================================
+void Drv_Sys_HdcpKeyLoad(void)
+{
+    u8 loadkey_cnt = 0;
+
+    BKCA_2B_REG |= BIT6_1; 
+    BKCA_2B_REG &= BIT6_0; //load key status clear.
+
+    //rgd_sec_flash_init_addr[23:0] = 0x050000 (Flash load address)
+    BKE0_68_REG = 0x05;
+    BKE0_69_REG = 0x00;
+    BKE0_6A_REG = 0x00;
+    
+    //rgd_upld_size[23:0] = = 0x000800 (Flash load size)
+    BKE0_65_REG = 0x00;
+    BKE0_66_REG = 0x08;
+    BKE0_67_REG = 0x00;
+
+    BKE0_60_REG |= BIT1_1; //start load key.
+    do
+    {
+        loadkey_cnt++;
+        Ocm_Delay1ms(1);
+        if(BKCA_80_REG & BIT0_1)
+        {
+            break;
+        }
+    }while(loadkey_cnt < 20);
+    printLT(PRINT_PRIO_HIG, "\nload key done[0x%02bx]",BKCA_80_REG);
+    BKE0_60_REG &= BIT1_0; //stop load key.
+}
+
+void Drv_Sys_DHRxPowerDomain(u8 b1IsPowerOn)
+{
+   if(b1IsPowerOn == TRUE)
+   {
+        BKE1_21_REG = 0x00; 
+        BKE1_22_REG = 0x00; 
+        BKE1_23_REG = 0x00; 
+        BKE1_24_REG = 0x00; 
+        BKE1_25_REG = 0x00;    //clk disable 
+        BKE5_80_REG &= BIT7_0; //power iso_en
+        BKE1_0B_REG &= BIT3_0; // reset
+        BKE5_80_REG &= BIT6_0; //power domin  enable
+   }
+   else
+   {
+        BKE5_80_REG |= BIT6_1; //power domin  disable
+        BKE1_0B_REG |= BIT3_1; // reset
+        BKE5_80_REG |= BIT7_1; //power iso_en
+        BKE1_21_REG = 0x7f; 
+        BKE1_22_REG = 0x0b; 
+        BKE1_23_REG = 0xff; 
+        BKE1_24_REG = 0xff; 
+        BKE1_25_REG = 0xf3; // clk enable  
+   } 
+}
+
+void Drv_Sys_DHTxPowerDomain(u8 b1IsPowerOn)
+{
+   if(b1IsPowerOn == TRUE)
+   {
+        BKE1_26_REG = 0x00; 
+        BKE1_27_REG = 0x00;     // clk disable 
+        BKE5_80_REG &= BIT5_0; //power iso_en
+        BKE1_0B_REG &= BIT2_0; // reset
+        BKE5_80_REG &= BIT4_0; //power domin  enable
+   }
+   else
+   {
+        BKE5_80_REG |= BIT4_1; //power domin  disable
+        BKE1_0B_REG |= BIT2_1; // reset
+        BKE5_80_REG |= BIT5_1; //power iso_en
+        BKE1_26_REG = 0xFF; 
+        BKE1_27_REG = 0xF8;// clk enable  
+   } 
+}
+
+void Drv_Sys_LmtxPowerDomain(u8 b1IsPowerOn)
+{
+   if(b1IsPowerOn == TRUE)
+   {
+        BKE1_2A_REG = 0x00; 
+        BKE1_2B_REG = 0x00;     //lmtx clk disable 
+        BKE5_81_REG &= BIT1_0; //power iso_en
+        BKE1_0B_REG &= BIT4_0; //LMTX reset
+        BKE5_81_REG &= BIT0_0; //power domin  enable
+   }
+   else
+   {
+        BKE5_81_REG |= BIT0_1; //power domin  disable
+        BKE1_0B_REG |= BIT4_1; //LMTX reset
+        BKE5_81_REG |= BIT1_1; //power iso_en
+        BKE1_2A_REG = 0xff; 
+        BKE1_2B_REG = 0xff; //lmtx clk enable  
+   } 
+}
+void Drv_Sys_DecPowerDomain(u8 b1IsPowerOn)
+{
+   if(b1IsPowerOn == TRUE)
+   {
+        BKE1_28_REG = 0x00;     // clk disable 
+        BKE5_80_REG &= BIT3_0; //power iso_en
+        BKE1_0B_REG &= BIT1_0; // reset
+        BKE5_80_REG &= BIT2_0; //power domin  enable
+   }
+   else
+   {
+        BKE5_80_REG |= BIT2_1; //power domin  disable
+        BKE1_0B_REG |= BIT1_1; // reset
+        BKE5_80_REG |= BIT3_1; //power iso_en
+        BKE1_28_REG = 0xff; // clk enable  
+   } 
+}
+
+void Drv_Sys_EncPowerDomain(u8 b1IsPowerOn)
+{
+   if(b1IsPowerOn == TRUE)
+   {
+        BKE1_29_REG = 0x00;    // clk disable 
+        BKE5_80_REG &= BIT1_0; //power iso_en
+        BKE1_0B_REG &= BIT0_0; //reset
+        BKE5_80_REG &= BIT0_0; //power domin  enable
+   }
+   else
+   {
+        BKE5_80_REG |= BIT0_1; //power domin  disable
+        BKE1_0B_REG |= BIT0_1; // reset valid
+        BKE5_80_REG |= BIT1_1; //power iso_en
+        BKE1_29_REG = 0xff;    //clk enable  
+   } 
+}
+
+#if ((TX_PORT_SIGN == DP_PORT) || (TX_PORT_SIGN == HDMI_PORT))
+void Drv_Sys_DhTxSrcSel(u8 ucSel)
+{
+    BKED_20_REG = ucSel;
+}
+#endif
+#if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+void Drv_Sys_LmOutSel(u8 ucSel)
+{
+    BKF9_00_REG = ucSel;
+}
+#endif
+
+#if ((HDMITX_VID_PATTERN_SEL != NO_PATTERN)||(DPTX_VID_PATTERN_SEL != NO_PATTERN))
+void Drv_System_VidPatternSet(void)
+{
+    u8 ucpcrpll_cal_cnt,ucpcrpll_lock_cnt;
+    u8 timing[17];
+    //timing fill
+    #if DPTX_VID_PATTERN_SEL == PTN480P
+    memcpy(timing,timing480p60hz,17);
+    #elif DPTX_VID_PATTERN_SEL == PTN720P
+    memcpy(timing,timing720p60hz,17);
+    #elif DPTX_VID_PATTERN_SEL == PTN1080P
+    memcpy(timing,timing1080p60hz,17);
+    #elif DPTX_VID_PATTERN_SEL == PTN4K30
+    memcpy(timing,timing4k30hz,17);
+    #elif DPTX_VID_PATTERN_SEL == PTN4K60
+    memcpy(timing,timing4k60hz,17);
+    #elif DPTX_VID_PATTERN_SEL == PTN4K120
+    memcpy(timing,timing4k120hz,17);
+    #elif DPTX_VID_PATTERN_SEL == PTN8K30
+    memcpy(timing,timing8k30hz,17);
+    #endif
+    
+    #if HDMITX_VID_PATTERN_SEL == PTN480P
+    memcpy(timing,timing480p60hz,17);
+    #elif HDMITX_VID_PATTERN_SEL == PTN720P
+    memcpy(timing,timing720p60hz,17);
+    #elif HDMITX_VID_PATTERN_SEL == PTN1080P
+    memcpy(timing,timing1080p60hz,17);
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K30
+    memcpy(timing,timing4k30hz,17);
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K60
+    memcpy(timing,timing4k60hz,17);
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K120
+    memcpy(timing,timing4k120hz,17);
+    #elif HDMITX_VID_PATTERN_SEL == PTN8K30
+    memcpy(timing,timing8k30hz,17);
+    #endif
+    BKC7_C3_REG = timing[0];
+    BKC7_C4_REG = timing[1];
+    BKC7_C5_REG = timing[2];
+    BKC7_C6_REG = timing[3];
+    BKC7_C7_REG = timing[4];
+    BKC7_C8_REG = timing[5];
+    BKC7_C9_REG = timing[6];
+    BKC7_CA_REG = timing[7];
+    BKC7_CB_REG = timing[8];
+    BKC7_CC_REG = timing[9];
+    BKC7_CD_REG = timing[10];
+    BKC7_CE_REG = timing[11];
+    BKC7_CF_REG = timing[12];
+    BKC7_D0_REG = timing[13];
+    BKC7_D1_REG = timing[14];
+
+    //pattern color space/depth set
+    BKC7_D6_REG = 0x30;//[5:4]rgd_ptn_video_pattern: 11-color square
+                       //[1:0]rgd_ptn_pixel_format:  00-rgb/ycbcr444/ycbcr420
+    //pcrpll init
+    BKC7_D7_REG &= BIT0_0;//[0]rgd_rx_da_src_sel: 0-dp
+    BKA3_23_REG = 0x01;//[6:4]rg_pcrpll_half_pcrck_muxsel : 010-aa_pll_half_pix_clk
+    BKA3_24_REG = 0x00;//[6:4]rg_pcrpll_half_pixck_muxsel : 010-aa_pll_half_pix_clk
+    BKA3_25_REG = 0x01;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    BKA3_26_REG = 0x01;//[6:4]rg_pcrpll_dscin_muxsel      : 000-aa_pll_pix_clk
+    BKA3_2A_REG = 0x80|timing[15];
+    BKA3_2B_REG = timing[16];//[7]rgd_sw_en_pcrpll_freq_set: 1-sw;
+                             //[6:4]rgd_sw_pcrpll_freq_set
+    BKA3_2E_REG = 0x08;//da_pcrpll_post_divsel = 1;                         
+    //pcrpll cali
+    BKA3_20_REG &= BIT4_0;//[4]rg_pcrpll_pd: 0-normal work
+    BKA3_20_REG |= BIT2_1;//post_div_set  = 2
+    BKA3_20_REG &= 0xfc;  //[1:0]rg_pcrpll_ref_sel: 00-Xtal_25m_clk
+    BKE2_3D_REG = 0x20;// ks =2;
+    ucpcrpll_cal_cnt = 0;
+    do{
+        BKE1_08_REG &= 0xfc;//[1]rgd_sw_pcrpll_cal_rst_n
+        BKE1_0E_REG &= BIT1_0;//[1]rg_sw_pcrpll_rst_n
+        BKE2_3D_REG &= BIT3_0;//[3]rgd_pcrpll_pll_cal_en
+        Ocm_Delay1ms(1);
+        BKE1_08_REG |= 0x03;
+        BKE1_0E_REG |= BIT1_1;
+        Ocm_Delay1ms(1);
+        BKE2_3D_REG |= BIT3_1;
+        Ocm_Delay1ms(2);
+        ucpcrpll_cal_cnt++;
+    }while((ucpcrpll_cal_cnt <3)&&((BKE2_47_REG&0x3) != 0x02));
+    printLT(PRINT_PRIO_HIG, "\nPattern pcr band = 0x%02bx", BKE2_4E_REG);
+    ucpcrpll_lock_cnt = 0;      
+    while((!(BKE2_28_REG&BIT4_1)) && (ucpcrpll_lock_cnt < 6))  //PLL lock output lock status
+    {
+        ucpcrpll_lock_cnt++;
+        Ocm_Delay1ms(1);
+    }
+    //dp rx sdm control mode
+    BKF3_34_REG |= 0x05;//[2]rg_soft_k_en: 1-en
+                        //[0]rg_soft_m_en: 1-en
+    BKF3_37_REG = timing[15];//m value
+    #if DPTX_VID_PATTERN_SEL == PTN480P
+    BKF3_3A_REG = 0x00;//k value
+    BKF3_3B_REG = 0x00;//k value
+    BKF3_3C_REG = 0x00;//k value
+    #elif DPTX_VID_PATTERN_SEL == PTN720P
+    BKF3_3A_REG = 0x85;//k value
+    BKF3_3B_REG = 0x1e;//k value
+    BKF3_3C_REG = 0xb8;//k value
+    #elif DPTX_VID_PATTERN_SEL == PTN1080P
+    BKF3_3A_REG = 0x85;//k value
+    BKF3_3B_REG = 0x1e;//k value
+    BKF3_3C_REG = 0xb8;//k value
+    #elif DPTX_VID_PATTERN_SEL == PTN4K30
+    BKF3_3A_REG = 0x85;//k value
+    BKF3_3B_REG = 0x1e;//k value
+    BKF3_3C_REG = 0xb8;//k value
+    #elif DPTX_VID_PATTERN_SEL == PTN4K60
+    BKF3_3A_REG = 0x85;//k value
+    BKF3_3B_REG = 0x1e;//k value
+    BKF3_3C_REG = 0xb8;//k value
+    #elif DPTX_VID_PATTERN_SEL == PTN4K120
+    BKF3_3A_REG = 0x33;//k value
+    BKF3_3B_REG = 0x33;//k value
+    BKF3_3C_REG = 0x33;//k value
+    #elif DPTX_VID_PATTERN_SEL == PTN8K30
+    BKF3_3A_REG = 0x33;//k value
+    BKF3_3B_REG = 0x33;//k value
+    BKF3_3C_REG = 0x33;//k value
+    #endif
+    
+    #if HDMITX_VID_PATTERN_SEL == PTN480P
+    g_stHdmiTx.ulTxPixelClk = 25000;
+    g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+    BKF3_3A_REG = 0x00;//k value
+    BKF3_3B_REG = 0x00;//k value
+    BKF3_3C_REG = 0x00;//k value
+    #elif HDMITX_VID_PATTERN_SEL == PTN720P
+    g_stHdmiTx.ulTxPixelClk = 74250;
+    g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+    BKF3_3A_REG = 0x85;//k value
+    BKF3_3B_REG = 0x1e;//k value
+    BKF3_3C_REG = 0xb8;//k value
+    #elif HDMITX_VID_PATTERN_SEL == PTN1080P
+    g_stHdmiTx.ulTxPixelClk = 148500;
+    g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+    BKF3_3A_REG = 0x85;//k value
+    BKF3_3B_REG = 0x1e;//k value
+    BKF3_3C_REG = 0xb8;//k value
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K30
+    g_stHdmiTx.ulTxPixelClk = 297000;
+    g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+    BKF3_3A_REG = 0x85;//k value
+    BKF3_3B_REG = 0x1e;//k value
+    BKF3_3C_REG = 0xb8;//k value
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K60
+    g_stHdmiTx.ulTxPixelClk = 594000;
+    g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+    BKF3_3A_REG = 0x85;//k value
+    BKF3_3B_REG = 0x1e;//k value
+    BKF3_3C_REG = 0xb8;//k value
+    #elif HDMITX_VID_PATTERN_SEL == PTN4K120
+    g_stHdmiTx.ulTxPixelClk = 1180000;
+    g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+    BKF3_3A_REG = 0x33;//k value
+    BKF3_3B_REG = 0x33;//k value
+    BKF3_3C_REG = 0x33;//k value
+    #elif HDMITX_VID_PATTERN_SEL == PTN8K30
+    g_stHdmiTx.ulTxPixelClk = 1180000;
+    g_stHdmiTx.ulTxTmdsClk  = g_stHdmiTx.ulTxPixelClk;
+    BKF3_3A_REG = 0x33;//k value
+    BKF3_3B_REG = 0x33;//k value
+    BKF3_3C_REG = 0x33;//k value
+    #endif
+    BKF3_3D_REG &=0xf0;
+    BKF3_3D_REG |=0x06;//[3:2]rg_diff_ord_sel;
+                       //[1:0]rg_sdm_ord_sel;  
+    BKA3_2A_REG = 0x00;
+    
+    //data mux
+    BKC7_D7_REG &= BIT6_0;//[6]rgd_dsc_dec_sel: 0-bypass
+    Drv_Sys_ChipRxSrcSel(CHIPRX_SRC_SEL_PTN);
+    //clk mux
+
+    BKA3_3C_REG &= 0x80;
+    BKA3_3D_REG &= 0x80;
+    BKA3_3E_REG &= 0x80;
+    BKA3_3F_REG &= 0x80;
+    BKA3_40_REG &= 0x80;
+    BKA3_41_REG &= 0x80;
+    BKA3_42_REG &= 0x80;
+
+    //sel pcrpll_dsc_in_clk
+    BKA3_3D_REG |= 0x60;//[6:4]rg_clkgen_div_link_muxsel     : 110-aa_pcrpll_dsc_in_clk
+    //half pix
+    BKA3_45_REG = 0x00;
+    BKA3_46_REG = 0x00;//[2:0]rg_clkgen_pcr_clk_recvsel      : 000-aa_pcrpll_pcr_clk
+    //pix
+    BKA3_3C_REG = 0x01;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                            //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 1
+    BKA3_3E_REG = 0x11;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                       //[3:0]rg_clkgen_dscout_divse        : div 2
+    BKA3_3F_REG = 0x01;//ad_dscrx_dsc_clk    2f/2
+    BKA3_40_REG = 0x11;//ad_dscrx_dsc_rd_clk 2f/2
+    
+    BKA3_41_REG = 0x01;//[6:4]rg_clkgen_dsctx_dsc_muxsel    : 000-aa_pcrpll_pix_clk
+    BKA3_42_REG = 0x11;//[6:4]rg_clkgen_dsctx_dscrd_muxsel  : 001-aa_pcrpll_pix_clk
+                         //[3:0]rg_clkgen_dsctx_dscrd_divsel : div                                             
+}
+
+void Drv_System_AudioPatternSet(void)
+{
+    u8 ucAudpll_cal_cnt;
+    u8 ucAudpll_lock_cnt;
+    BKE1_0E_REG &= BIT7_0;//AUDPLL HARDSERET = 0
+
+    BKA3_08_REG &= BIT4_0;
+    BKA3_08_REG &= 0xfc;  // 00-Xtal_25m_clk
+    BKA3_0E_REG = 0x02;
+    BKE2_2A_REG = 0x20;  // ks =2; rg_cal_en =1
+    
+    #if DPTX_VID_PATTERN_SEL != NO_PATTERN
+    #if DPTX_AUD_PATTERN_SEL == AUD_PTN_32K
+    BKA3_0F_REG = 0xbf;//m = 63
+    BKA3_10_REG = 0xc0;//div =32 
+    #endif
+
+    #if DPTX_AUD_PATTERN_SEL == AUD_PTN_44D1K
+    BKA3_0F_REG = 0xd7;
+    BKA3_10_REG = 0xc0;//44.1KHz
+    #endif
+
+    #if DPTX_AUD_PATTERN_SEL == AUD_PTN_48K
+    BKA3_0F_REG = 0xde;
+    BKA3_10_REG = 0xc0; //div = 32
+    #endif
+
+    #if DPTX_AUD_PATTERN_SEL == AUD_PTN_88D2K
+    BKA3_0F_REG = 0xd7;
+    BKA3_10_REG = 0xb0;//87.9KHz
+    #endif
+
+    #if DPTX_AUD_PATTERN_SEL == AUD_PTN_96K
+    BKA3_0F_REG = 0xdf;
+    BKA3_10_REG = 0xb0;//96.6KHz
+    #endif
+
+    #if DPTX_AUD_PATTERN_SEL == AUD_PTN_176D4K
+    BKA3_0F_REG = 0xd7;
+    BKA3_10_REG = 0xa0;//175.8KHz
+    #endif
+
+    #if DPTX_AUD_PATTERN_SEL == AUD_PTN_192K
+    BKA3_0F_REG = 0xde;
+    BKA3_10_REG = 0xa0;//193.3KHz
+    #endif
+    #endif
+    
+    #if HDMITX_VID_PATTERN_SEL != NO_PATTERN
+    #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_32K
+    BKA3_0F_REG = 0xbf;//m = 63
+    BKA3_10_REG = 0xc0;//div =32 
+    #endif
+
+    #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_44D1K
+    BKA3_0F_REG = 0xd7;
+    BKA3_10_REG = 0xc0;//44.1KHz
+    #endif
+
+    #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_48K
+    BKA3_0F_REG = 0xde;
+    BKA3_10_REG = 0xc0; //div = 32
+    #endif
+
+    #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_88D2K
+    BKA3_0F_REG = 0xd7;
+    BKA3_10_REG = 0xb0;//87.9KHz
+    #endif
+
+    #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_96K
+    BKA3_0F_REG = 0xdf;
+    BKA3_10_REG = 0xb0;//96.6KHz
+    #endif
+
+    #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_176D4K
+    BKA3_0F_REG = 0xd7;
+    BKA3_10_REG = 0xa0;//175.8KHz
+    #endif
+
+    #if HDMITX_AUD_PATTERN_SEL == AUD_PTN_192K
+    BKA3_0F_REG = 0xde;
+    BKA3_10_REG = 0xa0;//193.3KHz
+    #endif
+    #endif
+    
+    ucAudpll_cal_cnt = 0;
+    do{
+        BKE1_04_REG &= 0xfc;//[1]rgd_sw_audpll_cal_rst_n
+        BKE1_0F_REG &= BIT7_0;//[1]rg_sw_pcrpll_rst_n
+        BKE2_2A_REG &= BIT3_0;//[3]rgd_pcrpll_pll_cal_en
+        Ocm_Delay1ms(1);
+        BKE1_04_REG |= 0x03;
+        BKE1_0F_REG |= BIT7_1;
+        Ocm_Delay1ms(1);
+        BKE2_2A_REG |= BIT3_1;
+        Ocm_Delay1ms(2);
+        ucAudpll_cal_cnt++;
+    }while((ucAudpll_cal_cnt <3)&&((BKE2_34_REG&0x03) != 0x02));
+    printLT(PRINT_PRIO_HIG, "\nPattern Audpll band = 0x%02bx", BKE2_3C_REG);
+    ucAudpll_lock_cnt = 0;      
+    while((!(BKE2_28_REG&BIT5_1)) && (ucAudpll_lock_cnt < 6))  //PLL lock output lock status
+    {
+        ucAudpll_lock_cnt++;
+        Ocm_Delay1ms(1);
+    }
+    if(BKE2_28_REG&BIT5_1)
+    {
+        printLT(PRINT_PRIO_HIG, "\nPattern Audpll lock");
+    }
+}
+
+void Drv_Vid_TimingGet(LtTiming_S *pstTiming)
+{
+    //get V timing by video check
+    pstTiming->usVfp =   ((u16)BKC8_4C_REG << 8) + BKC8_4D_REG;
+    pstTiming->usVsync = ((u16)BKC8_46_REG << 8) + BKC8_47_REG;
+    pstTiming->usVbp =   ((u16)BKC8_4A_REG << 8) + BKC8_4B_REG;
+    pstTiming->usVact =  ((u16)BKC8_56_REG << 8) + BKC8_57_REG;
+    pstTiming->usVtol =  ((u16)BKC8_52_REG << 8) + BKC8_53_REG;
+    //h
+    pstTiming->usHfp =   ((u16)BKC8_50_REG << 8) + BKC8_51_REG;
+    pstTiming->usHsync = ((u16)BKC8_48_REG << 8) + BKC8_49_REG;
+    pstTiming->usHbp =   ((u16)BKC8_4E_REG << 8) + BKC8_4F_REG;
+    pstTiming->usHact =  ((u16)BKC8_58_REG << 8) + BKC8_59_REG;
+    pstTiming->usHtol =  ((u16)BKC8_54_REG << 8) + BKC8_55_REG;
+    //recover to real timing
+    if ((BKCC_D0_REG & 0x70) == 0x30)//[6:4]hdmi rx color space, 11-yuv420, -wangtt- wait update
+    {
+        pstTiming->usHbp   <<= 2;
+        pstTiming->usHfp   <<= 2;
+        pstTiming->usHsync <<= 2;
+        pstTiming->usHtol  <<= 2;
+        pstTiming->usHact  <<= 2;
+    }
+    else
+    {
+        pstTiming->usHbp   <<= 1;
+        pstTiming->usHfp   <<= 1;
+        pstTiming->usHsync <<= 1;
+        pstTiming->usHtol  <<= 1;
+        pstTiming->usHact  <<= 1;
+    }
+}
+#endif
+
+#if ((LVDXTX_VID_PATTERN_MODE != NO_PATTERN) ||(MIPITX_VID_PATTERN_MODE != NO_PATTERN))
+
+
+void Drv_PtnType_Sel(void)
+{
+    //pattern color space/depth set
+    BKC7_D6_REG = 0x30;//[5:4]rgd_ptn_video_pattern: 11-color square
+                       //[1:0]rgd_ptn_pixel_format:  00-rgb/ycbcr444/ycbcr420
+	
+//		//pattern white
+//		BKC7_C1_REG = 0x07;
+//	
+//		//pattern black
+//		BKC7_C1_REG = 0x00;		
+}
+
+void Drv_PtnClk_Set(u8 Value_0xA32A,u8 Value_0xA32B)//PTN0 = 0 , PTN1 = 1
+{
+    BKA3_2A_REG = 0x80|Value_0xA32A;
+    BKA3_2B_REG = Value_0xA32B;//[7]rgd_sw_en_pcrpll_freq_set: 1-sw;
+                             //[6:4]rgd_sw_pcrpll_freq_set
+		BKF3_37_REG = Value_0xA32A;//m value
+}
+
+
+void Drv_PtnPCR_Init(void)
+{
+    //pcrpll init
+    BKC7_D7_REG &= BIT0_0;//[0]rgd_rx_da_src_sel: 0-dp
+    BKA3_23_REG = 0x01;//[6:4]rg_pcrpll_half_pcrck_muxsel : 010-aa_pll_half_pix_clk
+    BKA3_24_REG = 0x01;//[6:4]rg_pcrpll_half_pixck_muxsel : 010-aa_pll_half_pix_clk
+    BKA3_25_REG = 0x01;//[6:4]rg_pcrpll_half_tmdsck_divsel: 010-aa_pll_half_pix_clk
+    BKA3_26_REG = 0x01;//[6:4]rg_pcrpll_dscin_muxsel      : 000-aa_pll_pix_clk
+//    BKA3_2A_REG = 0x80|timing[15];
+//    BKA3_2B_REG = timing[16];//[7]rgd_sw_en_pcrpll_freq_set: 1-sw;
+                             //[6:4]rgd_sw_pcrpll_freq_set
+    //pcrpll cali
+    BKA3_20_REG &= BIT4_0;//[4]rg_pcrpll_pd: 0-normal work
+    BKA3_20_REG &= 0xfc;  //[1:0]rg_pcrpll_ref_sel: 00-Xtal_25m_clk
+    BKE1_08_REG &= BIT1_0;//[1]rgd_sw_pcrpll_cal_rst_n
+    BKE1_0E_REG &= BIT1_0;//[1]rg_sw_pcrpll_rst_n
+    BKE2_3D_REG &= BIT3_0;//[3]rgd_pcrpll_pll_cal_en
+    Ocm_Delay1ms(1);
+    BKE1_08_REG |= BIT1_1;
+    BKE1_0E_REG |= BIT1_1;
+    BKE2_3D_REG |= BIT3_1;
+    Ocm_Delay1ms(10);
+
+    printLT(PRINT_PRIO_HIG, "\nPattern pcr band = 0x%02bx", BKE2_4E_REG);
+    Ocm_Delay1ms(10);        
+    if(BKE2_28_REG&BIT4_1)
+    {
+        printLT(PRINT_PRIO_HIG, "\nPattern pcr lock");
+    }
+		
+    //dp rx sdm control mode
+    BKF3_34_REG |= 0x05;//[2]rg_soft_k_en: 1-en
+                        //[0]rg_soft_m_en: 1-en
+//    BKF3_37_REG = timing[15];//m value
+	
+    BKF3_3A_REG = 0x04;//k value
+    BKF3_3B_REG = 0x00;//k value
+    BKF3_3C_REG = 0x00;//k value
+    BKF3_3D_REG &=0xf0;
+    BKF3_3D_REG |=0x06;//[3:2]rg_diff_ord_sel;
+                        //[1:0]rg_sdm_ord_sel;  
+    BKA3_2A_REG = 0x00;		
+}
+
+void Drv_PtnTiming_Set(struct TIMING *CustomTiming)
+{
+	
+//    LTLog(LOG_INFO, "Pattern[H]: Htotal:%d,Hactive:%d,Hsw:%d,Hfp:%d,Hbp:%d,Hspol:%bd",  CustomTiming->Htotal, CustomTiming->Hactive, CustomTiming->Hsw, CustomTiming->Hfp, CustomTiming->Hbp,CustomTiming->Hspol);
+//    LTLog(LOG_INFO, "Pattern[V]: Vtotal:%d,Vactive:%d,Vsw:%d,Vfp:%d,Vbp:%d,Vspol:%bd",  CustomTiming->Vtotal, CustomTiming->Vactive, CustomTiming->Vsw, CustomTiming->Vfp, CustomTiming->Vbp,CustomTiming->Vspol);    
+ 	
+		BKC7_C3_REG = ((CustomTiming->Hsw+CustomTiming->Hbp)/2)/256;
+		BKC7_C4_REG = ((CustomTiming->Hsw+CustomTiming->Hbp)/2)%256;
+		BKC7_C5_REG = (CustomTiming->Vsw+CustomTiming->Vbp)/256;
+		BKC7_C6_REG = (CustomTiming->Vsw+CustomTiming->Vbp)%256;
+		BKC7_C7_REG = (CustomTiming->Hactive/2)/256;
+		BKC7_C8_REG = (CustomTiming->Hactive/2)%256;
+		BKC7_C9_REG = (CustomTiming->Vactive)/256;
+		BKC7_CA_REG = (CustomTiming->Vactive)%256;
+		BKC7_CB_REG = (CustomTiming->Htotal/2)/256;
+		BKC7_CC_REG = (CustomTiming->Htotal/2)%256;
+		BKC7_CD_REG = (CustomTiming->Vtotal)/256;
+		BKC7_CE_REG = (CustomTiming->Vtotal)%256;
+		BKC7_CF_REG = (CustomTiming->Hsw/2)/256;
+		BKC7_D0_REG = (CustomTiming->Hsw/2)%256;
+		BKC7_D1_REG = CustomTiming->Vsw;		
+	
+}
+
+void Drv_PtnDataClk_Mux(void)
+{
+    //data mux
+    BKC7_D7_REG &= BIT6_0;//[6]rgd_dsc_dec_sel: 0-bypass
+    Drv_Sys_ChipRxSrcSel(CHIPRX_SRC_SEL_PTN);
+    //clk mux
+    BKA3_45_REG &= 0xe0;
+    BKA3_3C_REG &= 0x80;
+    BKA3_3E_REG &= 0x80;
+    BKA3_41_REG &= 0x80;
+    BKA3_42_REG &= 0x80;
+    //half pix
+//    BKA3_45_REG &= 0xe0;//[4]rg_clkgen_dscin_clk_recvsel     : 0-aa_pcrpll_dsc_in_clk
+                         //[3:1]rg_clkgen_divpcr_clk_recvsel  : 000-aa_pcrpll_div_pcr_clk
+                         //[0]rg_clkgen_pix_clk_recvsel       : 0-aa_pcrpll_pix_clk
+    BKA3_46_REG = 0x00;//[2:0]rg_clkgen_pcr_clk_recvsel      : 000-aa_pcrpll_pcr_clk
+    //pix
+    BKA3_3E_REG |= 0x00;//[6:4]rg_clkgen_dscout_muxsel       : 001-aa_pcrpll_pix_clk
+                        //[3:0]rg_clkgen_dscout_divse        : div 2
+    BKA3_3C_REG |= 0x00;//[6:4]rg_clkgen_cscrx_halfpix_muxsel: 000-aa_pcrpll_pix_clk or aa_secpcrpll_pix_clk
+                        //[3:0]rg_clkgen_cscrx_halfpix_divsel: div 2
+//    BKA3_41_REG |= 0x00;//[6:4]rg_clkgen_dsctx_dsc_muxsel    : 000-aa_pcrpll_pix_clk
+    BKA3_42_REG |= 0x00;//[6:4]rg_clkgen_dsctx_dscrd_muxsel  : 001-aa_pcrpll_pix_clk
+                        //[3:0]rg_clkgen_dsctx_dscrd_divsel : div 2  
+}
+
+
+#endif
+
+#if ((CHIP_SEL == LT7911UXE_DP)||(CHIP_SEL == LT6911GXD_DP))
+
+void Drv_Sys_LT7911gxe_HdcpRx_PowerDomain(u8 b1IsPowerOn)
+{
+	   if(b1IsPowerOn == TRUE)
+		 {
+		 //HDCP RX
+        BKC9_13_REG &= 0x07;	
+        BKC9_13_REG &= 0xF8;	
+        BKC9_14_REG &= 0x3F;	
+        BKC9_14_REG &= 0xCF;		
+        BKC9_14_REG &= 0xF7;				 
+		 }
+		 else
+		 {
+			 
+		 }
+}
+
+#if TX_PORT_SIGN == MIPI_PORT
+void Drv_MipiTx_Info_Update(u8 ucEvent)
+{
+	
+#define SOURECE_PLUG_EVENT   1
+#define SOURECE_UNPLUG_EVENT 2
+#define VIDEO_ON_EVENT      3
+#define VIDEO_OFF_EVENT       4	
+#define VIDEO_HDR_NOTIFY_EVENT  11	
+
+	u16 Htotal ,Hactive ,Vtotal,Vactive;
+
+        switch ( ucEvent )
+        {
+            case SOURECE_PLUG_EVENT :
+                break;
+            case SOURECE_UNPLUG_EVENT :
+                break;
+            case VIDEO_ON_EVENT :   
+							
+								/********Common:0xE080~0xE09F********/
+								/*version:0xE080~0xE083*/
+								/*interrupt type:0xE084*/
+								 SET_BIT(BKE0_84_REG, BIT0);//video ready;
+								 CLEAR_BIT(BKE0_84_REG, BIT2);
+								/*pixelclock:0xE085~0xE087*/
+							 
+								BKE0_85_REG = (g_stMipiTx.ulMipiInClk*2 >> 16)&0x0F;
+								BKE0_86_REG = g_stMipiTx.ulMipiInClk*2 >> 8;
+								BKE0_87_REG = g_stMipiTx.ulMipiInClk*2;	
+								/*resolution:0xE088~0xE08F*/
+							
+								Htotal    = Drv_VideoCheckSingle_Get(HTOTAL_POS);
+								Hactive   = Drv_VideoCheckSingle_Get(HACTIVE_POS);
+								Vtotal    = Drv_VideoCheckSingle_Get(VTOTAL_POS);
+								Vactive   = Drv_VideoCheckSingle_Get(VACTIVE_POS);
+							
+								BKE0_88_REG = GET_16BIT_HIGH(Htotal);
+								BKE0_89_REG = GET_16BIT_LOW(Htotal);
+								BKE0_8A_REG = GET_16BIT_HIGH(Vtotal);
+								BKE0_8B_REG = GET_16BIT_LOW(Vtotal);
+								BKE0_8C_REG = GET_16BIT_HIGH(Hactive);
+								BKE0_8D_REG = GET_16BIT_LOW(Hactive);
+								BKE0_8E_REG = GET_16BIT_HIGH(Vactive);
+								BKE0_8F_REG = GET_16BIT_LOW(Vactive);
+								
+								/*Byteclock:0xE092~0xE093*/
+								BKE0_92_REG = ((g_stMipiTx.ulMipiDataRate/8)>>16)&0x0F;
+								BKE0_93_REG = (g_stMipiTx.ulMipiDataRate/8)>>8;
+								BKE0_94_REG = g_stMipiTx.ulMipiDataRate/8;
+								
+								/********Mipi:0xE0A0~0xE0AF********/
+								/*Lane*/
+								BKE0_A0_REG = g_stMipiTx.ucTxPortNum ;
+								/*YUV422 10bit*/
+								switch(g_stMipiTx.ucTxFormat)
+								{
+										case CSI_YUV422_8Bit:
+												BKE0_A1_REG = 0x00;
+												break;
+										case CSI_YUV422_10Bit:
+												BKE0_A1_REG = 0x01;
+												break;
+										case CSI_RGB_888:
+												BKE0_A1_REG = 0x02;
+												break;                    
+										case CSI_YUV420_8Bit:
+												BKE0_A1_REG = 0x03;
+												break;
+										default:
+												BKE0_A1_REG = 0x00;
+												break;
+								}
+								
+								/********Dp:0xE095~0xE096********/								
+								BKE0_95_REG = g_stDpRx.ucPixelEncoding;//0x00:rgb 0x01:yuv422 0x02:yuv444 0x03:yuv420
+								BKE0_96_REG = g_stDpRx.ucBitDepth;//0-6bit,  1-8bit, 2-10bit, 3-12bit								
+								
+								LTLog(LOG_INFO,"MIPIVidInfoUpdate!!!!!!");
+                break;
+            case VIDEO_OFF_EVENT :
+							
+								BKE0_84_REG = 0x00;						
+								BKE0_85_REG = 0x00;
+						
+								BKE0_86_REG = 0x00;
+								BKE0_87_REG = 0x00;	
+								BKE0_88_REG = 0x00;
+								BKE0_89_REG = 0x00;
+								BKE0_8A_REG = 0x00;
+								BKE0_8B_REG = 0x00;
+								BKE0_8C_REG = 0x00;
+								BKE0_8D_REG = 0x00;
+								BKE0_8E_REG = 0x00;
+								BKE0_8F_REG = 0x00;	
+								BKE0_90_REG = 0x00;
+								BKE0_91_REG = 0x00;	
+								BKE0_92_REG = 0x00;
+								BKE0_93_REG = 0x00;
+								BKE0_94_REG = 0x00;	
+								BKE0_95_REG = 0x00;
+								BKE0_96_REG = 0x00;	
+								BKE0_97_REG = 0x00;		
+								BKE0_98_REG = 0x00;	
+								BKE0_99_REG = 0x00;			
+								BKE0_9A_REG = 0x00;		
+								BKE0_9B_REG = 0x00;	
+								BKE0_9C_REG = 0x00;		
+								BKE0_9D_REG = 0x00;		
+								BKE0_9E_REG = 0x00;	
+								BKE0_9F_REG = 0x00;																
+								
+								BKE0_A0_REG = 0x00;
+								BKE0_A1_REG = 0x00;
+								BKE0_A2_REG = 0x00;	
+								BKE0_A3_REG = 0x00;		
+								BKE0_A4_REG = 0x00;	
+								BKE0_A5_REG = 0x00;	
+								BKE0_A6_REG = 0x00;		
+								BKE0_A7_REG = 0x00;	
+								BKE0_A8_REG = 0x00;		
+								BKE0_A9_REG = 0x00;										
+																
+								LTLog(LOG_INFO,"MIPIVidInfoClear!!!!!!");    
+						
+                break;
+						
+            case VIDEO_HDR_NOTIFY_EVENT :
+								SET_BIT(BKE0_84_REG, BIT2);//HDR_EN;								
+
+								BKE0_85_REG = 0x00;
+						
+								BKE0_86_REG = BKF2_3C_REG;
+								BKE0_87_REG = BKF2_3D_REG;	
+								BKE0_88_REG = BKF2_3E_REG;
+								BKE0_89_REG = BKF2_3F_REG;
+								BKE0_8A_REG = BKF2_40_REG;
+								BKE0_8B_REG = BKF2_41_REG;
+								BKE0_8C_REG = BKF2_42_REG;
+								BKE0_8D_REG = BKF2_43_REG;
+								BKE0_8E_REG = BKF2_44_REG;
+								BKE0_8F_REG = BKF2_45_REG;	
+								BKE0_90_REG = BKF2_46_REG;
+								BKE0_91_REG = BKF2_47_REG;	
+								BKE0_92_REG = BKF2_48_REG;
+								BKE0_93_REG = BKF2_49_REG;
+								BKE0_94_REG = BKF2_4A_REG;		
+								BKE0_95_REG = BKF2_4B_REG;	
+								BKE0_96_REG = BKF2_4C_REG;		
+								BKE0_97_REG = BKF2_4D_REG;		
+								BKE0_98_REG = BKF2_4E_REG;	
+								BKE0_99_REG = BKF2_4F_REG;			
+								BKE0_9A_REG = BKF2_50_REG;		
+								BKE0_9B_REG = BKF2_51_REG;	
+								BKE0_9C_REG = BKF2_52_REG;		
+								BKE0_9D_REG = BKF2_53_REG;		
+								BKE0_9E_REG = BKF2_54_REG;	
+								BKE0_9F_REG = BKF2_55_REG;	
+								BKE0_A0_REG = BKF2_56_REG;		
+								BKE0_A1_REG = BKF2_57_REG;	
+								BKE0_A2_REG = BKF2_58_REG;		
+								BKE0_A3_REG = BKF2_59_REG;		
+								BKE0_A4_REG = BKF2_5A_REG;	
+								BKE0_A5_REG = BKF2_5B_REG;	
+								BKE0_A6_REG = BKF2_5C_REG;		
+								BKE0_A7_REG = BKF2_5D_REG;	
+								BKE0_A8_REG = BKF2_5E_REG;		
+								BKE0_A9_REG = BKF2_5F_REG;		
+											
+						
+                break;						
+            default:
+                break;
+        }	
+	
+}
+#endif
+
+
+u8 Drv_DPRX_AudFs_Det(void)
+{
+	u8 Fs_Val;
+	Fs_Val = BKC6_7C_REG;
+    if((Fs_Val >= 0xbf)&&(Fs_Val <= 0xc1))
+    {
+		return AUD_FS_192K;
+    }	
+    else if((Fs_Val >= 0xaf)&&(Fs_Val <= 0xb1))
+    {
+		return AUD_FS_176K;
+    }	
+	else if((Fs_Val >= 0x5f)&&(Fs_Val <= 0x61)) 
+	{
+		return AUD_FS_96K;
+	}
+	else if((Fs_Val >= 0x57)&&(Fs_Val <= 0x59)) 
+	{
+		return AUD_FS_88K;
+	}	
+    if((Fs_Val >= 0x2f)&&(Fs_Val <= 0x31))
+	{
+		return AUD_FS_48K;
+	}
+	else if((Fs_Val >= 0x2b)&&(Fs_Val <= 0x2d))
+	{
+		return AUD_FS_44K;
+	}
+    else if((Fs_Val >= 0x1f)&&(Fs_Val <= 0x21))
+    {
+		return AUD_FS_32K;
+    }
+    else if(Fs_Val == 0x00)
+    {
+		return AUD_FS_ZERO;
+    }
+    else
+    {
+        return AUD_FS_VOID;
+    }
+}
+
+u8 Drv_DPRX_AudChannel(void)
+{
+    static u8 ChNum;
+//    ChNum = BKF2_63_REG & 0x07;
+		ChNum = BKF2_F5_REG & 0x07;
+    if(ChNum)
+    {
+        ChNum += 1;
+    }
+    else
+    {
+        if(BKF2_F1_REG & 0x08)
+        {
+            ChNum = 8;
+        }
+        else
+        {
+            ChNum = 2;
+        }
+    }
+    return ChNum;
+}
+
+u8 Drv_DPRX_AudBitWidth(void)
+{
+    u8 Width = 0;
+		Width = BKF2_2E_REG & 0x0F;
+    if(Width == 0x02)
+    {
+        Width = 16;
+    }
+    else if((Width == 0x03)||(Width == 0x0A))
+    {
+        Width = 20;
+    }
+    else if(Width == 0x0B)
+    {
+        Width = 24;
+    }		
+    return Width;
+}
+
+u8 Drv_DPRX_AudFs_Update(void)
+{
+	u8 ucFsValue;
+    
+    ucFsValue = Drv_DPRX_AudFs_Det();
+      
+    if(AUD_FS_VOID != ucFsValue)
+    {
+        if(ucFsValue == g_stDpRx.ucFsValue)
+        {
+            return FALSE;
+        }
+        g_stDpRx.ucFsValue = ucFsValue;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void Drv_Aud_Info_Update(u8 IsTrue)
+{
+	
+	u8 ucFsValue, AudCh, AudWidth;
+	ucFsValue = Drv_DPRX_AudFs_Det();	
+	AudCh = Drv_DPRX_AudChannel();
+  AudWidth = Drv_DPRX_AudBitWidth();
+    if(IsTrue != FALSE)
+    {
+				SET_BIT(BKE0_84_REG, BIT1);//Audio;
+				CLEAR_BIT(BKE0_84_REG, BIT2);//Audio;	
+        BKE0_A2_REG = AudCh;
+				BKE0_A3_REG = AudWidth;			
+        BKE0_90_REG = 0x00;
+        BKE0_91_REG = ucFsValue;//Fs_value       
+        LTLog(LOG_INFO,"AudInfoUpdate!!!!!!");       
+    }
+    else
+    {
+				CLEAR_BIT(BKE0_84_REG, BIT1);//Audio;				
+        BKE0_A2_REG = 0x00;
+				BKE0_A3_REG = 0x00;				
+        BKE0_90_REG = 0x00;
+        BKE0_91_REG = 0x00;//Fs_value               
+        LTLog(LOG_INFO,"AudInfoClear!!!");
+    }
+		
+//		if(ucFsValue == 0)
+//		{
+//				CLEAR_BIT(BKE0_84_REG, BIT1);//Audio;				
+//        BKE0_A2_REG = 0x00;
+//        BKE0_90_REG = 0x00;
+//        BKE0_91_REG = 0x00;//Fs_value   			
+//		}
+}
+
+/**************For LT7911UXE INT**************/
+#if CHIP_SEL == LT7911UXE_DP
+u8 Drv_GPIO_INT_level_Get(void)
+{
+	
+    if(BKA3_7F_REG & 0x01)
+    {
+        return HIGH;
+    }
+    else
+    {
+        return LOW;
+    }	
+}
+#endif
+
+/**************For LT6911GXD INT(GPIO25_PWM3) IO**************/
+#if CHIP_SEL == LT6911GXD_DP
+u8 Drv_GPIO25_PWM3_level_Get(void)
+{
+	
+    if(BKA3_87_REG & 0x10)
+    {
+        return HIGH;
+    }
+    else
+    {
+        return LOW;
+    }	
+}
+#endif
+
+
+#endif
+
+
+#if ((TX_PORT_SIGN == MIPI_PORT) || (TX_PORT_SIGN == LVDS_PORT))
+//EDID Flash address : 0x70000
+void Custom_EDID_LoadFromFlash(void)
+{
+    u8 FlashEDID[512] = 0;
+    u16 loop_training = 0;
+    #if 0
+    Drv_Sector_Erease(0x70000);
+    Drv_Delay_ms(180);
+    Drv_Flash_Wr(0x70000,g_ucszDPRX_EDID, sizeof( g_ucszDPRX_EDID ));
+    #endif
+    Drv_Flash_Rd(0x70000,FlashEDID,512);
+    
+    if((FlashEDID[0]==0x00)&&(FlashEDID[1]==0xFF)&&(FlashEDID[2]==0xFF)
+		&&(FlashEDID[3]==0xFF)&&(FlashEDID[4]==0xFF)&&(FlashEDID[5]==0xFF)
+		&&(FlashEDID[6]==0xFF)&&(FlashEDID[7]==0x00))
+    {
+				#if 0
+        LTLog(LOG_INFO,"\nFlash EDID:");
+        for(loop_training = 0; loop_training < 128*(FlashEDID[0x7e]+1); loop_training++)
+        {
+            if((loop_training &0x0f) == 0)
+            {
+                    LTLog(LOG_INFO,"\n");
+            }
+            LTLog(LOG_INFO,"0x%02bx,",FlashEDID[loop_training]);
+        }
+				#endif
+				LTLog(LOG_INFO,"\nFlash EDID Load");
+        memcpy(szEdidData,FlashEDID,512);
+    } 
+    else
+    {
+        LTLog(LOG_INFO,"\nFlash EDID not exsit:");
+				#if TX_PORT_SIGN == MIPI_PORT
+			  memcpy(szEdidData,szMipiEdid,512);
+				#else
+				memcpy(szEdidData,szLvdsEdid,512);
+				#endif
+    }
+}
+
+void Drv_I2sGpio_1P8VSet(void)
+{
+		BKA3_77_REG = 0x54;	
+}
+
+void Drv_PWM0_Sel(u16 CycleFreq , u16 Cycle)
+{
+    BKE6_10_REG |= BIT4_1;//pwm enable
+    
+    BKE6_11_REG = 0x00;//period(Hbyte) 
+    BKE6_12_REG = CycleFreq>>8;//
+    BKE6_13_REG = CycleFreq;//period(Lbyte)
+
+    BKE6_14_REG = 0x00;//High time(Hbyte)
+    BKE6_15_REG = Cycle>>8;
+    BKE6_16_REG = Cycle;//High time(Lbyte)
+}
+
+void Drv_PWM1_Sel(u16 CycleFreq , u16 Cycle)
+{
+    BKE6_26_REG |= BIT4_1;//pwm enable
+    
+    BKE6_27_REG = 0x00;//period(Hbyte) 
+    BKE6_28_REG = CycleFreq>>8;//
+    BKE6_29_REG = CycleFreq;//period(Lbyte)
+
+    BKE6_2A_REG = 0x00;//High time(Hbyte)
+    BKE6_2B_REG = Cycle>>8;
+    BKE6_2C_REG = Cycle;//High time(Lbyte)
+}
+
+void Drv_PWM2_Sel(u16 CycleFreq , u16 Cycle)
+{
+    BKE6_3C_REG |= BIT4_1;//pwm enable
+    
+    BKE6_3D_REG = 0x00;//period(Hbyte) 
+    BKE6_3E_REG = CycleFreq>>8;//
+    BKE6_3F_REG = CycleFreq;//period(Lbyte)
+
+    BKE6_40_REG = 0x00;//High time(Hbyte)
+    BKE6_41_REG = Cycle>>8;
+    BKE6_42_REG = Cycle;//High time(Lbyte)
+}
+
+void Drv_PWM3_Sel(u16 CycleFreq , u16 Cycle)
+{
+    BKE6_52_REG |= BIT4_1;//pwm enable
+    
+    BKE6_53_REG = 0x00;//period(Hbyte) 
+    BKE6_54_REG = CycleFreq>>8;//
+    BKE6_55_REG = CycleFreq;//period(Lbyte)
+
+    BKE6_56_REG = 0x00;//High time(Hbyte)
+    BKE6_57_REG = Cycle>>8;
+    BKE6_58_REG = Cycle;//High time(Lbyte)
+}
+
+volatile u8 l_TXEventTrig;
+volatile u8 l_TXEvent;
+
+void TX_Event_Init(void)
+{
+    l_TXEventTrig = FALSE;
+    l_TXEvent = TX_SINK_UNPLUG_EVENT_2;    
+}
+
+void TX_Event_Set(u8 TxEvent)
+{
+    l_TXEventTrig = TRUE;//g_RXEventTrig = TRUE
+    l_TXEvent = TxEvent;
+    LTLog(LOG_INFO,"TxEvent-%bd",TxEvent);
+}
+
+u8 TX_Event_Trig(void)
+{
+    return l_TXEventTrig;
+}
+
+void TX_Event_Clr(void)
+{
+    l_TXEventTrig = FALSE;
+}
+
+u8 TX_Event_Get(void)
+{
+    return l_TXEvent;
+}
+#endif
+
+#if ((RX_PORT_SIGN == DP_PORT) &&(TX_PORT_SIGN == MIPI_PORT))
+void Drv_Sys_LT7911gxe_MipiTx_PowerDomain(u8 b1IsPowerOn)
+{
+   if(b1IsPowerOn == TRUE)
+   {
+		 
+		 //Dhtxphy
+        BKA1_59_REG &= 0x3F;
+
+		 //Dhtxrterm
+        BKA1_5A_REG &= 0xF0; 	 		 
+
+		 //arc
+        BKA2_98_REG &= 0xFC;
+        BKA2_9E_REG &= 0xBF;
+        BKA2_99_REG &= 0xBF;		
+		 
+		 //Earcpll
+        BKA3_14_REG |= 0x10;
+		 
+		 //Secpcrpll
+        BKA3_2F_REG |= 0x10; 	 		 
+		 
+		 //HDMI RX
+        BKC9_10_REG &= 0x00; 
+        BKC9_11_REG &= 0x1F;     
+        BKC9_1C_REG &= 0xF3;
+        BKCD_46_REG &= 0x00;
+        
+		 //HDCP TX
+//        BKE9_88_REG &= 0x7F;	
+//        BKE9_88_REG &= 0x8F;	
+//        BKE9_88_REG &= 0xF7;	
+//        BKE9_88_REG &= 0xF8;	
+//        BKE9_89_REG &= 0xF3;	
+//        BKE9_89_REG &= 0xFC;	
+        BKED_0B_REG &= 0x7C;	
+
+        BKE9_88_REG &= 0x00;
+        BKE9_89_REG &= 0x00;				
+				#if MIPITX_VID_PATTERN_MODE == NO_PATTERN
+		//PTN	
+        BKC9_17_REG &= 0x7F;
+				#endif
+				
+		//CRC
+//        BKC9_17_REG &= 0xBF;
+
+		//EARC
+        BKC9_19_REG &= 0xFC;	
+        BKC9_1A_REG &= 0x3F;
+        BKE1_22_REG &= 0xFC;
+
+		//CEC	
+        BKE1_20_REG &= 0xFC;
+
+		//DHRX SECPCRPLL
+        BKE1_25_REG &= 0x3F;	
+
+		//SECPCRPLL
+        BKE1_33_REG &= 0x00;	
+
+		//DHTX
+//        BKE1_26_REG &= 0x00;	
+//        BKE1_27_REG &= 0x07;		
+
+//		//DHTXPLL
+        BKE1_35_REG &= 0x03;	
+        BKE1_35_REG &= 0xFC;
+        BKE1_36_REG &= 0x7F;
+
+		//EARCPLL
+        BKE1_36_REG &= 0x80;	
+        BKE1_38_REG &= 0xF7;
+
+		#if PWM_OUT == DISABLED
+		//PWM SYS
+        BKE1_38_REG &= 0x7F;	
+		#endif
+		//FRL
+        BKEC_05_REG &= 0x00;	
+
+		//HDMITX20
+					BKED_08_REG &= 0x80;	
+					BKED_09_REG &= 0x00;
+					BKED_0A_REG &= 0x7F;
+
+		//HDMITX21
+        BKED_0A_REG &= 0x80;	
+				
+		//AFIFO
+        BKED_0B_REG &= 0x80;		
+				
+		//BYPASS SSC
+        BKF9_BA_REG &= 0xE7;	
+        BKF9_BA_REG &= 0xF9;
+        BKF9_BB_REG &= 0x3F;
+        BKF9_BD_REG &= 0xFB;		
+
+		//LVDS
+        BKF9_BB_REG &= 0xDF;	
+	
+	
+		#if 0	
+		/*******************DPHY**************/	
+				//PORT //1port out Disable another port 
+//        BKF9_BB_REG &= 0x1B;
+//        BKF9_BC_REG &= 0x22;
+//        BKF9_B9_REG &= 0x11;		
+//        BKE1_2B_REG &= 0xC0;	
+
+					//2port out  3D SBS
+//					BKF9_BB_REG &= 0x1B;
+//					BKF9_BC_REG &= 0xAA;
+//					BKF9_B9_REG &= 0xFF;//0xAA or 0x55 	Display anomaly	
+//					BKE1_2B_REG &= 0xF0;
+		#endif
+	
+				
+   }
+   else
+   {
+
+   } 
+}
+#endif
+
+#if  ((RX_PORT_SIGN == DP_PORT) && (TX_PORT_SIGN == LVDS_PORT))
+void Drv_Sys_LT7911gxe_LvdsTx_PowerDomain(u8 b1IsPowerOn)
+{
+   if(b1IsPowerOn == TRUE)
+   {
+		 
+		 //Dhtxphy
+        BKA1_59_REG &= 0x3F;
+
+		 //Dhtxrterm
+        BKA1_5A_REG &= 0xF0; 	 		 
+
+		 //arc
+        BKA2_98_REG &= 0xFC;
+        BKA2_9E_REG &= 0xBF;
+        BKA2_99_REG &= 0xBF;		
+		 
+		 //Earcpll
+        BKA3_14_REG |= 0x10;
+		 
+		 //Secpcrpll
+        BKA3_2F_REG |= 0x10; 	 		 
+		 
+		 //HDMI RX
+        BKC9_10_REG &= 0x00; 
+        BKC9_11_REG &= 0x1F;     
+        BKC9_1C_REG &= 0xF3;
+        BKCD_46_REG &= 0x00;
+        
+		 //HDCP TX
+//        BKE9_88_REG &= 0x7F;	
+//        BKE9_88_REG &= 0x8F;	
+//        BKE9_88_REG &= 0xF7;	
+//        BKE9_88_REG &= 0xF8;	
+//        BKE9_89_REG &= 0xF3;	
+//        BKE9_89_REG &= 0xFC;	
+        BKED_0B_REG &= 0x7C;	
+
+        BKE9_88_REG &= 0x00;
+        BKE9_89_REG &= 0x00;				
+				#if LVDXTX_VID_PATTERN_MODE == NO_PATTERN
+		//PTN	
+        BKC9_17_REG &= 0x7F;
+				#endif
+		//CRC
+//        BKC9_17_REG &= 0xBF;
+
+		//EARC
+        BKC9_19_REG &= 0xFC;	
+        BKC9_1A_REG &= 0x3F;
+        BKE1_22_REG &= 0xFC;
+
+		//CEC	
+        BKE1_20_REG &= 0xFC;
+
+		//DHRX SECPCRPLL
+        BKE1_25_REG &= 0x3F;	
+
+		//SECPCRPLL
+        BKE1_33_REG &= 0x00;	
+	
+//		//DHTXPLL
+        BKE1_35_REG &= 0x03;	
+        BKE1_35_REG &= 0xFC;
+        BKE1_36_REG &= 0x7F;
+
+		//EARCPLL
+        BKE1_36_REG &= 0x80;	
+        BKE1_38_REG &= 0xF7;
+
+			#if PWM_OUT == DISABLED
+		//PWM SYS
+        BKE1_38_REG &= 0x7F;	
+			#endif
+
+		//FRL
+        BKEC_05_REG &= 0x00;	
+
+		//HDMITX20
+				BKED_08_REG &= 0x80;	
+				BKED_09_REG &= 0x00;
+				BKED_0A_REG &= 0x7F;
+
+		//HDMITX21
+        BKED_0A_REG &= 0x80;	
+				
+		//AFIFO
+        BKED_0B_REG &= 0x80;
+
+		//DCS//3D
+        BKF9_BC_REG &= 0xDF;	
+        BKF9_BD_REG &= 0xEF;					
+
+   }
+   else
+   {
+
+   } 
+}
+#endif
+
+#if ((CHIP_SEL == LT6911GXD_HD) || (CHIP_SEL == LT7911UXE_HD))
+void Drv_Sys_LT6911GXE_PowerDomain()
+{
+		 //Dhtxphy
+        BKA1_59_REG &= 0x3F;
+
+		 //Dhtxrterm
+        BKA1_5A_REG &= 0xF0;
+
+		 //arc
+        BKA2_98_REG &= 0xFC;
+        BKA2_9E_REG &= 0xBF;
+        BKA2_99_REG &= 0xBF;
+
+		 
+		 //Secpcrpll
+        BKA3_2F_REG |= 0x10; 	 		 
+		 
+/*		 //HDMI RX
+//        BKC9_10_REG &= 0x00; 
+//        BKC9_11_REG &= 0x1F;     
+//        BKC9_1C_REG &= 0xF3;
+//        BKCD_46_REG &= 0x00;
+*/
+		 
+		 //DP RX
+        BKF1_A8_REG &= 0x00;
+				BKF1_A9_REG &= 0x00;
+        BKF1_AA_REG &= 0x00;
+        BKF1_AB_REG &= 0x00;
+        BKF1_AC_REG &= 0x00;
+				BKF1_AD_REG &= 0x00;
+				BKF1_AE_REG &= 0x00;
+        
+		 //HDCP TX	
+        BKED_0B_REG &= 0x7C;
+        BKE9_88_REG &= 0x00;
+        BKE9_89_REG &= 0x00;
+				
+#if LVDXTX_VID_PATTERN_MODE == NO_PATTERN
+		//PTN	
+        BKC9_17_REG &= 0x7F;
+#endif
+				
+		//CRC
+        BKC9_17_REG &= 0xBF;
+				
+//		//ACR
+//        BKC9_18_REG &= 0x00;	
+//        BKC9_19_REG &= 0x00;	
+//        BKC9_1A_REG &= 0x3F;
+				
+		//CEC	
+        BKE1_20_REG &= 0xFC;
+
+//		//SECPCRPLL
+//        BKE1_33_REG &= 0x00;
+
+//		//DHRX SECPCRPLL
+//        BKE1_22_REG &= 0x00;
+////				BKE1_23_REG &= 0x00;
+////				BKE1_24_REG &= 0x00;
+//        BKE1_25_REG &= 0x3F;
+				
+		//DSC DEC
+				BKE1_28_REG &= 0x00;
+				BKE1_29_REG &= 0x00;	
+
+		//DHTXPLL
+        BKE1_35_REG &= 0x03;	
+        BKE1_35_REG &= 0xFC;
+        BKE1_36_REG &= 0x7F;
+
+		//EARCPLL
+        BKE1_36_REG &= 0x80;	
+        BKE1_38_REG &= 0xF7;
+		//Earcpll
+        BKA3_14_REG |= 0x10;
+				
+		//PWM SYS
+        BKE1_38_REG &= 0x7F;
+
+		//HDMITX20
+				BKED_08_REG &= 0x80;	
+				BKED_09_REG &= 0x00;
+				BKED_0A_REG &= 0x7F;
+
+		//HDMITX21
+        BKED_0A_REG &= 0x80;	
+				
+		//AFIFO
+        BKED_0B_REG &= 0x80;	
+				
+		//BYPASS SSC
+        BKF9_BA_REG &= 0xE7;
+        BKF9_BA_REG &= 0xF9;
+        BKF9_BB_REG &= 0x3F;
+        BKF9_BD_REG &= 0xFB;
+
+//		//DHTX
+//				BKE5_80_REG &= 0xCF;
+//        BKE1_26_REG &= 0x00;
+//        BKE1_27_REG &= 0x00;
+
+//		//DPTX
+//        BKED_0C_REG &= 0x3C;	
+//        BKF5_84_REG &= 0x00;
+//        BKF5_85_REG &= 0x00;	
+//        BKF5_86_REG &= 0x00;
+				
+#if	(TX_PORT_SIGN == MIPI_PORT)
+		//LVDS
+				BKF9_BB_REG &= 0xDF;
+#endif
+
+//		//FRL
+//				BKEC_05_REG &= 0x00;
+	
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+				
+/*******************DPHY**************/				
+    //PORT //1port out Disable another port 
+//        BKF9_BB_REG &= 0x1B;
+//        BKF9_BC_REG &= 0x22;
+//        BKF9_B9_REG &= 0x11;
+//        BKE1_2B_REG &= 0xC0;
+
+//				//2port out  3D SBS
+//        BKF9_BB_REG &= 0x1B;
+//        BKF9_BC_REG &= 0xAA;
+//        BKF9_B9_REG &= 0xFF;		
+//        BKE1_2B_REG &= 0xCC;
+
+/*******************CPHY**************/		
+    //PORT //1port out Disable another port 
+//        BKF9_BB_REG &= 0x1B;
+//        BKF9_BC_REG &= 0x22;
+//        BKF9_BD_REG &= 0x35;					
+//        BKF9_B9_REG &= 0xFF;//0xAA or 0x55 	Display anomaly	
+//        BKE1_2B_REG &= 0xC0;	
+		
+					//2port out  3D SBS
+//
+				
+				LTLog(LOG_INFO,"\nLT6911GXE Power Domain Done!");
+}
+
+//void Drv_Sys_LT6911GXE_DHDPTX_PowerDomain_Restore(u8 b1IsPowerOn)
+//{
+//		if(b1IsPowerOn == TRUE)
+//		{
+//		//DHTX
+//				BKE5_80_REG |= 0xF0;
+//        BKE1_26_REG |= 0xFF;
+//        BKE1_27_REG |= 0xF8;	
+
+//		//DPTX
+//        BKED_0C_REG |= 0xFE;	
+//        BKF5_84_REG |= 0xFF;
+//        BKF5_85_REG |= 0xFF;	
+//        BKF5_86_REG |= 0xFF;
+//		}
+//}
+#endif
