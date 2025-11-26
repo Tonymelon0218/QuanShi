@@ -42,7 +42,7 @@
 
 //=====================================DP RX=================================================
 
-#define DPRX_LINK_RATE                   HBR3       // HBR3/HBR2/HBR/RBR
+#define DPRX_LINK_RATE                   HBR2       // HBR3/HBR2/HBR/RBR
 #define DPRX_LANE_COUNT                  TWO_LANE   // FOUR_LANE/TWO_LANE/ONE_LANE
 #define DPRX_TPS3_SUPPORT_EN             ENABLED    // ENABLED/DISABLED
 #define DPRX_TPS4_SUPPORT_EN             ENABLED    // ENABLED/DISABLED
