@@ -66,6 +66,8 @@ typedef enum
  * 25111802: 吴工重新封库测试HDCP。在PC上测试可以显示
  * 
  * 25/11/24_01: 调整代码为3D_90Hz HBR3模式, 关闭DSC, 还原 25110702 版本, EDID版本1.4, 6bit色深模式
+ * 
+ * 25/11/26_01: 3D_60Hz HDR3 NoDSC 8bit色深
  */
 #define LVDS_SSC                    DISABLED            // ENABLED & DISABLED
 #define LVDS_SSC_SEL                SSC_1920x1080_30k5
